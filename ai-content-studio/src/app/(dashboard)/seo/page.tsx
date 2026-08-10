@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/layout/placeholder";
+import { SeoClient } from "@/components/seo/seo-client";
 
 export default function Page() {
-  return <PlaceholderPage title="SEO" description="SEO 分析（Phase 2 上线）。" />;
+  return <SeoClient />;
 }

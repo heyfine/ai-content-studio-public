@@ -121,6 +121,7 @@ model Article {
   promptId  String?
   createdAt DateTime      @default(now())
   updatedAt DateTime      @updatedAt
+  seoReports SeoReport[]
 }
 
 enum ArticleStatus {
@@ -128,4 +129,20 @@ enum ArticleStatus {
   REVIEW
   PUBLISHED
   ARCHIVED
+}
+
+/// SEO 分析报告：每次 /api/seo/analyze 写入，关联 Article
+model SeoReport {
+  id          String   @id @default(uuid())
+  articleId   String
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  /// SEO 评分 0-100
+  score       Int
+  /// 提取的关键词
+  keywords    String[]
+  /// 问题列表（字符串数组）
+  issues      Json
+  /// 建议列表（字符串数组）
+  suggestions Json
+  createdAt   DateTime @default(now())
 }
