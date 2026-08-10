@@ -40,4 +40,38 @@ describe("EditorPanel", () => {
     expect(useStudioStore.getState().content).toBe("一二三");
     expect(screen.getByText(/3 字符/)).toBeInTheDocument();
   });
+
+  it("预览模式隐藏 textarea，渲染 Markdown 正文", () => {
+    useStudioStore.setState({ content: "# 预览标题" });
+    render(<EditorPanel />);
+    fireEvent.click(screen.getByLabelText("预览模式"));
+    expect(screen.queryByLabelText("文章正文")).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("预览标题");
+    expect(screen.getByTestId("markdown-preview")).toBeInTheDocument();
+  });
+
+  it("分屏模式同时显示编辑与预览,编辑实时同步预览", () => {
+    useStudioStore.setState({ content: "# 旧" });
+    render(<EditorPanel />);
+    fireEvent.click(screen.getByLabelText("分屏模式"));
+    expect(screen.getByLabelText("文章正文")).toBeInTheDocument();
+    expect(screen.getByTestId("markdown-preview")).toBeInTheDocument();
+    // 编辑同步预览
+    fireEvent.change(screen.getByLabelText("文章正文"), { target: { value: "# 新内容" } });
+    expect(useStudioStore.getState().content).toBe("# 新内容");
+    expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("新内容");
+  });
+
+  it("可来回切换模式且 aria-pressed 正确", () => {
+    render(<EditorPanel />);
+    const edit = screen.getByLabelText("编辑模式");
+    const split = screen.getByLabelText("分屏模式");
+    const preview = screen.getByLabelText("预览模式");
+    expect(edit).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(screen.getByLabelText("预览模式"));
+    expect(preview).toHaveAttribute("aria-pressed", "true");
+    expect(edit).toHaveAttribute("aria-pressed", "false");
+    fireEvent.click(screen.getByLabelText("编辑模式"));
+    expect(edit).toHaveAttribute("aria-pressed", "true");
+  });
 });
