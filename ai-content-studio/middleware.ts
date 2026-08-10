@@ -1,11 +1,12 @@
-import type { NextRequest } from "next/server";
-import { NextResponse } from "next/server";
+import NextAuth from "next-auth";
+import { authConfig } from "@/auth.config";
 
-// Phase 1 占位中间件：暂不拦截。认证授权在第 5 步接通 next-auth 后启用。
-export function middleware(_request: NextRequest) {
-  return NextResponse.next();
-}
+// edge-safe：不引入 prisma/bcryptjs，仅做 JWT 鉴权；node-only authorize 在 lib/auth.ts。
+export const { auth: middleware } = NextAuth({
+  ...authConfig,
+  providers: [],
+});
 
 export const config = {
-  matcher: ["/((?!login|api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
+  matcher: ["/((?!api|_next/static|_next/image|favicon.ico|.*\\..*).*)"],
 };

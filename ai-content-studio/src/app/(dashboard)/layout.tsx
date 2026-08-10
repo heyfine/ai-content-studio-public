@@ -2,7 +2,7 @@ import type { PropsWithChildren } from "react";
 import { Header } from "@/components/layout/header";
 import { Sidebar } from "@/components/layout/sidebar";
 
-export default function DashboardLayout({ children }: PropsWithChildren) {
+export default async function DashboardLayout({ children }: PropsWithChildren) {
   return (
     <div className="flex h-screen w-full overflow-hidden">
       <aside className="hidden w-60 shrink-0 flex-col border-r md:flex">

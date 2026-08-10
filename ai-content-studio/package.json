@@ -17,7 +17,7 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "node --experimental-transform-types scripts/seed-admin.ts"
+    "db:seed": "node --experimental-transform-types --env-file=.env.local scripts/seed-admin.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.7.0",
