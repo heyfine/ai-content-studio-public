@@ -1,56 +1,87 @@
-# {{项目名}}
+# AI Content Studio
 
-<!-- 模板说明：替换所有 {{占位符}}；删除不适用小节。 -->
+个人 AI 内容生产工作台：选题 → AI 写作 → 人工编辑 → SEO → 发布 WordPress → 数据分析 → 内容迭代，形成闭环。定位为「个人版 Jasper + Notion AI + WordPress CMS + OpenRouter 管理平台」。
 
-{{一句话项目简介：做什么的，解决什么问题}}
+## 现状
+
+Phase 1 基线已完成：可运行的空壳后台 + 登录认证闭环。AI 供应商/Prompt/文章/发布等业务模块为占位页，将在 Phase 2+ 实装。完整规划见 `AI Content Studio项目.txt` 与 `docs/ROADMAP.md`。
+
+## 技术栈
+
+| 项 | 选型 |
+| --- | --- |
+| 运行时 | Node.js ≥ 24 |
+| 语言 | TypeScript |
+| 框架 | Next.js 16（App Router + Turbopack） |
+| UI | Tailwind CSS v4 + shadcn/ui（base-nova，基于 @base-ui/react） |
+| 状态 | Zustand（Phase 2 起） |
+| 表单 | React Hook Form + Zod 4 |
+| 数据库 | PostgreSQL（Supabase） + Prisma 6 |
+| 认证 | Auth.js v5（JWT + Credentials） |
+| 测试 | Vitest 4 + Testing Library + msw |
+| 代码质量 | Biome 2（格式化）+ ESLint + tsc |
+| 包管理 | pnpm 11 |
 
 ## 常用命令
 
+> Windows PowerShell 执行策略会拦截 `pnpm` 脚本，统一用 `pnpm.cmd`；或改用 Git Bash 直接 `pnpm`。
+
 ```bash
-pnpm install         # 安装依赖
-pnpm dev             # 本地开发
-pnpm build           # 生产构建
-pnpm typecheck       # 类型检查
-pnpm lint            # lint 检查
-pnpm test            # 运行测试
-pnpm run format      # 格式化代码
+cd ai-content-studio
+pnpm.cmd install         # 安装依赖
+pnpm.cmd dev             # 本地开发（Turbopack）
+pnpm.cmd build           # 生产构建
+pnpm.cmd typecheck       # 类型检查（tsc --noEmit）
+pnpm.cmd test            # 运行测试
+pnpm.cmd run test:coverage  # 覆盖率（阈值 80%）
+pnpm.cmd run format      # Biome 格式化
+pnpm.cmd run db:generate # 生成 Prisma Client
+pnpm.cmd run db:migrate  # 执行迁移（需 DATABASE_URL）
+pnpm.cmd run db:seed     # 种子管理员（需 ADMIN_EMAIL/ADMIN_PASSWORD）
 ```
 
 ## 目录结构
 
-<!-- 按实际项目列出，示例： -->
-
 ```
-src/                 源码
-  components/        组件
-  lib/               数据层 / 工具
-  app/               页面路由
-scripts/             脚本（发布 / 数据同步等）
-docs/                项目文档
-deploy/              部署配置 / 环境脚本
+AI Content Studio gml/
+├── AGENTS.md            AI 行为准则（覆盖全树）
+├── README.md            本文件
+├── docs/                文档体系（PROJECT_MEMORY / ROADMAP / WIP …）
+├── AI Content Studio项目.txt   原始产品设计全文
+└── ai-content-studio/   Next.js 代码根
+    ├── src/app/         路由：(auth)/login、(dashboard)/*、api/auth
+    ├── src/components/  layout/ 与 ui/
+    ├── src/lib/         auth / prisma / credentials / auth-schema
+    ├── src/config/      nav 菜单配置
+    ├── prisma/          schema.prisma
+    ├── middleware.ts    路由保护
+    ├── vitest.config.ts / biome.json
+    └── scripts/seed-admin.ts
 ```
 
 ## 环境变量
 
-<!-- 列出所有环境变量（名称、用途、是否必填、示例），注意不要出现真实密钥： -->
+复制 `ai-content-studio/.env.example` 为 `.env.local` 填写（勿提交）：
 
-| 变量 | 用途 | 必填 | 示例 |
-| --- | --- | --- | --- |
-| `{{VARIABLE_NAME}}` | {{用途}} | 是/否 | {{示例值}} |
-
-复制 `.env.example` 为 `.env.local` 填写。
+| 变量 | 用途 | 必填 |
+| --- | --- | --- |
+| `DATABASE_URL` | PostgreSQL 连接串（Supabase） | 是 |
+| `AUTH_SECRET` | Auth.js 加密密钥 | 是 |
+| `AUTH_TRUST_HOST` | 信任主机头 | 是 |
+| `ADMIN_EMAIL` | 种子管理员邮箱 | 运行 db:seed 时 |
+| `ADMIN_PASSWORD` | 种子管理员密码 | 运行 db:seed 时 |
 
 ## 部署
 
-- 部署平台：{{Vercel / Docker / 自建…}}
-- 地址：{{线上地址}}
+- 平台规划：Vercel（前端）+ Supabase（PostgreSQL）+ Oracle 服务器（WordPress）
 - 详细步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## AI 接手指南
 
-1. 先读 [AGENTS.md](AGENTS.md)（行为约定）→ [docs/WIP.md](docs/WIP.md)（当前进度）→ [docs/PROJECT_MEMORY.md](docs/PROJECT_MEMORY.md)（环境/架构/踩坑）
+1. [AGENTS.md](AGENTS.md)（行为约定）→ [docs/PROJECT_MEMORY.md](docs/PROJECT_MEMORY.md)（环境/踩坑/决策）→ [docs/WIP.md](docs/WIP.md)（当前进度）
 2. 需要理解来龙去脉再读 [docs/BUILD_LOG.md](docs/BUILD_LOG.md)
+3. 代码在 `ai-content-studio/`，所有命令在该目录执行
 
 ## 更新规则
 
-- 项目名 / 简介 / 常用命令 / 目录结构 / 环境变量 / 部署地址发生变化时 → 同步更新本文件
+- 技术栈 / 常用命令 / 目录结构 / 环境变量 / 部署信息变化时 → 同步更新本文件

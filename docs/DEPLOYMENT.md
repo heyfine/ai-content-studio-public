@@ -1,45 +1,47 @@
 # 部署指南
 
-<!-- 模板说明：替换 {{占位符}} 为项目实际部署信息。未部署前保留骨架，把规划写清楚。 -->
-
 ## 部署目标
 
-- 平台：{{Vercel / Docker / 云服务器 / 自建…}}
-- 线上地址：{{域名}}
-- 环境：{{生产环境说明，如 Node 版本、区域}}
+- 平台：Vercel（前端）+ Supabase（PostgreSQL）+ Oracle 服务器（WordPress）
+- 线上地址（规划）：ai.ggmm.cc.cd
+- 环境：Node.js ≥ 24
 
 ## 环境变量
 
-部署平台配置以下环境变量（与 `.env.example` 对应，值为生产值，勿提交仓库）：
+部署平台配置以下变量（与 `ai-content-studio/.env.example` 对应，值为生产值，勿提交仓库）：
 
 | 变量 | 说明 |
 | --- | --- |
-| {{VARIABLE}} | {{说明}} |
+| `DATABASE_URL` | Supabase PostgreSQL 连接串 |
+| `AUTH_SECRET` | Auth.js 加密密钥（生产用强随机值） |
+| `AUTH_TRUST_HOST` | 一般设 true |
+| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | 仅本地 db:seed 使用，部署可用 secrets 灌入 |
 
-## 部署流程
+## 部署流程（规划）
 
-1. 推送代码到 {{分支，如 main}}
-2. {{构建 / 触发部署命令，如 vercel --prod}}
-3. 验证：{{冒烟检查清单，如打开首页 / 跑一个关键 API / 看监控}}
+1. 推送代码到 main 分支
+2. Vercel 自动构建 `next build --turbopack`
+3. 配置环境变量后首次发布
+4. 验证：`/login` 可登录 → `/dashboard` 受保护可达
 
 ## 回滚
 
-- {{回滚方式：如 Vercel 一键回滚上一版本 / 服务器上重跑上一镜像标签}}
+- Vercel 一键回滚上一版本（Production Deployments）
 
 ## 运维
 
-- 监控：{{监控方案，如 health check / 告警通知}}
-- 备份：{{备份方案与保留策略}}
-- 更新依赖 / 例行维护：{{步骤}}
+- 监控：Vercel Analytics / health check（待接入）
+- 备份：Supabase 自动备份 + 手动定期导出
+- 依赖更新：pnpm audit 定期
 
 ## 上线检查清单
 
-- [ ] {{环境变量齐全且为生产值}}
-- [ ] {{HTTPS 证书正常}}
-- [ ] {{关键页面 / API 冒烟通过}}
-- [ ] {{监控告警已接入}}
-- [ ] {{备份已就绪}}
+- [ ] 环境变量齐全且为生产值
+- [ ] HTTPS 证书正常
+- [ ] /login 与 /dashboard 冒烟通过
+- [ ] 数据库迁移已执行
+- [ ] 种子管理员已创建并改密
 
 ## 更新规则
 
-- 部署流程 / 环境变量 / 平台配置 / 回滚方式发生变化时 → 同步更新本文件
+- 部署流程 / 环境变量 / 平台配置 / 回滚方式变化时同步更新

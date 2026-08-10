@@ -4,7 +4,10 @@ import { authConfig } from "./auth.config";
 const req = (path: string) => ({ nextUrl: new URL("https://x" + path) }) as never;
 
 describe("authConfig.authorized", () => {
-  const authorized = authConfig.callbacks.authorized as (a: unknown, r: unknown) => unknown;
+  const authorized = authConfig.callbacks.authorized as (a: {
+    auth?: { user?: unknown } | null;
+    request: { nextUrl: URL };
+  }) => unknown;
 
   it("未登录访问 dashboard 拒绝", () => {
     expect(authorized({ auth: null, request: req("/dashboard") })).toBe(false);
