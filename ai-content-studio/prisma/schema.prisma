@@ -105,3 +105,27 @@ model AIGeneration {
   duration     Int?
   createdAt    DateTime @default(now())
 }
+
+/// 文章：Phase 3 内容生产核心表，状态机 draft→review→published→archived
+model Article {
+  id        String        @id @default(uuid())
+  title     String
+  slug      String        @unique
+  content   String        @default("")
+  status    ArticleStatus @default(DRAFT)
+  /// SEO 评分（SEO 模块 Phase 4 写入）
+  seoScore  Int?
+  /// WordPress 文章 ID（发布模块 Phase 4 写入）
+  wpPostId  String?
+  /// 可选，关联生成所用的 Prompt 模板
+  promptId  String?
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+}
+
+enum ArticleStatus {
+  DRAFT
+  REVIEW
+  PUBLISHED
+  ARCHIVED
+}
