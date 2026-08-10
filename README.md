@@ -4,7 +4,10 @@
 
 ## 现状
 
-Phase 1 基线已完成：可运行的空壳后台 + 登录认证闭环。AI 供应商/Prompt/文章/发布等业务模块为占位页，将在 Phase 2+ 实装。完整规划见 `AI Content Studio项目.txt` 与 `docs/ROADMAP.md`。
+- Phase 1 基线已完成：可运行空壳后台 + 登录认证闭环。
+- Phase 2 代码已完成：AI 供应商管理、模型路由、统一 `AI.generate()` 调用层、AI Studio 冒烟测试均就位，typecheck/test/build 全绿。
+- 仅数据库迁移与端到端登录依赖 `DATABASE_URL`（🔶 你在 Supabase 建项目后提供）。
+- 完整规划见 `AI Content Studio项目.txt` 与 `docs/ROADMAP.md`。
 
 ## 技术栈
 
@@ -49,11 +52,12 @@ AI Content Studio gml/
 ├── docs/                文档体系（PROJECT_MEMORY / ROADMAP / WIP …）
 ├── AI Content Studio项目.txt   原始产品设计全文
 └── ai-content-studio/   Next.js 代码根
-    ├── src/app/         路由：(auth)/login、(dashboard)/*、api/auth
-    ├── src/components/  layout/ 与 ui/
-    ├── src/lib/         auth / prisma / credentials / auth-schema
-    ├── src/config/      nav 菜单配置
-    ├── prisma/          schema.prisma
+    ├── src/app/         路由：(auth)/login、(dashboard)/*、api/auth|providers|task-routes|ai/generate
+    ├── src/components/  layout / ui / providers / settings / studio
+    ├── src/lib/         auth / prisma / crypto / credentials / auth-schema
+    │                    / ai（adapters/router/generate）/ services / schemas
+    ├── src/config/      nav 菜单 + task-routes 任务定义
+    ├── prisma/          schema.prisma（User + AIProvider/AIModel/AITaskRoute/Prompt/AIGeneration）
     ├── middleware.ts    路由保护
     ├── vitest.config.ts / biome.json
     └── scripts/seed-admin.ts
@@ -68,8 +72,11 @@ AI Content Studio gml/
 | `DATABASE_URL` | PostgreSQL 连接串（Supabase） | 是 |
 | `AUTH_SECRET` | Auth.js 加密密钥 | 是 |
 | `AUTH_TRUST_HOST` | 信任主机头 | 是 |
+| `ENCRYPTION_KEY` | API Key AES-256-GCM 加密密钥 | 是（AI 供应商功能） |
 | `ADMIN_EMAIL` | 种子管理员邮箱 | 运行 db:seed 时 |
 | `ADMIN_PASSWORD` | 种子管理员密码 | 运行 db:seed 时 |
+
+> ⚠️ `.env` / `.env.local` 不提交，AI 不直接读取；脚本由你本地运行（见 AGENTS.md 安全条款）。
 
 ## 部署
 
