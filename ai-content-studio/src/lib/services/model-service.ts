@@ -11,11 +11,10 @@ export interface CreateModelInput {
 }
 
 export async function listModels(providerId?: string) {
-  return prisma.aIModel.findMany(
-    providerId
-      ? { where: { providerId }, include: { provider: true } }
-      : { include: { provider: true } },
-  );
+  if (providerId) {
+    return prisma.aIModel.findMany({ where: { providerId }, include: { provider: true } });
+  }
+  return prisma.aIModel.findMany({ include: { provider: true } });
 }
 
 export async function createModel(input: CreateModelInput) {

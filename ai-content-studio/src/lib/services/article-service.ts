@@ -33,11 +33,10 @@ export function slugify(title: string): string {
 }
 
 export async function listArticles(status?: ArticleStatus) {
-  return prisma.article.findMany(
-    status
-      ? { where: { status }, orderBy: { updatedAt: "desc" } }
-      : { orderBy: { updatedAt: "desc" } },
-  );
+  if (status) {
+    return prisma.article.findMany({ where: { status }, orderBy: { updatedAt: "desc" } });
+  }
+  return prisma.article.findMany({ orderBy: { updatedAt: "desc" } });
 }
 
 export async function getArticle(id: string) {

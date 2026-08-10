@@ -5,7 +5,7 @@ const PrismaClient = vi.fn(function PrismaClient() {
   return { user: { findUnique } };
 });
 
-vi.mock("@prisma/client", () => ({ PrismaClient }));
+vi.mock(".prisma/client", () => ({ PrismaClient }));
 
 describe("prisma lazy client", () => {
   beforeEach(() => {

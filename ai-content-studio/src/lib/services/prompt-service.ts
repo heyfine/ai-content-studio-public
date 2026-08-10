@@ -11,9 +11,10 @@ export interface CreatePromptInput {
 export type UpdatePromptInput = Partial<CreatePromptInput>;
 
 export async function listPrompts(type?: string) {
-  return prisma.prompt.findMany(
-    type ? { where: { type }, orderBy: { updatedAt: "desc" } } : { orderBy: { updatedAt: "desc" } },
-  );
+  if (type) {
+    return prisma.prompt.findMany({ where: { type }, orderBy: { updatedAt: "desc" } });
+  }
+  return prisma.prompt.findMany({ orderBy: { updatedAt: "desc" } });
 }
 
 export async function getPrompt(id: string) {

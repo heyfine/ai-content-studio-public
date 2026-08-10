@@ -1,9 +1,9 @@
 import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
-  // Prisma 依赖运行时通过 node_modules/.prisma/client 解析 generated client，
-  // 必须排除出 Turbopack 的 server bundle，否则报 "did not initialize yet"。
-  serverExternalPackages: ["@prisma/client"],
+  // @prisma/client 包入口在 pnpm 拓扑下是 stub；real client 在 node_modules/.prisma/client
+  // 两者都需排除出 Turbopack server bundle，交由 Node 原生 require 解析（prisma.ts 用 createRequire 解析）
+  serverExternalPackages: ["@prisma/client", ".prisma/client"],
 };
 
 export default nextConfig;

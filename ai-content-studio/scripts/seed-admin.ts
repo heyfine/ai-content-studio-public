@@ -1,5 +1,20 @@
 import bcrypt from "bcryptjs";
-import { PrismaClient } from "@prisma/client";
+import { createRequire } from "node:module";
+
+const req = createRequire(import.meta.url);
+const realClientPath = req.resolve(".prisma/client/default", { paths: [process.cwd()] });
+const { PrismaClient } = req(realClientPath) as {
+  PrismaClient: new () => {
+    user: {
+      upsert: (args: {
+        where: { email: string };
+        update: { passwordHash: string; role: string };
+        create: { email: string; passwordHash: string; role: string };
+      }) => Promise<{ email: string; role: string }>;
+    };
+    $disconnect: () => Promise<void>;
+  };
+};
 
 async function main() {
   const email = process.env.ADMIN_EMAIL;
