@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 
 import { useStudioStore, nextId, type ChatMessage } from "@/stores/studio-store";
 import { taskRouteDefinitions } from "@/config/task-routes";
+import { streamGenerateRequest } from "@/lib/ai/stream-client";
 
 function taskLabel(task: string): string {
   return taskRouteDefinitions.find((t) => t.value === task)?.label ?? task;
@@ -31,12 +32,20 @@ function MessageItem({ m }: { m: ChatMessage }) {
 }
 
 export function AIChatPanel() {
-  const { messages, selectedTask, appendMessage, setSelectedTask, setGenerating, setContent } =
-    useStudioStore();
+  const {
+    messages,
+    selectedTask,
+    selectedPromptId,
+    appendMessage,
+    appendDelta,
+    setSelectedTask,
+    setGenerating,
+    setContent,
+    setError,
+  } = useStudioStore();
   const [input, setInput] = useState("");
   const generating = useStudioStore((s) => s.isGenerating);
   const error = useStudioStore((s) => s.error);
-  const setError = useStudioStore((s) => s.setError);
 
   async function send() {
     const text = input.trim();
@@ -45,18 +54,25 @@ export function AIChatPanel() {
     appendMessage({ id: nextId(), role: "user", content: text, task: selectedTask });
     setError(null);
     setGenerating(true);
+    const assistantId = nextId();
+    appendMessage({ id: assistantId, role: "assistant", content: "", task: selectedTask });
+    let acc = "";
     try {
-      const res = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task: selectedTask, input: text }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "生成失败");
-      appendMessage({ id: nextId(), role: "assistant", content: data.content, task: selectedTask });
-      // 写文章/大纲类任务回填到编辑区
+      for await (const ev of streamGenerateRequest({
+        task: selectedTask,
+        input: text,
+        promptId: selectedPromptId ?? undefined,
+      })) {
+        if (ev.type === "delta") {
+          acc += ev.content;
+          appendDelta(assistantId, ev.content);
+        } else if (ev.type === "error") {
+          throw new Error(ev.message);
+        }
+      }
+      // 写文章/大纲类任务把完整生成内容回填到编辑区
       if (selectedTask === "article_generate" || selectedTask === "outline_generate") {
-        setContent(data.content);
+        setContent(acc);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));

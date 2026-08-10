@@ -6,6 +6,8 @@ export const generateSchema = z.object({
   systemPrompt: z.string().optional(),
   temperature: z.number().min(0).max(2).optional(),
   maxTokens: z.number().int().positive().max(8192).optional(),
+  promptId: z.string().optional(),
+  articleId: z.string().optional(),
 });
 
 export type GenerateValues = z.infer<typeof generateSchema>;

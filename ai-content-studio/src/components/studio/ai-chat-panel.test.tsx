@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 
+function sseResponse(events: unknown[]): Response {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      for (const e of events) controller.enqueue(encoder.encode(`data: ${JSON.stringify(e)}\n\n`));
+      controller.close();
+    },
+  });
+  return new Response(stream, {
+    status: 200,
+    headers: { "Content-Type": "text/event-stream" },
+  });
+}
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -56,11 +70,14 @@ describe("AIChatPanel", () => {
     expect(useStudioStore.getState().selectedTask).toBe("seo_analyze");
   });
 
-  it("发送成功追加用户与助手消息", async () => {
-    fetchMock.mockResolvedValue({
-      ok: true,
-      json: async () => ({ content: "AI 回复", generationId: "g1" }),
-    });
+  it("发送成功流式拼接用户与助手消息", async () => {
+    fetchMock.mockResolvedValue(
+      sseResponse([
+        { type: "delta", content: "AI " },
+        { type: "delta", content: "回复" },
+        { type: "done", generationId: "g1" },
+      ]),
+    );
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "写文章" } });
     fireEvent.click(screen.getByText("发送"));
@@ -69,16 +86,20 @@ describe("AIChatPanel", () => {
       expect(screen.getByText("AI 回复")).toBeInTheDocument();
     });
     expect(fetchMock).toHaveBeenCalledWith(
-      "/api/ai/generate",
-      expect.objectContaining({ method: "POST" }),
+      "/api/ai/stream",
+      expect.objectContaining({
+        method: "POST",
+        body: expect.stringContaining('"input":"写文章"'),
+      }),
     );
-    // input cleared
     expect(screen.getByLabelText("AI 输入")).toHaveValue("");
   });
 
   it("article_generate 回填到编辑区 content", async () => {
     resetStore({ selectedTask: "article_generate" });
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ content: "正文内容" }) });
+    fetchMock.mockResolvedValue(
+      sseResponse([{ type: "delta", content: "正文内容" }, { type: "done" }]),
+    );
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
@@ -87,7 +108,9 @@ describe("AIChatPanel", () => {
 
   it("非 article/outline 任务不回填 content", async () => {
     resetStore({ selectedTask: "seo_analyze" });
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ content: "SEO 建议" }) });
+    fetchMock.mockResolvedValue(
+      sseResponse([{ type: "delta", content: "SEO 建议" }, { type: "done" }]),
+    );
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
@@ -95,22 +118,35 @@ describe("AIChatPanel", () => {
     expect(useStudioStore.getState().content).toBe("");
   });
 
-  it("生成失败显示错误 alert", async () => {
-    fetchMock.mockResolvedValue({ ok: false, json: async () => ({ error: "未配置路由" }) });
+  it("error 事件显示错误 alert", async () => {
+    fetchMock.mockResolvedValue(
+      sseResponse([{ type: "error", status: "no_route", message: "未配置路由" }]),
+    );
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
     await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("未配置路由"));
-    expect(useStudioStore.getState().messages).toHaveLength(1); // 仅用户消息
   });
 
-  it("生成中显示 加载提示且按钮禁用", async () => {
-    fetchMock.mockResolvedValue({ ok: true, json: async () => ({ content: "c" }) });
+  it("HTTP 失败显示错误 alert", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ error: "未授权" }), {
+        status: 401,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    render(<AIChatPanel />);
+    fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
+    fireEvent.click(screen.getByText("发送"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("未授权"));
+  });
+
+  it("生成中显示 加载提示", async () => {
+    fetchMock.mockResolvedValue(sseResponse([{ type: "delta", content: "c" }, { type: "done" }]));
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
     await waitFor(() => expect(screen.getByText("生成中…")).toBeInTheDocument());
-    // await 完成
     await waitFor(() => expect(screen.queryByText("生成中…")).not.toBeInTheDocument());
   });
 });

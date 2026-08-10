@@ -1,7 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 const { decrypt } = vi.hoisted(() => ({ decrypt: vi.fn((s: string) => "decrypted:" + s) }));
-const { getAdapter, genMock } = vi.hoisted(() => ({ getAdapter: vi.fn(), genMock: vi.fn() }));
+const { getAdapter, genMock, streamGenMock } = vi.hoisted(() => ({
+  getAdapter: vi.fn(),
+  genMock: vi.fn(),
+  streamGenMock: vi.fn(),
+}));
 const { findRoute, findModel } = vi.hoisted(() => ({ findRoute: vi.fn(), findModel: vi.fn() }));
 
 vi.mock("@/lib/prisma", () => ({
@@ -15,11 +19,11 @@ vi.mock("@/lib/crypto", () => ({ decrypt }));
 vi.mock("./adapters", () => ({
   getAdapter: (...a: unknown[]) => {
     getAdapter(...(a as never[]));
-    return { generate: genMock };
+    return { generate: genMock, streamGenerate: streamGenMock };
   },
 }));
 
-import { generateByTask, resolveRoute, NoRouteError } from "./router";
+import { generateByTask, streamByTask, resolveRoute, NoRouteError } from "./router";
 
 const modelWithProvider = {
   id: "m1",
@@ -32,6 +36,22 @@ const modelWithProvider = {
     apiKey: "enc",
   },
 };
+
+async function consume(
+  gen: AsyncGenerator<string, { inputTokens?: number; outputTokens?: number; context: unknown }>,
+) {
+  const out: string[] = [];
+  let meta: { inputTokens?: number; outputTokens?: number; context: unknown } | undefined;
+  while (true) {
+    const r = await gen.next();
+    if (r.done) {
+      meta = r.value;
+      break;
+    }
+    out.push(r.value);
+  }
+  return { out, meta };
+}
 
 describe("resolveRoute", () => {
   beforeEach(() => {
@@ -95,6 +115,8 @@ describe("generateByTask", () => {
   });
 
   it("带 systemPrompt 时前置 system 消息", async () => {
+    findRoute.mockReset();
+    findModel.mockReset();
     findRoute.mockResolvedValue({ id: "r1", task: "t", modelId: "m1" });
     findModel.mockResolvedValue(modelWithProvider);
     genMock.mockResolvedValue({ content: "ok" });
@@ -102,5 +124,48 @@ describe("generateByTask", () => {
     const msgs = genMock.mock.calls[0][0].messages;
     expect(msgs[0]).toEqual({ role: "system", content: "你是助手" });
     expect(msgs[1]).toEqual({ role: "user", content: "hi" });
+  });
+});
+
+describe("streamByTask", () => {
+  beforeEach(() => {
+    findRoute.mockReset();
+    findModel.mockReset();
+    streamGenMock.mockReset();
+  });
+
+  it("逐个 yield 增量并返回 context 与 token 统计", async () => {
+    findRoute.mockResolvedValue({ id: "r1", task: "t", modelId: "m1" });
+    findModel.mockResolvedValue(modelWithProvider);
+    streamGenMock.mockImplementation(async function* () {
+      yield "a";
+      yield "b";
+      return { inputTokens: 1, outputTokens: 2 };
+    });
+    const { out, meta } = await consume(streamByTask({ task: "t", input: "y" }));
+    expect(out).toEqual(["a", "b"]);
+    expect(meta?.context).toMatchObject({ modelId: "m1" });
+    expect(meta?.inputTokens).toBe(1);
+    expect(meta?.outputTokens).toBe(2);
+    expect(streamGenMock).toHaveBeenCalledWith(expect.objectContaining({ model: "deepseek-chat" }));
+  });
+
+  it("带 systemPrompt 时前置 system 消息透传给 streamGenerate", async () => {
+    findRoute.mockResolvedValue({ id: "r1", task: "t", modelId: "m1" });
+    findModel.mockResolvedValue(modelWithProvider);
+    streamGenMock.mockImplementation(async function* () {
+      return { inputTokens: 0, outputTokens: 0 };
+    });
+    await consume(streamByTask({ task: "t", input: "y", systemPrompt: "你是助手" }));
+    const req = streamGenMock.mock.calls[0][0];
+    expect(req.messages[0]).toEqual({ role: "system", content: "你是助手" });
+    expect(req.messages[1]).toEqual({ role: "user", content: "y" });
+  });
+
+  it("未配置任务路由抛 NoRouteError", async () => {
+    findRoute.mockResolvedValue(null);
+    await expect(streamByTask({ task: "none", input: "y" }).next()).rejects.toBeInstanceOf(
+      NoRouteError,
+    );
   });
 });

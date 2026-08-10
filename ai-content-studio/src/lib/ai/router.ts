@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt } from "@/lib/crypto";
 import { getAdapter } from "./adapters";
-import type { AIAdapter, AIProviderConfig, AIRequest, AIResponse } from "./types";
+import type { AIAdapter, AIProviderConfig, AIRequest, AIResponse, StreamMeta } from "./types";
 
 export class NoRouteError extends Error {
   constructor(task: string) {
@@ -80,4 +80,41 @@ export async function generateByTask(args: {
     outputTokens: res.outputTokens,
     context,
   };
+}
+
+export async function* streamByTask(args: {
+  task: string;
+  input: string;
+  systemPrompt?: string;
+  temperature?: number;
+  maxTokens?: number;
+}): AsyncGenerator<
+  string,
+  { inputTokens?: number; outputTokens?: number; context: RouteContext },
+  void
+> {
+  const { adapter, model, context } = await resolveRoute(args.task);
+  const messages = [
+    ...(args.systemPrompt ? [{ role: "system" as const, content: args.systemPrompt }] : []),
+    { role: "user" as const, content: args.input },
+  ];
+  const req: AIRequest = {
+    model,
+    messages,
+    temperature: args.temperature,
+    maxTokens: args.maxTokens,
+  };
+  const gen = adapter.streamGenerate(req);
+  let inputTokens: number | undefined;
+  let outputTokens: number | undefined;
+  while (true) {
+    const result = await gen.next();
+    if (result.done) {
+      inputTokens = result.value?.inputTokens;
+      outputTokens = result.value?.outputTokens;
+      break;
+    }
+    yield result.value;
+  }
+  return { inputTokens, outputTokens, context };
 }

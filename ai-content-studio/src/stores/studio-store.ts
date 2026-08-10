@@ -18,6 +18,7 @@ export interface StudioState {
   setTitle: (v: string) => void;
   setContent: (v: string) => void;
   appendMessage: (m: ChatMessage) => void;
+  appendDelta: (id: string, delta: string) => void;
   clearMessages: () => void;
   setSelectedTask: (t: string) => void;
   setSelectedPromptId: (id: string | null) => void;
@@ -42,6 +43,10 @@ export const useStudioStore = create<StudioState>((set) => ({
   setTitle: (v) => set({ title: v }),
   setContent: (v) => set({ content: v }),
   appendMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
+  appendDelta: (id, delta) =>
+    set((s) => ({
+      messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)),
+    })),
   clearMessages: () => set({ messages: [] }),
   setSelectedTask: (t) => set({ selectedTask: t }),
   setSelectedPromptId: (id) => set({ selectedPromptId: id }),

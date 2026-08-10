@@ -30,6 +30,16 @@ describe("studio-store", () => {
     expect(useStudioStore.getState().messages[1].role).toBe("assistant");
   });
 
+  it("appendDelta 按 id 累加增量，不影响其它消息", () => {
+    useStudioStore.getState().appendMessage({ id: "1", role: "user", content: "hi" });
+    useStudioStore.getState().appendMessage({ id: "2", role: "assistant", content: "" });
+    useStudioStore.getState().appendDelta("2", "你");
+    useStudioStore.getState().appendDelta("2", "好");
+    const msgs = useStudioStore.getState().messages;
+    expect(msgs[0].content).toBe("hi");
+    expect(msgs[1].content).toBe("你好");
+  });
+
   it("clearMessages 清空", () => {
     useStudioStore.getState().appendMessage({ id: "1", role: "user", content: "hi" });
     useStudioStore.getState().clearMessages();

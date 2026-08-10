@@ -5,7 +5,8 @@ import { Sparkles as SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { taskRouteDefinitions } from "@/config/task-routes";
-import { useStudioStore } from "@/stores/studio-store";
+import { useStudioStore, nextId } from "@/stores/studio-store";
+import { streamGenerateRequest } from "@/lib/ai/stream-client";
 
 interface PromptOption {
   id: string;
@@ -14,11 +15,20 @@ interface PromptOption {
 }
 
 export function StudioSidebar() {
-  const { selectedTask, setSelectedTask, content, title, setContent, setGenerating, setError } =
-    useStudioStore();
+  const {
+    selectedTask,
+    setSelectedTask,
+    selectedPromptId,
+    content,
+    title,
+    setContent,
+    setGenerating,
+    setError,
+    appendMessage,
+    appendDelta,
+  } = useStudioStore();
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
-  const selectedPromptId = useStudioStore((s) => s.selectedPromptId);
   const setSelectedPromptId = useStudioStore((s) => s.setSelectedPromptId);
 
   useEffect(() => {
@@ -43,18 +53,23 @@ export function StudioSidebar() {
     const input =
       [title && `标题：${title}`, content].filter(Boolean).join("\n\n") || "请生成一篇文章";
     setSelectedTask(task);
+    const promptId = selectedPromptId ?? undefined;
     setError(null);
     setGenerating(true);
+    const assistantId = nextId();
+    appendMessage({ id: assistantId, role: "assistant", content: "", task });
+    let acc = "";
     try {
-      const res = await fetch("/api/ai/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task, input }),
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error ?? "生成失败");
-      if (task === "article_generate" || task === "outline_generate") {
-        setContent(data.content);
+      for await (const ev of streamGenerateRequest({ task, input, promptId })) {
+        if (ev.type === "delta") {
+          acc += ev.content;
+          appendDelta(assistantId, ev.content);
+          if (task === "article_generate" || task === "outline_generate") {
+            setContent(acc);
+          }
+        } else if (ev.type === "error") {
+          throw new Error(ev.message);
+        }
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
