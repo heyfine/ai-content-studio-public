@@ -30,14 +30,22 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     selectedPromptId: null,
     isGenerating: false,
     error: null,
+    articleId: null,
+    articleStatus: null,
     ...over,
   });
 }
 
 function mockRoute(prompts: unknown[], streamEvents: unknown[]) {
   fetchMock.mockImplementation(async (url: string) => {
-    if (url.endsWith("/api/prompts")) {
+    if (url === "/api/prompts") {
       return new Response(JSON.stringify(prompts), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      });
+    }
+    if (url === "/api/articles" || url.startsWith("/api/articles/")) {
+      return new Response(JSON.stringify({ id: "a1", status: "DRAFT" }), {
         status: 200,
         headers: { "Content-Type": "application/json" },
       });
@@ -52,10 +60,11 @@ describe("StudioSidebar", () => {
     resetStore();
   });
 
-  it("渲染 6 个 AI 操作按钮 与 Prompt 模板选择", async () => {
+  it("渲染 ArticleActions 与 6 个 AI 操作按钮与 Prompt 模板选择", async () => {
     mockRoute([], []);
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByLabelText("选择 Prompt")).not.toBeDisabled());
+    expect(screen.getByTestId("article-actions")).toBeInTheDocument();
     expect(screen.getByText("AI 操作")).toBeInTheDocument();
     expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(6);
   });

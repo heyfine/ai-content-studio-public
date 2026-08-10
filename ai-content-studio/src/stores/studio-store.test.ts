@@ -9,6 +9,8 @@ const initial = {
   selectedPromptId: null,
   isGenerating: false,
   error: null,
+  articleId: null,
+  articleStatus: null,
 };
 
 describe("studio-store", () => {
@@ -63,6 +65,26 @@ describe("studio-store", () => {
     useStudioStore.getState().setError("boom");
     expect(useStudioStore.getState().isGenerating).toBe(true);
     expect(useStudioStore.getState().error).toBe("boom");
+  });
+
+  it("setSavedArticle 设置 id 与 status", () => {
+    useStudioStore.getState().setSavedArticle("a1", "DRAFT");
+    expect(useStudioStore.getState().articleId).toBe("a1");
+    expect(useStudioStore.getState().articleStatus).toBe("DRAFT");
+  });
+
+  it("setArticleStatus 更新状态", () => {
+    useStudioStore.getState().setSavedArticle("a1", "DRAFT");
+    useStudioStore.getState().setArticleStatus("REVIEW");
+    expect(useStudioStore.getState().articleStatus).toBe("REVIEW");
+    expect(useStudioStore.getState().articleId).toBe("a1");
+  });
+
+  it("resetArticle 清回未保存态", () => {
+    useStudioStore.getState().setSavedArticle("a1", "PUBLISHED");
+    useStudioStore.getState().resetArticle();
+    expect(useStudioStore.getState().articleId).toBeNull();
+    expect(useStudioStore.getState().articleStatus).toBeNull();
   });
 
   it("nextId 单调递增", () => {

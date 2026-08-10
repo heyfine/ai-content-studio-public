@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { useStudioStore, nextId } from "@/stores/studio-store";
 import { streamGenerateRequest } from "@/lib/ai/stream-client";
+import { ArticleActions } from "./article-actions";
 
 interface PromptOption {
   id: string;
@@ -80,6 +81,7 @@ export function StudioSidebar() {
 
   return (
     <div className="flex h-full flex-col gap-4 overflow-y-auto p-4" data-testid="studio-sidebar">
+      <ArticleActions />
       <div className="space-y-2">
         <Label>AI 操作</Label>
         <div className="grid grid-cols-2 gap-2">

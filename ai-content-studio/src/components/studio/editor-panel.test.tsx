@@ -13,6 +13,8 @@ describe("EditorPanel", () => {
       selectedPromptId: null,
       isGenerating: false,
       error: null,
+      articleId: null,
+      articleStatus: null,
     });
   });
 
