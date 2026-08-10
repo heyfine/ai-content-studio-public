@@ -5,8 +5,8 @@
 ## 现状
 
 - Phase 1 基线已完成：可运行空壳后台 + 登录认证闭环。
-- Phase 2 代码已完成：AI 供应商管理、模型路由、统一 `AI.generate()` 调用层、AI Studio 冒烟测试均就位，typecheck/test/build 全绿。
-- 仅数据库迁移与端到端登录依赖 `DATABASE_URL`（🔶 你在 Supabase 建项目后提供）。
+- Phase 2 已完成：AI 供应商管理、模型路由、统一 `AI.generate()` 调用层；数据库已迁移 + 种子管理员就绪，端到端登录链路验证通过。
+- Phase 3 进行中：内容生产闭环已打通 Prompt 管理 → 文章状态机 → AI Studio 三栏 → AI 流式生成 + Prompt 模板注入 → Markdown 编辑器 → 文章保存与状态流转 UI；typecheck/test/build 全绿，覆盖率 ≥80%。
 - 完整规划见 `AI Content Studio项目.txt` 与 `docs/ROADMAP.md`。
 
 ## 技术栈
@@ -17,7 +17,7 @@
 | 语言 | TypeScript |
 | 框架 | Next.js 16（App Router + Turbopack） |
 | UI | Tailwind CSS v4 + shadcn/ui（base-nova，基于 @base-ui/react） |
-| 状态 | Zustand（Phase 2 起） |
+| 状态 | Zustand（Studio 跨面板共享） |
 | 表单 | React Hook Form + Zod 4 |
 | 数据库 | PostgreSQL（Supabase） + Prisma 6 |
 | 认证 | Auth.js v5（JWT + Credentials） |
