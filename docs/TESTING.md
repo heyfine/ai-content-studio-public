@@ -13,7 +13,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 ## 覆盖率要求
 
 - 核心逻辑（lib / config / 组件）覆盖率阈值：行/分支/函数/语句 ≥ 80%
-- 当前（Phase 3 任务 6 后）：326 测试，Stmts 93.89 / Branch 84.51 / Func 91.44 / Lines 96.42
+- 当前（Phase 4 SEO 后）：356 测试，Stmts 94.07 / Branch 85.44 / Func 91.79 / Lines 96.47
 - 不足时 CI 会失败；关键路径必测
 
 ## 测试类型
