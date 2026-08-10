@@ -26,6 +26,8 @@ export default defineConfig({
         "src/app/page.tsx",
         "src/app/**/page.tsx",
         "src/app/**/layout.tsx",
+        "src/app/api/auth/**",
+        "src/lib/auth.ts",
         "src/types/**",
       ],
       thresholds: {
