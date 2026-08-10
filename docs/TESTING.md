@@ -13,7 +13,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 ## 覆盖率要求
 
 - 核心逻辑（lib / config / 组件）覆盖率阈值：行/分支/函数/语句 ≥ 80%
-- 当前（Phase 2）：152 测试，Stmts 94.6 / Branch 84.1 / Funcs 91.8 / Lines 96.6
+- 当前（Phase 3 任务 1 后）：198 测试，Stmts 94.06 / Branch 84.77 / Func 89.6 / Lines 96.35
 - 不足时 CI 会失败；关键路径必测
 
 ## 测试类型
@@ -43,6 +43,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 - **mock next-auth/react**：用 `vi.hoisted` 注入 signIn/signOut
 - **async server component 测试**：`render(await Component())`（需 mock 其 server 依赖如 auth）
 - **window.confirm mock**：删书确认类用 `vi.spyOn(window, "confirm").mockReturnValue(true/false)`
+- **effect 触发的 fetch 测试（避免悬空 promise）**：测「加载中」时不要用 `mockReturnValue(new Promise(()=>{}))`（永不 resolve，Vitest 4 判为悬空失败），改用可控 deferred：`let r; fetch.mockReturnValue(new Promise(res => { r = res; })); render(...); 断言; r({ ok:true, json:async()=>[] })`。测「加载失败」时用 `mockResolvedValue({ ok:false })` 让组件内部 throw 并被 try/catch 捕获，避免顶层 rejected promise 被判未捕获拒绝。
 
 ## 更新规则
 
