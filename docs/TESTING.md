@@ -13,7 +13,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 ## 覆盖率要求
 
 - 核心逻辑（lib / config / 组件）覆盖率阈值：行/分支/函数/语句 ≥ 80%
-- 当前（Phase 3 任务 1 后）：198 测试，Stmts 94.06 / Branch 84.77 / Func 89.6 / Lines 96.35
+- 当前（Phase 3 任务 2 后）：262 测试，Stmts 93.5 / Branch 85.35 / Func 89.1 / Lines 96.16
 - 不足时 CI 会失败；关键路径必测
 
 ## 测试类型
@@ -37,6 +37,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 ## 常用技巧
 
 - **API 路由测试**：直接 import handler 函数（`GET`/`POST`/`PUT`/`DELETE`），用 `new Request(url, {method, headers, body})` 构造入参，断言 `res.status` 与 `await res.json()`；mock `@/lib/auth` 与对应 service。带 params 的 handler传 `ctx: { params: Promise.resolve({ id }) }`。
+- **状态机 API**：业务层抛 `非法状态转换`/`不存在` 文本错误，路由用正则匹配文本映射 HTTP 状态（404/409）；Prisma P2025（删除不存在记录）也捕获转 404。状态机转换验收用独立可测模块（`article-status.ts` 的 canTransition/assertTransition），不与 DB 耦合。
 - **base-ui Select 在 jsdom 中测试**：`vi.mock("@/components/ui/select")` 替换为原生 `<select>`，保持 `value`/`onValueChange` 签名，用 `fireEvent.change` 选值。
 - **base-ui Dialog 在 jsdom 中测试**：`vi.mock("@/components/ui/dialog")` 让 `Dialog`/`DialogContent` 直接渲染 children、`DialogTrigger`/`DialogClose` 直接渲染 `render` prop，跳过 portal/可见性，表单内容恒可见可交互。
 - **mock next/navigation**：setup.tsx 已全局 mock；测试内可 `vi.mock` 覆盖 usePathname 控制路由
