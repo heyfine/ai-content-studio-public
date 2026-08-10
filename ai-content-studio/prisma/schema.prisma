@@ -146,3 +146,16 @@ model SeoReport {
   suggestions Json
   createdAt   DateTime @default(now())
 }
+
+/// WordPress 站点配置：应用密码 AES-256-GCM 加密入库
+model WordPressConfig {
+  id          String   @id @default(uuid())
+  name        String
+  siteUrl     String   @unique
+  username    String
+  /// AES-256-GCM 加密后的应用密码（base64）
+  appPassword String
+  enabled     Boolean  @default(true)
+  createdAt    DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
