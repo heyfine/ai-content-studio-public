@@ -182,12 +182,12 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger as never} />
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] w-full flex-col overflow-hidden sm:max-w-3xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "编辑 Prompt" : "添加 Prompt"}</DialogTitle>
           <DialogDescription>管理提示词模板，生成时按类型注入为 system prompt。</DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {submitError && (
             <p role="alert" className="text-sm text-destructive">
               {submitError}
@@ -228,7 +228,7 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
             <Label htmlFor="prompt-content">Prompt 内容</Label>
             <textarea
               id="prompt-content"
-              className="min-h-[120px] w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              className="min-h-[40vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm"
               value={form.content}
               onChange={(e) => setField("content", e.target.value)}
             />
@@ -243,7 +243,7 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
             <Label htmlFor="prompt-active">启用（生成时使用）</Label>
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <DialogClose
             render={
               <Button type="button" variant="ghost">
