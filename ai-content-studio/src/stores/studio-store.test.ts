@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach } from "vitest";
 import { useStudioStore, nextId } from "./studio-store";
 
 const initial = {
@@ -153,10 +153,31 @@ describe("studio-store reasoning", () => {
     expect(useStudioStore.getState().reasoningEnabled).toBe(false);
     expect(useStudioStore.getState().reasoningEffort).toBe("medium");
   });
-  it("setReasoningEnabled/setReasoningEffort 更新值", () => {
+  it("setReasoningEnabled/setReasoningEffort 更新值并持久化到 localStorage", () => {
     useStudioStore.getState().setReasoningEnabled(true);
     useStudioStore.getState().setReasoningEffort("high");
     expect(useStudioStore.getState().reasoningEnabled).toBe(true);
     expect(useStudioStore.getState().reasoningEffort).toBe("high");
+    const persisted = JSON.parse(localStorage.getItem("ai-studio-reasoning-prefs") ?? "{}");
+    expect(persisted.state).toMatchObject({ reasoningEnabled: true, reasoningEffort: "high" });
+  });
+
+  it("关闭后 localStorage 同步为关闭", () => {
+    useStudioStore.getState().setReasoningEnabled(true);
+    useStudioStore.getState().setReasoningEnabled(false);
+    const persisted = JSON.parse(localStorage.getItem("ai-studio-reasoning-prefs") ?? "{}");
+    expect(persisted.state.reasoningEnabled).toBe(false);
+  });
+
+  it("重建 store 时从 localStorage 恢复深度思考状态（刷新页面场景）", async () => {
+    localStorage.setItem(
+      "ai-studio-reasoning-prefs",
+      JSON.stringify({ state: { reasoningEnabled: true, reasoningEffort: "high" }, version: 0 }),
+    );
+    vi.resetModules();
+    const { useStudioStore: freshStore } = await import("./studio-store");
+    expect(freshStore.getState().reasoningEnabled).toBe(true);
+    expect(freshStore.getState().reasoningEffort).toBe("high");
+    localStorage.removeItem("ai-studio-reasoning-prefs");
   });
 });

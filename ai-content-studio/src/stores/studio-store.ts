@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import { persist } from "zustand/middleware";
 
 export interface ChatMessage {
   id: string;
@@ -62,42 +63,54 @@ export function nextId(): string {
   return `m${idSeq}`;
 }
 
-export const useStudioStore = create<StudioState>((set) => ({
-  title: "",
-  content: "",
-  messages: [],
-  generations: [],
-  selectedTask: "article_generate",
-  selectedPromptId: null,
-  isGenerating: false,
-  error: null,
-  articleId: null,
-  reasoningEnabled: false,
-  reasoningEffort: "medium",
-  articleStatus: null,
-  setTitle: (v) => set({ title: v }),
-  setContent: (v) => set({ content: v }),
-  appendMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
-  appendDelta: (id, delta) =>
-    set((s) => ({
-      messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)),
-    })),
-  clearMessages: () => set({ messages: [] }),
-  appendGeneration: (item) => set((s) => ({ generations: [...s.generations, item] })),
-  appendGenerationDelta: (id, delta) =>
-    set((s) => ({
-      generations: s.generations.map((g) =>
-        g.id === id ? { ...g, content: g.content + delta } : g,
-      ),
-    })),
-  clearGenerations: () => set({ generations: [] }),
-  setSelectedTask: (t) => set({ selectedTask: t }),
-  setSelectedPromptId: (id) => set({ selectedPromptId: id }),
-  setReasoningEnabled: (b) => set({ reasoningEnabled: b }),
-  setReasoningEffort: (e) => set({ reasoningEffort: e }),
-  setGenerating: (b) => set({ isGenerating: b }),
-  setError: (e) => set({ error: e }),
-  setSavedArticle: (id, status) => set({ articleId: id, articleStatus: status }),
-  setArticleStatus: (status) => set({ articleStatus: status }),
-  resetArticle: () => set({ articleId: null, articleStatus: null }),
-}));
+export const useStudioStore = create<StudioState>()(
+  persist(
+    (set) => ({
+      title: "",
+      content: "",
+      messages: [],
+      generations: [],
+      selectedTask: "article_generate",
+      selectedPromptId: null,
+      isGenerating: false,
+      error: null,
+      articleId: null,
+      reasoningEnabled: false,
+      reasoningEffort: "medium",
+      articleStatus: null,
+      setTitle: (v) => set({ title: v }),
+      setContent: (v) => set({ content: v }),
+      appendMessage: (m) => set((s) => ({ messages: [...s.messages, m] })),
+      appendDelta: (id, delta) =>
+        set((s) => ({
+          messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)),
+        })),
+      clearMessages: () => set({ messages: [] }),
+      appendGeneration: (item) => set((s) => ({ generations: [...s.generations, item] })),
+      appendGenerationDelta: (id, delta) =>
+        set((s) => ({
+          generations: s.generations.map((g) =>
+            g.id === id ? { ...g, content: g.content + delta } : g,
+          ),
+        })),
+      clearGenerations: () => set({ generations: [] }),
+      setSelectedTask: (t) => set({ selectedTask: t }),
+      setSelectedPromptId: (id) => set({ selectedPromptId: id }),
+      setReasoningEnabled: (b) => set({ reasoningEnabled: b }),
+      setReasoningEffort: (e) => set({ reasoningEffort: e }),
+      setGenerating: (b) => set({ isGenerating: b }),
+      setError: (e) => set({ error: e }),
+      setSavedArticle: (id, status) => set({ articleId: id, articleStatus: status }),
+      setArticleStatus: (status) => set({ articleStatus: status }),
+      resetArticle: () => set({ articleId: null, articleStatus: null }),
+    }),
+    {
+      name: "ai-studio-reasoning-prefs",
+      // 只持久化深度思考开关与强度，刷新页面后保持用户选择
+      partialize: (s) => ({
+        reasoningEnabled: s.reasoningEnabled,
+        reasoningEffort: s.reasoningEffort,
+      }),
+    },
+  ),
+);
