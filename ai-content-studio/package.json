@@ -17,7 +17,8 @@
     "db:generate": "prisma generate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "node --experimental-transform-types --env-file=.env.local scripts/seed-admin.ts"
+    "db:seed": "node --experimental-transform-types --env-file=.env.local scripts/seed-admin.ts",
+    "db:seed-prompts": "node --experimental-transform-types --env-file=.env.local scripts/seed-prompts.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.116.0",
