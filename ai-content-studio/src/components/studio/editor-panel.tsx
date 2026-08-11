@@ -1,37 +1,82 @@
 "use client";
 
 import { useState } from "react";
-import { Pencil as PencilIcon, Columns2 as Columns2Icon, Eye as EyeIcon } from "lucide-react";
+import {
+  ArrowUpFromLine as ApplyIcon,
+  Check as CheckIcon,
+  ClipboardCopy as CopyIcon,
+  Eraser as EraserIcon,
+} from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { cn } from "@/lib/utils";
-import { useStudioStore } from "@/stores/studio-store";
+import { Label } from "@/components/ui/label";
+import { useStudioStore, type GenerationItem } from "@/stores/studio-store";
+import { taskRouteDefinitions } from "@/config/task-routes";
 import { MarkdownPreview } from "./markdown-preview";
 
-type Mode = "edit" | "split" | "preview";
-
-interface ModeToggleProps {
-  active: boolean;
-  label: string;
-  onClick: () => void;
-  children: React.ReactNode;
+function taskLabel(task: string): string {
+  return taskRouteDefinitions.find((t) => t.value === task)?.label ?? task;
 }
 
-function ModeToggle({ active, label, onClick, children }: ModeToggleProps) {
+function GenerationCard({ g }: { g: GenerationItem }) {
+  const setContent = useStudioStore((s) => s.setContent);
+  const [copied, setCopied] = useState(false);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(g.content);
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1500);
+    } catch {
+      // 剪贴板不可用时静默忽略
+    }
+  }
+
   return (
-    <Button variant="ghost" size="sm" aria-label={label} aria-pressed={active} onClick={onClick}>
-      {children}
-    </Button>
+    <div className="rounded-md border" data-testid="generation-item">
+      <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-1.5">
+        <span className="text-xs font-medium" data-testid="generation-header">
+          第{g.index}次 · {taskLabel(g.task)} · {g.createdAt}
+        </span>
+        <div className="flex shrink-0 items-center gap-1">
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label="复制生成结果"
+            onClick={() => void copy()}
+            disabled={!g.content}
+          >
+            {copied ? <CheckIcon className="size-3" /> : <CopyIcon className="size-3" />}
+            {copied ? "已复制" : "复制"}
+          </Button>
+          <Button
+            variant="ghost"
+            size="xs"
+            aria-label="应用到原文"
+            onClick={() => setContent(g.content)}
+            disabled={!g.content}
+          >
+            <ApplyIcon className="size-3" /> 应用到原文
+          </Button>
+        </div>
+      </div>
+      <div className="max-h-[320px] overflow-y-auto px-3 py-2" data-testid="generation-content">
+        {g.content ? (
+          <MarkdownPreview content={g.content} />
+        ) : (
+          <p className="text-sm text-muted-foreground">生成中…</p>
+        )}
+      </div>
+    </div>
   );
 }
 
 export function EditorPanel() {
-  const { title, content, setTitle, setContent } = useStudioStore();
-  const [mode, setMode] = useState<Mode>("edit");
+  const { title, content, setTitle, setContent, generations, clearGenerations } = useStudioStore();
 
   return (
     <div className="flex h-full flex-col" data-testid="editor-panel">
-      <div className="border-b px-4 py-3">
+      <div className="shrink-0 border-b px-4 py-3">
         <Input
           aria-label="文章标题"
           className="border-0 px-0 text-lg font-semibold shadow-none focus-visible:ring-0"
@@ -40,54 +85,48 @@ export function EditorPanel() {
           onChange={(e) => setTitle(e.target.value)}
         />
       </div>
-      <div
-        role="group"
-        aria-label="编辑视图"
-        className="flex items-center gap-1 border-b px-4 py-1.5"
-      >
-        <ModeToggle active={mode === "edit"} label="编辑模式" onClick={() => setMode("edit")}>
-          <PencilIcon className="size-3.5" /> 编辑
-        </ModeToggle>
-        <ModeToggle active={mode === "split"} label="分屏模式" onClick={() => setMode("split")}>
-          <Columns2Icon className="size-3.5" /> 分屏
-        </ModeToggle>
-        <ModeToggle active={mode === "preview"} label="预览模式" onClick={() => setMode("preview")}>
-          <EyeIcon className="size-3.5" /> 预览
-        </ModeToggle>
-      </div>
-      <div className="flex flex-1 flex-col overflow-hidden">
-        {mode === "edit" && (
+      <div className="flex min-h-0 flex-1 flex-col gap-4 p-4">
+        <section className="flex min-h-0 flex-1 flex-col">
+          <div className="flex items-center justify-between pb-1.5">
+            <Label>原文</Label>
+            <span className="text-xs text-muted-foreground">{content.length} 字符</span>
+          </div>
           <textarea
-            aria-label="文章正文"
-            className="flex-1 resize-none border-0 bg-transparent px-4 py-3 font-mono text-sm outline-none"
-            placeholder="在此输入或由 AI 生成 Markdown 正文…"
+            aria-label="原文"
+            className="min-h-[120px] flex-1 resize-none rounded-md border border-input bg-transparent px-3 py-2 text-sm outline-none"
+            placeholder="把要改写的原文或资料粘贴到这里，再在右侧选择 AI 操作…"
             value={content}
             onChange={(e) => setContent(e.target.value)}
           />
-        )}
-        {mode === "split" && (
-          <div className="grid flex-1 grid-cols-2 overflow-hidden">
-            <textarea
-              aria-label="文章正文"
-              className="resize-none border-r border-border bg-transparent px-4 py-3 font-mono text-sm outline-none"
-              placeholder="在此输入或由 AI 生成 Markdown 正文…"
-              value={content}
-              onChange={(e) => setContent(e.target.value)}
-            />
-            <MarkdownPreview content={content} className="overflow-y-auto px-4 py-3" />
+        </section>
+        <section className="flex min-h-0 flex-1 flex-col">
+          <div className="flex items-center justify-between pb-1.5">
+            <Label>生成结果</Label>
+            {generations.length > 0 && (
+              <Button
+                variant="ghost"
+                size="xs"
+                aria-label="清空生成结果"
+                onClick={clearGenerations}
+              >
+                <EraserIcon className="size-3" /> 清空
+              </Button>
+            )}
           </div>
-        )}
-        {mode === "preview" && (
-          <MarkdownPreview content={content} className="flex-1 overflow-y-auto px-4 py-3" />
-        )}
-      </div>
-      <div className="border-t px-4 py-2 text-xs text-muted-foreground">
-        {content.length} 字符
-        {content && (
-          <span className="ml-2 text-emerald-500" aria-label="自动保存提示">
-            · Markdown
-          </span>
-        )}
+          <div
+            className="min-h-0 flex-1 space-y-2 overflow-y-auto pr-1"
+            data-testid="generation-list"
+          >
+            {generations.length === 0 && (
+              <p className="py-10 text-center text-sm text-muted-foreground">
+                暂无生成结果，点右侧「AI 操作」开始。
+              </p>
+            )}
+            {generations.map((g) => (
+              <GenerationCard key={g.id} g={g} />
+            ))}
+          </div>
+        </section>
       </div>
     </div>
   );

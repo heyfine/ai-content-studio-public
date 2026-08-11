@@ -15,6 +15,7 @@ describe("StudioLayout", () => {
       title: "",
       content: "",
       messages: [],
+      generations: [],
       selectedTask: "article_generate",
       selectedPromptId: null,
       isGenerating: false,

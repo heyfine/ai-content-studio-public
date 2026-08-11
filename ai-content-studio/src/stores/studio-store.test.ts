@@ -5,6 +5,7 @@ const initial = {
   title: "",
   content: "",
   messages: [],
+  generations: [],
   selectedTask: "article_generate",
   selectedPromptId: null,
   isGenerating: false,
@@ -93,6 +94,54 @@ describe("studio-store", () => {
     const a = nextId();
     const b = nextId();
     expect(a).not.toBe(b);
+  });
+
+  it("appendGeneration 追加生成条目并保留序号与时间", () => {
+    useStudioStore.getState().appendGeneration({
+      id: "g1",
+      task: "article_generate",
+      index: 1,
+      content: "",
+      createdAt: "14:32:05",
+    });
+    useStudioStore.getState().appendGeneration({
+      id: "g2",
+      task: "seo_analyze",
+      index: 2,
+      content: "",
+      createdAt: "14:35:11",
+    });
+    const gs = useStudioStore.getState().generations;
+    expect(gs).toHaveLength(2);
+    expect(gs[1]).toMatchObject({ id: "g2", index: 2, createdAt: "14:35:11" });
+  });
+
+  it("appendGenerationDelta 按 id 累加生成内容，不影响其它条目", () => {
+    useStudioStore.getState().appendGeneration({
+      id: "g1",
+      task: "article_generate",
+      index: 1,
+      content: "",
+      createdAt: "14:32:05",
+    });
+    useStudioStore.getState().appendGenerationDelta("g1", "生成");
+    useStudioStore.getState().appendGenerationDelta("g1", "正文");
+    useStudioStore.getState().appendGenerationDelta("missing", "忽略");
+    const gs = useStudioStore.getState().generations;
+    expect(gs[0].content).toBe("生成正文");
+    expect(gs).toHaveLength(1);
+  });
+
+  it("clearGenerations 清空", () => {
+    useStudioStore.getState().appendGeneration({
+      id: "g1",
+      task: "article_generate",
+      index: 1,
+      content: "x",
+      createdAt: "14:32:05",
+    });
+    useStudioStore.getState().clearGenerations();
+    expect(useStudioStore.getState().generations).toEqual([]);
   });
 });
 

@@ -10,7 +10,7 @@ vi.mock("@/lib/services/refresh-service", () => ({ refreshArticle: refreshArticl
 
 import { POST } from "./route";
 
-function makeRequest(id: string, body?: unknown) {
+function makeRequest(id: string, body?: string) {
   return new Request("https://localhost/api/articles/" + id + "/refresh", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -44,7 +44,7 @@ describe("POST /api/articles/[id]/refresh", () => {
       newContentLength: 200,
       stale: { aged: true, lowSeo: true, ageDays: 220 },
     });
-    const res = await POST(makeRequest("a1", { maxTokens: 1024 }), ctx("a1"));
+    const res = await POST(makeRequest("a1", JSON.stringify({ maxTokens: 1024 })), ctx("a1"));
     expect(res.status).toBe(200);
     const data = await res.json();
     expect(data.newSeoScore).toBe(82);

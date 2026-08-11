@@ -26,6 +26,7 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     title: "",
     content: "",
     messages: [],
+    generations: [],
     selectedTask: "article_generate",
     selectedPromptId: null,
     isGenerating: false,
@@ -97,19 +98,24 @@ describe("AIChatPanel", () => {
     expect(screen.getByLabelText("AI 输入")).toHaveValue("");
   });
 
-  it("article_generate 回填到编辑区 content", async () => {
-    resetStore({ selectedTask: "article_generate" });
+  it("article_generate 追加生成结果且不回填 content", async () => {
+    resetStore({ selectedTask: "article_generate", content: "原文" });
     fetchMock.mockResolvedValue(
       sseResponse([{ type: "delta", content: "正文内容" }, { type: "done" }]),
     );
     render(<AIChatPanel />);
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
-    await waitFor(() => expect(useStudioStore.getState().content).toBe("正文内容"));
+    await waitFor(() => {
+      const g = useStudioStore.getState().generations;
+      expect(g).toHaveLength(1);
+      expect(g[0]).toMatchObject({ task: "article_generate", index: 1, content: "正文内容" });
+      expect(useStudioStore.getState().content).toBe("原文");
+    });
   });
 
-  it("非 article/outline 任务不回填 content", async () => {
-    resetStore({ selectedTask: "seo_analyze" });
+  it("非 article/outline 任务同样追加生成结果且不回填 content", async () => {
+    resetStore({ selectedTask: "seo_analyze", content: "原文" });
     fetchMock.mockResolvedValue(
       sseResponse([{ type: "delta", content: "SEO 建议" }, { type: "done" }]),
     );
@@ -117,7 +123,10 @@ describe("AIChatPanel", () => {
     fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
     fireEvent.click(screen.getByText("发送"));
     await waitFor(() => expect(screen.getByText("SEO 建议")).toBeInTheDocument());
-    expect(useStudioStore.getState().content).toBe("");
+    const g = useStudioStore.getState().generations;
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ task: "seo_analyze", content: "SEO 建议" });
+    expect(useStudioStore.getState().content).toBe("原文");
   });
 
   it("error 事件显示错误 alert", async () => {

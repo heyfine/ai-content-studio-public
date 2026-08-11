@@ -22,11 +22,12 @@ export function StudioSidebar() {
     selectedPromptId,
     content,
     title,
-    setContent,
     setGenerating,
     setError,
     appendMessage,
     appendDelta,
+    appendGeneration,
+    appendGenerationDelta,
   } = useStudioStore();
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const [loadingPrompts, setLoadingPrompts] = useState(true);
@@ -59,15 +60,18 @@ export function StudioSidebar() {
     setGenerating(true);
     const assistantId = nextId();
     appendMessage({ id: assistantId, role: "assistant", content: "", task });
-    let acc = "";
+    appendGeneration({
+      id: assistantId,
+      task,
+      index: useStudioStore.getState().generations.length + 1,
+      content: "",
+      createdAt: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    });
     try {
       for await (const ev of streamGenerateRequest({ task, input, promptId })) {
         if (ev.type === "delta") {
-          acc += ev.content;
           appendDelta(assistantId, ev.content);
-          if (task === "article_generate" || task === "outline_generate") {
-            setContent(acc);
-          }
+          appendGenerationDelta(assistantId, ev.content);
         } else if (ev.type === "error") {
           throw new Error(ev.message);
         }

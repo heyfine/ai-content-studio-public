@@ -66,10 +66,10 @@ export function stalenessReasons(
  * 1) 最低 seoScore 优先（seoScore 为 null 视为 100，即非低质但仍可因 age 入选）；
  * 2) 同分则最早 updatedAt 优先。
  */
-export function rankStaleArticles(
-  list: ArticleStalenessInput[],
+export function rankStaleArticles<T extends ArticleStalenessInput>(
+  list: T[],
   opts: StalenessOptions = {},
-): ArticleStalenessInput[] {
+): T[] {
   const stale = list.filter((a) => isStaleArticle(a, opts));
   return stale.sort((a, b) => {
     const sa = a.seoScore ?? 100;

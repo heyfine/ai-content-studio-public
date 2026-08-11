@@ -26,6 +26,7 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     title: "",
     content: "",
     messages: [],
+    generations: [],
     selectedTask: "article_generate",
     selectedPromptId: null,
     isGenerating: false,
@@ -83,7 +84,7 @@ describe("StudioSidebar", () => {
     expect(useStudioStore.getState().selectedPromptId).toBe("p1");
   });
 
-  it("点击 AI 操作走流式接口；article_generate 回填 content 且拼到消息", async () => {
+  it("点击 AI 操作走流式接口；article_generate 追加到生成结果且拼到消息，不回填 content", async () => {
     mockRoute(
       [{ id: "p1", name: "x", type: "t" }],
       [
@@ -92,7 +93,7 @@ describe("StudioSidebar", () => {
         { type: "done", generationId: "g" },
       ],
     );
-    resetStore({ title: "我的主题", content: "" });
+    resetStore({ title: "我的主题", content: "原文内容" });
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("当前任务")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("article_generate"));
@@ -104,21 +105,29 @@ describe("StudioSidebar", () => {
           body: expect.stringContaining("我的主题"),
         }),
       );
-      expect(useStudioStore.getState().content).toBe("生成的正文");
+      const g = useStudioStore.getState().generations;
+      expect(g).toHaveLength(1);
+      expect(g[0]).toMatchObject({ task: "article_generate", index: 1, content: "生成的正文" });
+      expect(g[0].createdAt).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+      expect(useStudioStore.getState().content).toBe("原文内容");
       expect(useStudioStore.getState().messages.some((m) => m.content === "生成的正文")).toBe(true);
     });
   });
 
-  it("非 article/outline 任务不回填 content", async () => {
+  it("非 article/outline 任务也追加生成结果且不回填 content", async () => {
     mockRoute(
       [{ id: "p1", name: "x", type: "t" }],
       [{ type: "delta", content: "SEO 建议" }, { type: "done" }],
     );
+    resetStore({ title: "t", content: "原文" });
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("当前任务")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("seo_analyze"));
     await waitFor(() => expect(useStudioStore.getState().selectedTask).toBe("seo_analyze"));
-    expect(useStudioStore.getState().content).toBe("");
+    const g = useStudioStore.getState().generations;
+    expect(g).toHaveLength(1);
+    expect(g[0]).toMatchObject({ task: "seo_analyze", index: 1, content: "SEO 建议" });
+    expect(useStudioStore.getState().content).toBe("原文");
     expect(useStudioStore.getState().messages.some((m) => m.content === "SEO 建议")).toBe(true);
   });
 

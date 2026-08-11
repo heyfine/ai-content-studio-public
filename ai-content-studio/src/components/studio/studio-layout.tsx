@@ -6,15 +6,15 @@ import { StudioSidebar } from "./studio-sidebar";
 
 export function StudioLayout() {
   return (
-    <div className="h-[calc(100vh-4rem)] overflow-hidden">
-      <div className="grid h-full grid-cols-1 lg:grid-cols-[280px_1fr_240px]">
-        <aside className="hidden border-r lg:block">
+    <div className="h-full overflow-hidden">
+      <div className="grid h-full min-h-0 grid-cols-1 lg:grid-cols-[280px_1fr_240px]">
+        <aside className="hidden min-h-0 border-r lg:block">
           <AIChatPanel />
         </aside>
-        <main className="overflow-hidden border-r">
+        <main className="min-h-0 overflow-hidden border-r">
           <EditorPanel />
         </main>
-        <aside className="hidden lg:block">
+        <aside className="hidden min-h-0 lg:block">
           <StudioSidebar />
         </aside>
       </div>

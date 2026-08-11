@@ -7,10 +7,22 @@ export interface ChatMessage {
   task?: string;
 }
 
+/** 一次 AI 生成的完整结果（原文与生成内容对比区的条目）。 */
+export interface GenerationItem {
+  id: string;
+  task: string;
+  /** 第几次生成（从 1 开始，全局递增） */
+  index: number;
+  content: string;
+  /** 开始生成时间（如 14:32:05），用于展示 */
+  createdAt: string;
+}
+
 export interface StudioState {
   title: string;
   content: string;
   messages: ChatMessage[];
+  generations: GenerationItem[];
   selectedTask: string;
   selectedPromptId: string | null;
   isGenerating: boolean;
@@ -28,6 +40,9 @@ export interface StudioState {
   appendMessage: (m: ChatMessage) => void;
   appendDelta: (id: string, delta: string) => void;
   clearMessages: () => void;
+  appendGeneration: (item: GenerationItem) => void;
+  appendGenerationDelta: (id: string, delta: string) => void;
+  clearGenerations: () => void;
   setSelectedTask: (t: string) => void;
   setSelectedPromptId: (id: string | null) => void;
   setReasoningEnabled: (b: boolean) => void;
@@ -51,6 +66,7 @@ export const useStudioStore = create<StudioState>((set) => ({
   title: "",
   content: "",
   messages: [],
+  generations: [],
   selectedTask: "article_generate",
   selectedPromptId: null,
   isGenerating: false,
@@ -67,6 +83,14 @@ export const useStudioStore = create<StudioState>((set) => ({
       messages: s.messages.map((m) => (m.id === id ? { ...m, content: m.content + delta } : m)),
     })),
   clearMessages: () => set({ messages: [] }),
+  appendGeneration: (item) => set((s) => ({ generations: [...s.generations, item] })),
+  appendGenerationDelta: (id, delta) =>
+    set((s) => ({
+      generations: s.generations.map((g) =>
+        g.id === id ? { ...g, content: g.content + delta } : g,
+      ),
+    })),
+  clearGenerations: () => set({ generations: [] }),
   setSelectedTask: (t) => set({ selectedTask: t }),
   setSelectedPromptId: (id) => set({ selectedPromptId: id }),
   setReasoningEnabled: (b) => set({ reasoningEnabled: b }),

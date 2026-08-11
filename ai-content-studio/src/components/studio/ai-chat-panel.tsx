@@ -40,11 +40,12 @@ export function AIChatPanel() {
     reasoningEffort,
     appendMessage,
     appendDelta,
+    appendGeneration,
+    appendGenerationDelta,
     setSelectedTask,
     setReasoningEnabled,
     setReasoningEffort,
     setGenerating,
-    setContent,
     setError,
   } = useStudioStore();
   const [input, setInput] = useState("");
@@ -60,7 +61,13 @@ export function AIChatPanel() {
     setGenerating(true);
     const assistantId = nextId();
     appendMessage({ id: assistantId, role: "assistant", content: "", task: selectedTask });
-    let acc = "";
+    appendGeneration({
+      id: assistantId,
+      task: selectedTask,
+      index: useStudioStore.getState().generations.length + 1,
+      content: "",
+      createdAt: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+    });
     try {
       for await (const ev of streamGenerateRequest({
         task: selectedTask,
@@ -69,15 +76,11 @@ export function AIChatPanel() {
         ...(reasoningEnabled ? { reasoningEffort } : {}),
       })) {
         if (ev.type === "delta") {
-          acc += ev.content;
           appendDelta(assistantId, ev.content);
+          appendGenerationDelta(assistantId, ev.content);
         } else if (ev.type === "error") {
           throw new Error(ev.message);
         }
-      }
-      // 写文章/大纲类任务把完整生成内容回填到编辑区
-      if (selectedTask === "article_generate" || selectedTask === "outline_generate") {
-        setContent(acc);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -103,7 +106,7 @@ export function AIChatPanel() {
           ))}
         </select>
       </div>
-      <div className="flex-1 overflow-y-auto px-3 py-3">
+      <div className="min-h-0 flex-1 overflow-y-auto px-3 py-3">
         <div className="space-y-3">
           {messages.length === 0 && (
             <p className="py-8 text-center text-sm text-muted-foreground">
