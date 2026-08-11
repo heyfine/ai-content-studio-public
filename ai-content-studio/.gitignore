@@ -40,3 +40,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# agent / editor 本地产物与启动脚本（不入库）
+AGENTS.md
+CLAUDE.md
+dev-server.log
+start-dev.ps1
