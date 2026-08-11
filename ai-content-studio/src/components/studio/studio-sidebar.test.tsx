@@ -60,13 +60,13 @@ describe("StudioSidebar", () => {
     resetStore();
   });
 
-  it("渲染 ArticleActions 与 6 个 AI 操作按钮与 Prompt 模板选择", async () => {
+  it("渲染 ArticleActions 与 8 个 AI 操作按钮与 Prompt 模板选择", async () => {
     mockRoute([], []);
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByLabelText("选择 Prompt")).not.toBeDisabled());
     expect(screen.getByTestId("article-actions")).toBeInTheDocument();
     expect(screen.getByText("AI 操作")).toBeInTheDocument();
-    expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(6);
+    expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(8);
   });
 
   it("Prompt 列表加载后填充选项", async () => {
