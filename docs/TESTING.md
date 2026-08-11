@@ -13,7 +13,7 @@ pnpm.cmd run test:coverage   # 覆盖率
 ## 覆盖率要求
 
 - 核心逻辑（lib / config / 组件）覆盖率阈值：行/分支/函数/语句 ≥ 80%
-- 当前（Phase 4 SEO 后）：356 测试，Stmts 94.07 / Branch 85.44 / Func 91.79 / Lines 96.47
+- 当前（Phase 7 后）：78 文件 / 530 测试通过；typecheck 全绿
 - 不足时 CI 会失败；关键路径必测
 
 ## 测试类型
@@ -45,6 +45,8 @@ pnpm.cmd run test:coverage   # 覆盖率
 - **async server component 测试**：`render(await Component())`（需 mock 其 server 依赖如 auth）
 - **window.confirm mock**：删书确认类用 `vi.spyOn(window, "confirm").mockReturnValue(true/false)`
 - **Zustand store 测试**：store 是模块级单例，跨用例共享；beforeEach 用 `useStudioStore.setState({ ...initial })` 重置，再 `useStudioStore.getState().xxx()` 断言，或先 setState 到目标状态再 render 组件测交互（组件读 store，无需 mock store）。
+- **zustand persist 测试**：写入 localStorage 的格式是 `{ state: {...partialize 结果}, version: 0 }`；断言/预置需按此格式。模拟「刷新页面」用 `vi.resetModules()` + `await import("./store")` 重建 store 验证 rehydrate。
+- **base-ui Dialog 真实组件可直接测**：与 base-ui Select 不同（Select 需 mock），Dialog 由受控 `open` 控制 + 内部原生 radio/button，jsdom 直接 render 即可交互（弹窗出现用 `waitFor` 等），无需 `vi.mock("@/components/ui/dialog")`。
 - **SSE 流式客户端测试**：mock fetch 返回 ReadableStream 的 new Response，Content-Type 为 text/event-stream，每事件形如 `data: {...JSON...}\n\n`；消费方用 `for await` 断言 delta/done/error 序列。
 - **data-testid vs data-action**：组件若需在测试用 getByTestId 定位，就给元素加 `data-testid`；纯数据标记可并存 `data-action` 由 `el.dataset.action` 在测试中读取——两者不冲突，按需并存。
 - **effect 触发的 fetch 测试（避免悬空 promise）**：测「加载中」时不要用 `mockReturnValue(new Promise(()=>{}))`（永不 resolve，Vitest 4 判为悬空失败），改用可控 deferred：`let r; fetch.mockReturnValue(new Promise(res => { r = res; })); render(...); 断言; r({ ok:true, json:async()=>[] })`。测「加载失败」时用 `mockResolvedValue({ ok:false })` 让组件内部 throw 并被 try/catch 捕获，避免顶层 rejected promise 被判未捕获拒绝。
