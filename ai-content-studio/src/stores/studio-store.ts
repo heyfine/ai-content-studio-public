@@ -25,7 +25,8 @@ export interface StudioState {
   messages: ChatMessage[];
   generations: GenerationItem[];
   selectedTask: string;
-  selectedPromptId: string | null;
+  /** 各任务类型最近一次确认使用的 Prompt 模板 id（null = 不使用模板），持久化记忆 */
+  lastPromptByTask: Record<string, string | null>;
   isGenerating: boolean;
   error: string | null;
   /** 当前编辑文章的数据库 id；为空表示未保存（新建中） */
@@ -45,7 +46,7 @@ export interface StudioState {
   appendGenerationDelta: (id: string, delta: string) => void;
   clearGenerations: () => void;
   setSelectedTask: (t: string) => void;
-  setSelectedPromptId: (id: string | null) => void;
+  setLastPrompt: (task: string, promptId: string | null) => void;
   setReasoningEnabled: (b: boolean) => void;
   setReasoningEffort: (e: "low" | "medium" | "high") => void;
   setGenerating: (b: boolean) => void;
@@ -71,7 +72,7 @@ export const useStudioStore = create<StudioState>()(
       messages: [],
       generations: [],
       selectedTask: "article_generate",
-      selectedPromptId: null,
+      lastPromptByTask: {},
       isGenerating: false,
       error: null,
       articleId: null,
@@ -95,7 +96,8 @@ export const useStudioStore = create<StudioState>()(
         })),
       clearGenerations: () => set({ generations: [] }),
       setSelectedTask: (t) => set({ selectedTask: t }),
-      setSelectedPromptId: (id) => set({ selectedPromptId: id }),
+      setLastPrompt: (task, promptId) =>
+        set((s) => ({ lastPromptByTask: { ...s.lastPromptByTask, [task]: promptId } })),
       setReasoningEnabled: (b) => set({ reasoningEnabled: b }),
       setReasoningEffort: (e) => set({ reasoningEffort: e }),
       setGenerating: (b) => set({ isGenerating: b }),
@@ -106,10 +108,11 @@ export const useStudioStore = create<StudioState>()(
     }),
     {
       name: "ai-studio-reasoning-prefs",
-      // 只持久化深度思考开关与强度，刷新页面后保持用户选择
+      // 持久化深度思考开关/强度 + 各任务最近一次选择的 Prompt 模板，刷新页面后保持
       partialize: (s) => ({
         reasoningEnabled: s.reasoningEnabled,
         reasoningEffort: s.reasoningEffort,
+        lastPromptByTask: s.lastPromptByTask,
       }),
     },
   ),

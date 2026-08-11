@@ -11,16 +11,11 @@ import { canTransition, ARTICLE_STATUS_LABELS, type ArticleStatus } from "@/lib/
 const FLOW_TARGETS: ArticleStatus[] = ["DRAFT", "REVIEW", "PUBLISHED"];
 
 export function ArticleActions() {
-  const {
-    title,
-    content,
-    articleId,
-    articleStatus,
-    selectedPromptId,
-    setError,
-    setSavedArticle,
-    setArticleStatus,
-  } = useStudioStore();
+  const { title, content, articleId, articleStatus, setError, setSavedArticle, setArticleStatus } =
+    useStudioStore();
+  const lastArticlePrompt = useStudioStore(
+    (s) => s.lastPromptByTask["article_generate"] ?? undefined,
+  );
   const [saving, setSaving] = useState(false);
   const [transitioning, setTransitioning] = useState(false);
   const [savedHint, setSavedHint] = useState(false);
@@ -38,7 +33,7 @@ export function ArticleActions() {
         res = await fetch(`/api/articles/${articleId}`, {
           method: "PUT",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title, content, promptId: selectedPromptId ?? undefined }),
+          body: JSON.stringify({ title, content, promptId: lastArticlePrompt }),
         });
       } else {
         res = await fetch("/api/articles", {
@@ -48,7 +43,7 @@ export function ArticleActions() {
             title,
             content,
             status: articleStatus ?? undefined,
-            promptId: selectedPromptId ?? undefined,
+            promptId: lastArticlePrompt,
           }),
         });
       }

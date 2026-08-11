@@ -10,7 +10,7 @@ function resetStore() {
     messages: [],
     generations: [],
     selectedTask: "article_generate",
-    selectedPromptId: null,
+    lastPromptByTask: {},
     isGenerating: false,
     error: null,
     articleId: null,

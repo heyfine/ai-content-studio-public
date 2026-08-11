@@ -28,7 +28,7 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     messages: [],
     generations: [],
     selectedTask: "article_generate",
-    selectedPromptId: null,
+    lastPromptByTask: {},
     isGenerating: false,
     error: null,
     reasoningEnabled: false,
@@ -127,6 +127,17 @@ describe("AIChatPanel", () => {
     expect(g).toHaveLength(1);
     expect(g[0]).toMatchObject({ task: "seo_analyze", content: "SEO 建议" });
     expect(useStudioStore.getState().content).toBe("原文");
+  });
+
+  it("发送时使用该任务记忆的 Prompt 模板", async () => {
+    resetStore({ lastPromptByTask: { article_generate: "p1" } });
+    fetchMock.mockResolvedValue(sseResponse([{ type: "delta", content: "c" }, { type: "done" }]));
+    render(<AIChatPanel />);
+    fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
+    fireEvent.click(screen.getByText("发送"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.promptId).toBe("p1");
   });
 
   it("error 事件显示错误 alert", async () => {

@@ -13,7 +13,7 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     content: "",
     messages: [],
     selectedTask: "article_generate",
-    selectedPromptId: null,
+    lastPromptByTask: {},
     isGenerating: false,
     error: null,
     articleId: null,

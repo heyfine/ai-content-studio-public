@@ -7,7 +7,7 @@ const initial = {
   messages: [],
   generations: [],
   selectedTask: "article_generate",
-  selectedPromptId: null,
+  lastPromptByTask: {} as Record<string, string | null>,
   isGenerating: false,
   error: null,
   articleId: null,
@@ -56,11 +56,14 @@ describe("studio-store", () => {
     expect(useStudioStore.getState().selectedTask).toBe("seo_analyze");
   });
 
-  it("setSelectedPromptId 设置、可清 null", () => {
-    useStudioStore.getState().setSelectedPromptId("p1");
-    expect(useStudioStore.getState().selectedPromptId).toBe("p1");
-    useStudioStore.getState().setSelectedPromptId(null);
-    expect(useStudioStore.getState().selectedPromptId).toBeNull();
+  it("setLastPrompt 按任务记录最近一次选择，可记录不使用模板", () => {
+    useStudioStore.getState().setLastPrompt("article_generate", "p1");
+    useStudioStore.getState().setLastPrompt("seo_analyze", "p2");
+    useStudioStore.getState().setLastPrompt("article_generate", null);
+    expect(useStudioStore.getState().lastPromptByTask).toEqual({
+      article_generate: null,
+      seo_analyze: "p2",
+    });
   });
 
   it("setGenerating/setError 控制状态", () => {
@@ -169,15 +172,23 @@ describe("studio-store reasoning", () => {
     expect(persisted.state.reasoningEnabled).toBe(false);
   });
 
-  it("重建 store 时从 localStorage 恢复深度思考状态（刷新页面场景）", async () => {
+  it("重建 store 时从 localStorage 恢复深度思考与模板记忆（刷新页面场景）", async () => {
     localStorage.setItem(
       "ai-studio-reasoning-prefs",
-      JSON.stringify({ state: { reasoningEnabled: true, reasoningEffort: "high" }, version: 0 }),
+      JSON.stringify({
+        state: {
+          reasoningEnabled: true,
+          reasoningEffort: "high",
+          lastPromptByTask: { article_generate: "p1" },
+        },
+        version: 0,
+      }),
     );
     vi.resetModules();
     const { useStudioStore: freshStore } = await import("./studio-store");
     expect(freshStore.getState().reasoningEnabled).toBe(true);
     expect(freshStore.getState().reasoningEffort).toBe("high");
+    expect(freshStore.getState().lastPromptByTask).toEqual({ article_generate: "p1" });
     localStorage.removeItem("ai-studio-reasoning-prefs");
   });
 });

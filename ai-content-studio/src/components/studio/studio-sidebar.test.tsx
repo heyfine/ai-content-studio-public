@@ -28,7 +28,7 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     messages: [],
     generations: [],
     selectedTask: "article_generate",
-    selectedPromptId: null,
+    lastPromptByTask: {},
     isGenerating: false,
     error: null,
     articleId: null,
@@ -55,38 +55,125 @@ function mockRoute(prompts: unknown[], streamEvents: unknown[]) {
   });
 }
 
+/** 打开对话框并点击「开始生成」（默认走「不使用模板」） */
+async function runViaDialog(taskTestId: string) {
+  fireEvent.click(screen.getByTestId(taskTestId));
+  await waitFor(() => expect(screen.getByText("开始生成")).toBeInTheDocument());
+  fireEvent.click(screen.getByText("开始生成"));
+}
+
 describe("StudioSidebar", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     resetStore();
   });
 
-  it("渲染 ArticleActions 与 8 个 AI 操作按钮与 Prompt 模板选择", async () => {
+  it("渲染 ArticleActions、8 个 AI 操作按钮与当前任务，无模板下拉框", async () => {
     mockRoute([], []);
     render(<StudioSidebar />);
-    await waitFor(() => expect(screen.getByLabelText("选择 Prompt")).not.toBeDisabled());
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
     expect(screen.getByTestId("article-actions")).toBeInTheDocument();
-    expect(screen.getByText("AI 操作")).toBeInTheDocument();
     expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(8);
+    expect(screen.getByText("当前任务")).toBeInTheDocument();
+    expect(screen.queryByLabelText("选择 Prompt")).not.toBeInTheDocument();
   });
 
-  it("Prompt 列表加载后填充选项", async () => {
-    mockRoute([{ id: "p1", name: "技术文章", type: "article_write" }], []);
+  it("点击 AI 操作弹出模板选择对话框，且只列出匹配任务类型的模板", async () => {
+    mockRoute(
+      [
+        { id: "p1", name: "自然写作", type: "article_generate" },
+        { id: "p2", name: "SEO 分析模板", type: "seo_analyze" },
+      ],
+      [],
+    );
     render(<StudioSidebar />);
-    await waitFor(() => expect(screen.getByText("技术文章")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("选择 Prompt 模板")).toBeInTheDocument());
+    expect(screen.getByText("为「文章生成」选择本次使用的提示词模板。")).toBeInTheDocument();
+    expect(screen.getByLabelText("自然写作")).toBeInTheDocument();
+    expect(screen.queryByLabelText("SEO 分析模板")).not.toBeInTheDocument();
   });
 
-  it("选择 Prompt 更新 store", async () => {
-    mockRoute([{ id: "p1", name: "技术文章", type: "article_write" }], []);
+  it("确认所选模板后请求携带 promptId 并记忆到 lastPromptByTask", async () => {
+    mockRoute(
+      [{ id: "p1", name: "自然写作", type: "article_generate" }],
+      [{ type: "delta", content: "正文" }, { type: "done" }],
+    );
+    resetStore({ title: "t", content: "原文" });
     render(<StudioSidebar />);
-    await waitFor(() => expect(screen.getByText("技术文章")).toBeInTheDocument());
-    fireEvent.change(screen.getByLabelText("选择 Prompt"), { target: { value: "p1" } });
-    expect(useStudioStore.getState().selectedPromptId).toBe("p1");
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("开始生成")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("自然写作"));
+    fireEvent.click(screen.getByText("开始生成"));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/ai/stream",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"promptId":"p1"'),
+        }),
+      );
+    });
+    expect(useStudioStore.getState().lastPromptByTask["article_generate"]).toBe("p1");
+  });
+
+  it("确认「不使用模板」后请求不带 promptId 并记忆为 null", async () => {
+    mockRoute(
+      [{ id: "p1", name: "自然写作", type: "article_generate" }],
+      [{ type: "delta", content: "正文" }, { type: "done" }],
+    );
+    render(<StudioSidebar />);
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("开始生成")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("不使用模板"));
+    fireEvent.click(screen.getByText("开始生成"));
+    await waitFor(() =>
+      expect(useStudioStore.getState().lastPromptByTask["article_generate"]).toBeNull(),
+    );
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/ai/stream",
+      expect.objectContaining({ body: expect.not.stringContaining("promptId") }),
+    );
+  });
+
+  it("取消选择不触发生成", async () => {
+    mockRoute([], []);
+    render(<StudioSidebar />);
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("取消")).toBeInTheDocument());
+    fireEvent.click(screen.getByText("取消"));
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/ai/stream", expect.anything());
+    expect(useStudioStore.getState().generations).toHaveLength(0);
+  });
+
+  it("再次点击同一操作时自动预选上一次选择的模板（记忆状态）", async () => {
+    mockRoute(
+      [{ id: "p1", name: "自然写作", type: "article_generate" }],
+      [{ type: "delta", content: "正文" }, { type: "done" }],
+    );
+    render(<StudioSidebar />);
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    // 第一次：选自然写作并生成
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("开始生成")).toBeInTheDocument());
+    fireEvent.click(screen.getByLabelText("自然写作"));
+    fireEvent.click(screen.getByText("开始生成"));
+    await waitFor(() =>
+      expect(useStudioStore.getState().lastPromptByTask["article_generate"]).toBe("p1"),
+    );
+    // 第二次：点按钮，自然写作应被预选
+    fireEvent.click(screen.getByTestId("article_generate"));
+    await waitFor(() => expect(screen.getByText("开始生成")).toBeInTheDocument());
+    expect((screen.getByLabelText("自然写作") as HTMLInputElement).checked).toBe(true);
   });
 
   it("点击 AI 操作走流式接口；article_generate 追加到生成结果且拼到消息，不回填 content", async () => {
     mockRoute(
-      [{ id: "p1", name: "x", type: "t" }],
+      [],
       [
         { type: "delta", content: "生成" },
         { type: "delta", content: "的正文" },
@@ -96,7 +183,7 @@ describe("StudioSidebar", () => {
     resetStore({ title: "我的主题", content: "原文内容" });
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("当前任务")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("article_generate"));
+    await runViaDialog("article_generate");
     await waitFor(() => {
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/ai/stream",
@@ -115,14 +202,11 @@ describe("StudioSidebar", () => {
   });
 
   it("非 article/outline 任务也追加生成结果且不回填 content", async () => {
-    mockRoute(
-      [{ id: "p1", name: "x", type: "t" }],
-      [{ type: "delta", content: "SEO 建议" }, { type: "done" }],
-    );
+    mockRoute([], [{ type: "delta", content: "SEO 建议" }, { type: "done" }]);
     resetStore({ title: "t", content: "原文" });
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("当前任务")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("seo_analyze"));
+    await runViaDialog("seo_analyze");
     await waitFor(() => expect(useStudioStore.getState().selectedTask).toBe("seo_analyze"));
     const g = useStudioStore.getState().generations;
     expect(g).toHaveLength(1);
@@ -132,13 +216,10 @@ describe("StudioSidebar", () => {
   });
 
   it("error 事件写入 store error", async () => {
-    mockRoute(
-      [{ id: "p1", name: "x", type: "t" }],
-      [{ type: "error", status: "no_route", message: "路由未配置" }],
-    );
+    mockRoute([], [{ type: "error", status: "no_route", message: "路由未配置" }]);
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("当前任务")).toBeInTheDocument());
-    fireEvent.click(screen.getByTestId("article_generate"));
+    await runViaDialog("article_generate");
     await waitFor(() => expect(useStudioStore.getState().error).toBe("路由未配置"));
   });
 });

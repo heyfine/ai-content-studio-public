@@ -35,7 +35,6 @@ export function AIChatPanel() {
   const {
     messages,
     selectedTask,
-    selectedPromptId,
     reasoningEnabled,
     reasoningEffort,
     appendMessage,
@@ -48,6 +47,7 @@ export function AIChatPanel() {
     setGenerating,
     setError,
   } = useStudioStore();
+  const lastPromptByTask = useStudioStore((s) => s.lastPromptByTask);
   const [input, setInput] = useState("");
   const generating = useStudioStore((s) => s.isGenerating);
   const error = useStudioStore((s) => s.error);
@@ -72,7 +72,7 @@ export function AIChatPanel() {
       for await (const ev of streamGenerateRequest({
         task: selectedTask,
         input: text,
-        promptId: selectedPromptId ?? undefined,
+        promptId: lastPromptByTask[selectedTask] ?? undefined,
         ...(reasoningEnabled ? { reasoningEffort } : {}),
       })) {
         if (ev.type === "delta") {
