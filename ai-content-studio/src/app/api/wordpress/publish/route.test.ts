@@ -1,14 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { authMock, publishArticleMock, unpublishArticleMock } = vi.hoisted(() => ({
-  authMock: vi.fn(),
-  publishArticleMock: vi.fn(),
-  unpublishArticleMock: vi.fn(),
-}));
+const { authMock, publishArticleMock, publishRawContentMock, unpublishArticleMock } = vi.hoisted(
+  () => ({
+    authMock: vi.fn(),
+    publishArticleMock: vi.fn(),
+    publishRawContentMock: vi.fn(),
+    unpublishArticleMock: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/services/wordpress-service", () => ({
   publishArticle: publishArticleMock,
+  publishRawContent: publishRawContentMock,
   unpublishArticle: unpublishArticleMock,
 }));
 
@@ -26,6 +30,7 @@ describe("POST /api/wordpress/publish", () => {
   beforeEach(() => {
     authMock.mockReset();
     publishArticleMock.mockReset();
+    publishRawContentMock.mockReset();
   });
 
   it("未登录返回 401", async () => {
@@ -34,10 +39,28 @@ describe("POST /api/wordpress/publish", () => {
     expect(res.status).toBe(401);
   });
 
-  it("校验失败（无 articleId）返回 400", async () => {
+  it("校验失败（无 articleId 且无 标题+内容）返回 400", async () => {
     authMock.mockResolvedValue({ user: { email: "a@b.com" } });
     const res = await POST(makeRequest({}));
     expect(res.status).toBe(400);
+  });
+
+  it("原始内容直发：title+content 走 publishRawContent", async () => {
+    authMock.mockResolvedValue({ user: { email: "a@b.com" } });
+    publishRawContentMock.mockResolvedValue({
+      wpPostId: "66",
+      link: "https://blog.example.com/?p=66",
+      status: "publish",
+      articleId: null,
+    });
+    const res = await POST(
+      makeRequest({ title: "标题", content: "正文", configId: "c1", wpStatus: "draft" }),
+    );
+    expect(res.status).toBe(200);
+    expect(publishRawContentMock).toHaveBeenCalledWith("标题", "正文", "c1", "draft");
+    expect(publishArticleMock).not.toHaveBeenCalled();
+    const data = await res.json();
+    expect(data.articleId).toBeNull();
   });
 
   it("成功发布返回 wpPostId 与 link", async () => {

@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { publishArticle, unpublishArticle } from "@/lib/services/wordpress-service";
+import {
+  publishArticle,
+  publishRawContent,
+  unpublishArticle,
+} from "@/lib/services/wordpress-service";
 import { wordpressPublishSchema } from "@/lib/schemas/wordpress";
 
 export async function POST(request: Request) {
@@ -14,11 +18,10 @@ export async function POST(request: Request) {
     if (!parsed.success) {
       return NextResponse.json({ error: "校验失败", issues: parsed.error.issues }, { status: 400 });
     }
-    const result = await publishArticle(
-      parsed.data.articleId,
-      parsed.data.configId,
-      parsed.data.wpStatus,
-    );
+    const { articleId, configId, wpStatus, title, content } = parsed.data;
+    const result = articleId
+      ? await publishArticle(articleId, configId, wpStatus)
+      : await publishRawContent(title ?? "", content ?? "", configId, wpStatus);
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof Error && /文章不存在|WordPress 站点不可用|未配置/.test(e.message)) {

@@ -45,6 +45,14 @@ function mockRoute(prompts: unknown[], streamEvents: unknown[]) {
         headers: { "Content-Type": "application/json" },
       });
     }
+    if (url === "/api/wordpress/configs") {
+      return new Response(
+        JSON.stringify([
+          { id: "c1", name: "技术博客", siteUrl: "https://tech.example.com", enabled: true },
+        ]),
+        { status: 200, headers: { "Content-Type": "application/json" } },
+      );
+    }
     if (url === "/api/articles" || url.startsWith("/api/articles/")) {
       return new Response(JSON.stringify({ id: "a1", status: "DRAFT" }), {
         status: 200,
@@ -199,6 +207,25 @@ describe("StudioSidebar", () => {
       expect(useStudioStore.getState().content).toBe("原文内容");
       expect(useStudioStore.getState().messages.some((m) => m.content === "生成的正文")).toBe(true);
     });
+  });
+
+  it("渲染「一键发送到博客」按钮，点击打开发送对话框并列出生成结果", async () => {
+    mockRoute([], []);
+    resetStore({
+      generations: [
+        { id: "g1", task: "article_generate", index: 1, content: "第一次", createdAt: "14:32:05" },
+        { id: "g2", task: "article_generate", index: 2, content: "第二次", createdAt: "14:35:11" },
+      ],
+    });
+    render(<StudioSidebar />);
+    await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("blog-publish"));
+    await waitFor(() => expect(screen.getByLabelText("发送到哪个博客")).toBeInTheDocument());
+    const genSelect = screen.getByLabelText("选择生成结果") as HTMLSelectElement;
+    expect(Array.from(genSelect.options).map((o) => o.textContent)).toEqual([
+      "第1次 · 文章生成 · 14:32:05",
+      "第2次 · 文章生成 · 14:35:11",
+    ]);
   });
 
   it("非 article/outline 任务也追加生成结果且不回填 content", async () => {

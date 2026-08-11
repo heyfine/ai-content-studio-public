@@ -3,9 +3,12 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
   configFindUnique: vi.fn(),
+  configUpdate: vi.fn(),
+  configDelete: vi.fn(),
   create: vi.fn(),
   articleFindUnique: vi.fn(),
   articleUpdate: vi.fn(),
+  encrypt: vi.fn((s: string) => "encrypted:" + s),
   decrypt: vi.fn((s: string) => "decrypted:" + s),
 }));
 
@@ -14,6 +17,8 @@ vi.mock("@/lib/prisma", () => ({
     wordPressConfig: {
       findFirst: mocks.findFirst,
       findUnique: mocks.configFindUnique,
+      update: mocks.configUpdate,
+      delete: mocks.configDelete,
       create: mocks.create,
     },
     article: {
@@ -22,7 +27,7 @@ vi.mock("@/lib/prisma", () => ({
     },
   },
 }));
-vi.mock("@/lib/crypto", () => ({ decrypt: mocks.decrypt }));
+vi.mock("@/lib/crypto", () => ({ encrypt: mocks.encrypt, decrypt: mocks.decrypt }));
 
 const originalFetch = globalThis.fetch;
 function mockFetch(response: unknown, ok = true, status = 200) {
@@ -38,8 +43,11 @@ function mockFetch(response: unknown, ok = true, status = 200) {
 import {
   getActiveConfig,
   createWordpressConfig,
+  updateWordpressConfig,
+  deleteWordpressConfig,
   publishPost,
   publishArticle,
+  publishRawContent,
   unpublishArticle,
 } from "./wordpress-service";
 
@@ -83,7 +91,7 @@ describe("wordpress-service", () => {
 
   describe("createWordpressConfig", () => {
     beforeEach(() => mocks.create.mockReset());
-    it("去掉 siteUrl 末尾斜杠并写入", async () => {
+    it("去掉 siteUrl 末尾斜杠、appPassword 加密入库", async () => {
       mocks.create.mockResolvedValue({ id: "c2" });
       await createWordpressConfig({
         name: "博客",
@@ -91,14 +99,41 @@ describe("wordpress-service", () => {
         username: "admin",
         appPassword: "enc",
       });
+      expect(mocks.encrypt).toHaveBeenCalledWith("enc");
       expect(mocks.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
             siteUrl: "https://blog.example.com",
-            appPassword: "enc",
+            appPassword: "encrypted:enc",
+            enabled: true,
           }),
         }),
       );
+    });
+  });
+
+  describe("updateWordpressConfig / deleteWordpressConfig", () => {
+    beforeEach(() => {
+      mocks.configUpdate.mockReset();
+      mocks.configDelete.mockReset();
+    });
+    it("只更新传入字段；appPassword 传入则加密", async () => {
+      mocks.configUpdate.mockResolvedValue({ id: "c1" });
+      await updateWordpressConfig("c1", { name: "新名字", enabled: false });
+      expect(mocks.configUpdate).toHaveBeenCalledWith({
+        where: { id: "c1" },
+        data: { name: "新名字", enabled: false },
+      });
+      await updateWordpressConfig("c1", { appPassword: "newpwd" });
+      expect(mocks.configUpdate).toHaveBeenLastCalledWith({
+        where: { id: "c1" },
+        data: { appPassword: "encrypted:newpwd" },
+      });
+    });
+    it("删除按 id", async () => {
+      mocks.configDelete.mockResolvedValue({ id: "c1" });
+      await deleteWordpressConfig("c1");
+      expect(mocks.configDelete).toHaveBeenCalledWith({ where: { id: "c1" } });
     });
   });
 
@@ -225,6 +260,40 @@ describe("wordpress-service", () => {
       });
       mockFetch({ id: 9, link: "l", status: "draft" });
       await publishArticle("a1", undefined, "draft");
+      const body = JSON.parse(
+        (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
+      );
+      expect(body.status).toBe("draft");
+    });
+  });
+
+  describe("publishRawContent", () => {
+    beforeEach(() => {
+      mocks.findFirst.mockReset();
+      globalThis.fetch = originalFetch;
+    });
+    it("直接按标题+内容调 WP 发布，默认 publish，articleId 为 null", async () => {
+      mocks.configFindUnique.mockResolvedValue(config);
+      mockFetch({ id: 66, link: "https://blog.example.com/?p=66", status: "publish" });
+      const r = await publishRawContent("标题", "正文", "c1");
+      expect(r).toEqual({
+        wpPostId: "66",
+        link: "https://blog.example.com/?p=66",
+        status: "publish",
+        articleId: null,
+      });
+      const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(called[0]).toBe("https://blog.example.com/wp-json/wp/v2/posts");
+      expect(JSON.parse(called[1].body)).toEqual({
+        title: "标题",
+        content: "正文",
+        status: "publish",
+      });
+    });
+    it("显式 wpStatus=draft 时按草稿发布", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mockFetch({ id: 67, link: "l", status: "draft" });
+      await publishRawContent("t", "c", undefined, "draft");
       const body = JSON.parse(
         (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0][1].body,
       );

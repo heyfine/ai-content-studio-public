@@ -8,6 +8,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { WordPressSiteManager, type WpSiteOption } from "./wordpress-site-manager";
 
 interface ArticleOption {
   id: string;
@@ -16,19 +17,11 @@ interface ArticleOption {
   wpPostId: string | null;
 }
 
-interface WpConfigOption {
-  id: string;
-  name: string;
-  siteUrl: string;
-  username: string;
-  enabled: boolean;
-}
-
 interface PublishResult {
   wpPostId: string;
   link: string;
   status: string;
-  articleId: string;
+  articleId: string | null;
 }
 
 type WpStatusMode = "auto" | "publish" | "draft";
@@ -50,7 +43,7 @@ function statusLabel(status: string): string {
 
 export function PublishClient() {
   const [articles, setArticles] = useState<ArticleOption[]>([]);
-  const [configs, setConfigs] = useState<WpConfigOption[]>([]);
+  const [configs, setConfigs] = useState<WpSiteOption[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedArticleId, setSelectedArticleId] = useState("");
   const [selectedConfigId, setSelectedConfigId] = useState("");
@@ -59,6 +52,17 @@ export function PublishClient() {
   const [unpublishing, setUnpublishing] = useState(false);
   const [result, setResult] = useState<PublishResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  async function refreshConfigs() {
+    try {
+      const cfgRes = await fetch("/api/wordpress/configs");
+      if (!cfgRes.ok) return;
+      const cfg = (await cfgRes.json()) as WpSiteOption[];
+      setConfigs(cfg);
+    } catch {
+      // 站点列表加载失败保持原状
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -70,11 +74,11 @@ export function PublishClient() {
         ]);
         if (!artRes.ok || !cfgRes.ok) throw new Error("加载失败");
         const art = (await artRes.json()) as ArticleOption[];
-        const cfg = (await cfgRes.json()) as WpConfigOption[];
+        const cfg = (await cfgRes.json()) as WpSiteOption[];
         if (!cancelled) {
           setArticles(art);
+          setConfigs(cfg);
           const enabled = cfg.filter((c) => c.enabled);
-          setConfigs(enabled);
           if (enabled.length === 1) setSelectedConfigId(enabled[0].id);
         }
       } catch {
@@ -92,6 +96,7 @@ export function PublishClient() {
   }, []);
 
   const selectedArticle = articles.find((a) => a.id === selectedArticleId);
+  const enabledConfigs = configs.filter((c) => c.enabled);
 
   async function publish() {
     if (!selectedArticleId) return;
@@ -145,7 +150,7 @@ export function PublishClient() {
     }
   }
 
-  const canPublish = !!selectedArticleId && configs.length > 0 && !publishing;
+  const canPublish = !!selectedArticleId && enabledConfigs.length > 0 && !publishing;
   const canUnpublish = !!selectedArticle?.wpPostId && !unpublishing;
 
   return (
@@ -187,9 +192,9 @@ export function PublishClient() {
 
           <div className="space-y-2">
             <Label htmlFor="pub-config">WordPress 站点</Label>
-            {configs.length === 0 ? (
+            {enabledConfigs.length === 0 ? (
               <p className="text-sm text-amber-600" data-testid="no-config">
-                尚未配置启用的 WordPress 站点，请先在数据库添加 WordPressConfig。
+                尚未配置启用的 WordPress 站点，请在下方「WordPress 站点管理」新建或启用站点。
               </p>
             ) : (
               <select
@@ -200,7 +205,7 @@ export function PublishClient() {
                 onChange={(e) => setSelectedConfigId(e.target.value)}
                 disabled={publishing || unpublishing}
               >
-                {configs.map((c) => (
+                {enabledConfigs.map((c) => (
                   <option key={c.id} value={c.id}>
                     {c.name}（{c.siteUrl}）
                   </option>
@@ -272,6 +277,10 @@ export function PublishClient() {
             </div>
           )}
         </>
+      )}
+
+      {!loading && (
+        <WordPressSiteManager configs={configs} onChange={() => void refreshConfigs()} />
       )}
     </div>
   );

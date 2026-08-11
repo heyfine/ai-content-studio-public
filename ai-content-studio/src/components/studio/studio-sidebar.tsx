@@ -1,13 +1,14 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Sparkles as SparklesIcon } from "lucide-react";
+import { Send as SendIcon, Sparkles as SparklesIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { useStudioStore, nextId } from "@/stores/studio-store";
 import { streamGenerateRequest } from "@/lib/ai/stream-client";
 import { ArticleActions } from "./article-actions";
+import { BlogPublishDialog } from "./blog-publish-dialog";
 import { TemplatePickerDialog, type PromptOption } from "./template-picker-dialog";
 
 export function StudioSidebar() {
@@ -28,6 +29,8 @@ export function StudioSidebar() {
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   /** 点击 AI 操作后待确认的任务；非 null 时弹窗打开 */
   const [pendingTask, setPendingTask] = useState<string | null>(null);
+  /** 一键发送到博客对话框开关 */
+  const [publishOpen, setPublishOpen] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -126,6 +129,14 @@ export function StudioSidebar() {
           {taskRouteDefinitions.find((t) => t.value === selectedTask)?.label ?? selectedTask}
         </p>
       </div>
+      <Button
+        variant="secondary"
+        className="w-full"
+        onClick={() => setPublishOpen(true)}
+        data-testid="blog-publish"
+      >
+        <SendIcon className="size-4" /> 一键发送到博客
+      </Button>
       <TemplatePickerDialog
         open={pendingTask !== null}
         task={pendingTask}
@@ -135,6 +146,7 @@ export function StudioSidebar() {
         onConfirm={handleConfirm}
         onCancel={handleCancel}
       />
+      <BlogPublishDialog open={publishOpen} onClose={() => setPublishOpen(false)} />
     </div>
   );
 }

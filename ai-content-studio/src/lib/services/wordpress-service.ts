@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { decrypt } from "@/lib/crypto";
+import { decrypt, encrypt } from "@/lib/crypto";
 import { assertTransition, type ArticleStatus } from "@/lib/article-status";
 
 export interface WpConfigInput {
@@ -9,6 +9,8 @@ export interface WpConfigInput {
   appPassword: string;
   enabled?: boolean;
 }
+
+export type WpConfigUpdateInput = Partial<WpConfigInput>;
 
 export async function listWordpressConfigs() {
   return prisma.wordPressConfig.findMany({ orderBy: { updatedAt: "desc" } });
@@ -20,10 +22,30 @@ export async function createWordpressConfig(input: WpConfigInput) {
       name: input.name,
       siteUrl: input.siteUrl.replace(/\/+$/, ""),
       username: input.username,
-      appPassword: input.appPassword,
+      appPassword: encrypt(input.appPassword),
       enabled: input.enabled ?? true,
     },
   });
+}
+
+export async function updateWordpressConfig(id: string, input: WpConfigUpdateInput) {
+  const data: {
+    name?: string;
+    siteUrl?: string;
+    username?: string;
+    appPassword?: string;
+    enabled?: boolean;
+  } = {};
+  if (input.name !== undefined) data.name = input.name;
+  if (input.siteUrl !== undefined) data.siteUrl = input.siteUrl.replace(/\/+$/, "");
+  if (input.username !== undefined) data.username = input.username;
+  if (input.appPassword !== undefined) data.appPassword = encrypt(input.appPassword);
+  if (input.enabled !== undefined) data.enabled = input.enabled;
+  return prisma.wordPressConfig.update({ where: { id }, data });
+}
+
+export async function deleteWordpressConfig(id: string) {
+  return prisma.wordPressConfig.delete({ where: { id } });
 }
 
 /** 取启用中的首个站点配置 */
@@ -83,7 +105,20 @@ export interface PublishResult {
   wpPostId: string;
   link: string;
   status: string;
-  articleId: string;
+  articleId: string | null;
+}
+
+/** 原始内容直接发布（AI Studio「一键发送到博客」用，不落文章表）。 */
+export async function publishRawContent(
+  title: string,
+  content: string,
+  configId?: string,
+  wpStatus?: "publish" | "draft",
+): Promise<PublishResult> {
+  const config = await getActiveConfig(configId);
+  const status: "publish" | "draft" = wpStatus ?? "publish";
+  const post = await publishPost(config, { title, content, status });
+  return { wpPostId: String(post.id), link: post.link, status: post.status, articleId: null };
 }
 
 /**

@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { taskRouteDefinitions } from "@/config/task-routes";
 
 export interface PromptRow {
   id: string;
@@ -27,18 +28,14 @@ export interface PromptRow {
   active: boolean;
 }
 
-const PROMPT_TYPES = [
-  "system",
-  "article_write",
-  "outline_generate",
-  "seo_analyze",
-  "title_generate",
-  "summary",
-  "translate",
-];
+/** 类型选项与 AI 操作任务对齐（中文标签展示，value 为任务标识） */
+const PROMPT_TYPE_OPTIONS = taskRouteDefinitions.map((t) => ({
+  value: t.value,
+  label: t.label,
+}));
 
 function typeLabel(t: string) {
-  return PROMPT_TYPES.includes(t) ? t : t;
+  return taskRouteDefinitions.find((d) => d.value === t)?.label ?? t;
 }
 
 export function PromptsClient() {
@@ -149,7 +146,7 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
   const isEdit = !!initialValues?.id;
   const [form, setForm] = useState({
     name: initialValues?.name ?? "",
-    type: initialValues?.type ?? "article_write",
+    type: initialValues?.type ?? "article_generate",
     description: initialValues?.description ?? "",
     content: initialValues?.content ?? "",
     active: initialValues?.active ?? true,
@@ -188,6 +185,24 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
           <DialogDescription>管理提示词模板，生成时按类型注入为 system prompt。</DialogDescription>
         </DialogHeader>
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
+          <div className="rounded-md border bg-muted/40 p-3 text-sm text-muted-foreground">
+            <p className="mb-1 font-medium text-foreground">使用说明</p>
+            <ul className="list-disc space-y-1 pl-4">
+              <li>
+                「类型」需与右侧 AI 操作的任务对应——例如「文章生成」对应的类型是{" "}
+                <code className="rounded bg-muted px-1">article_generate</code>
+                ，选错类型该模板不会被使用。
+              </li>
+              <li>
+                内容会作为 system prompt 注入；用户的输入（标题 + 正文）会作为文章资料一起发送。
+              </li>
+              <li>系统不做变量替换，请把要求、限制直接写进内容里。</li>
+              <li>
+                示例：「你是一名资深科技编辑。请阅读用户输入的资料，写一篇自然、准确、没有 AI
+                味的文章……」
+              </li>
+            </ul>
+          </div>
           {submitError && (
             <p role="alert" className="text-sm text-destructive">
               {submitError}
@@ -209,9 +224,9 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
               value={form.type}
               onChange={(e) => setField("type", e.target.value)}
             >
-              {PROMPT_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {t}
+              {PROMPT_TYPE_OPTIONS.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
                 </option>
               ))}
             </select>
@@ -229,6 +244,7 @@ export function PromptFormDialog({ trigger, initialValues, onSaved }: PromptForm
             <textarea
               id="prompt-content"
               className="min-h-[40vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              placeholder="示例：你是一名资深科技编辑。请阅读用户输入的资料，写一篇自然、准确、没有 AI 味的文章……"
               value={form.content}
               onChange={(e) => setField("content", e.target.value)}
             />

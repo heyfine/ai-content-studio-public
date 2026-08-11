@@ -71,7 +71,27 @@ describe("PromptsClient", () => {
     render(<PromptsClient />);
     await waitFor(() => expect(screen.getByText("技术文章")).toBeInTheDocument());
     expect(screen.getByText(/article_write · v3 · 启用/)).toBeInTheDocument();
-    expect(screen.getByText(/seo_analyze · v1 · 禁用/)).toBeInTheDocument();
+    expect(screen.getByText(/SEO 分析 · v1 · 禁用/)).toBeInTheDocument();
+  });
+
+  it("未知类型回退显示原始值", async () => {
+    fetchMock.mockResolvedValue({
+      ok: true,
+      json: async () => [
+        {
+          id: "p9",
+          name: "旧模板",
+          description: null,
+          type: "system",
+          content: "c",
+          version: 1,
+          active: true,
+        },
+      ],
+    });
+    render(<PromptsClient />);
+    await waitFor(() => expect(screen.getByText("旧模板")).toBeInTheDocument());
+    expect(screen.getByText(/system · v1 · 启用/)).toBeInTheDocument();
   });
 
   it("确认删除后发送 DELETE 并刷新", async () => {
@@ -194,6 +214,24 @@ describe("PromptFormDialog", () => {
         expect.objectContaining({ method: "PUT" }),
       ),
     );
+  });
+
+  it("类型下拉使用中文标签且与任务路由对齐", () => {
+    render(<PromptFormDialog trigger={<button type="button">t</button>} />);
+    const select = screen.getByLabelText("类型") as HTMLSelectElement;
+    expect(select).toBeInTheDocument();
+    const labels = Array.from(select.options).map((o) => o.textContent);
+    expect(labels).toContain("文章生成");
+    expect(labels).toContain("SEO 分析");
+    expect(labels).toContain("AI 审核");
+    // 旧的非任务类型不应出现在选项中
+    expect(labels).not.toContain("system");
+  });
+
+  it("表单内展示使用说明与示例", () => {
+    render(<PromptFormDialog trigger={<button type="button">t</button>} />);
+    expect(screen.getByText("使用说明")).toBeInTheDocument();
+    expect(screen.getByText(/你是一名资深科技编辑/)).toBeInTheDocument();
   });
 
   it("提交失败显示错误信息", async () => {
