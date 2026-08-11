@@ -31,7 +31,16 @@ export async function createModel(input: CreateModelInput) {
   });
 }
 
-export async function updateModel(id: string, input: Partial<CreateModelInput>) {
+export type UpdateModelInput = Partial<
+  Omit<CreateModelInput, "contextLength" | "inputPrice" | "outputPrice">
+> & {
+  contextLength?: number | null;
+  inputPrice?: number | null;
+  outputPrice?: number | null;
+};
+
+/** 更新模型：null 表示清空该字段，undefined 表示不更新 */
+export async function updateModel(id: string, input: UpdateModelInput) {
   return prisma.aIModel.update({ where: { id }, data: input });
 }
 

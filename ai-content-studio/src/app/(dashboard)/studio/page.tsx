@@ -1,4 +1,5 @@
 import { StudioLayout } from "@/components/studio/studio-layout";
+import { StudioModelSelector } from "@/components/studio/studio-model-selector";
 
 export default function Page() {
   return (
@@ -9,6 +10,7 @@ export default function Page() {
           AI 辅助创作工作台：左侧对话 / 中间编辑 / 右侧操作与模板。
         </p>
       </div>
+      <StudioModelSelector />
       <StudioLayout />
     </div>
   );

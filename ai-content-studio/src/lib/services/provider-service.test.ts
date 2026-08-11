@@ -9,12 +9,13 @@ const { getAdapter, listModels } = vi.hoisted(() => ({
   listModels: vi.fn(),
 }));
 
-const { providers, findUnique, create, update, del } = vi.hoisted(() => ({
+const { providers, findUnique, create, update, del, aIModelFindMany } = vi.hoisted(() => ({
   providers: vi.fn(),
   findUnique: vi.fn(),
   create: vi.fn(),
   update: vi.fn(),
   del: vi.fn(),
+  aIModelFindMany: vi.fn(),
 }));
 
 vi.mock("@/lib/crypto", () => ({ encrypt, decrypt }));
@@ -27,6 +28,7 @@ vi.mock("@/lib/ai", () => ({
 vi.mock("@/lib/prisma", () => ({
   prisma: {
     aIProvider: { findMany: providers, findUnique, create, update, delete: del },
+    aIModel: { findMany: aIModelFindMany },
   },
 }));
 
@@ -36,6 +38,7 @@ import {
   listProviders,
   testConnection,
   toProviderConfig,
+  fetchModels,
 } from "./provider-service";
 
 describe("provider-service", () => {
@@ -116,5 +119,66 @@ describe("provider-service", () => {
     const r = await testConnection("p1");
     expect(r.success).toBe(false);
     expect(r.error).toBe("invalid key");
+  });
+});
+
+describe("provider-service models", () => {
+  beforeEach(() => {
+    create.mockReset();
+    update.mockReset();
+    findUnique.mockReset();
+    aIModelFindMany.mockReset();
+    getAdapter.mockClear();
+    listModels.mockReset();
+  });
+
+  it("createProvider 携带 models 时嵌套 create（displayName 兜底）", async () => {
+    create.mockResolvedValue({ id: "p1", models: [] });
+    await createProvider({
+      name: "DS",
+      type: "OPENAI_COMPATIBLE",
+      baseUrl: "https://api.x.com",
+      apiKey: "sk",
+      models: [
+        { name: "deepseek-chat", displayName: "DeepSeek V3" },
+        { name: "deepseek-reasoner" },
+      ],
+    });
+    const arg = create.mock.calls[0][0];
+    expect(arg.data.models.create).toEqual([
+      { name: "deepseek-chat", displayName: "DeepSeek V3" },
+      { name: "deepseek-reasoner", displayName: "deepseek-reasoner" },
+    ]);
+    expect(arg.include).toEqual({ models: true });
+  });
+
+  it("updateProvider 提供 models 时按 name 同步（删多余/加缺失/更新同名）", async () => {
+    aIModelFindMany.mockResolvedValue([
+      { id: "m1", name: "deepseek-chat", displayName: "old" },
+      { id: "m2", name: "gpt-4o", displayName: "GPT" },
+    ]);
+    update.mockResolvedValue({ id: "p1", models: [] });
+    await updateProvider("p1", {
+      models: [
+        { name: "deepseek-chat", displayName: "DeepSeek V3" },
+        { name: "claude", displayName: "Claude" },
+      ],
+    });
+    const d = update.mock.calls[0][0].data;
+    expect(d.models.deleteMany.id.in).toEqual(["m2"]);
+    expect(d.models.create).toEqual([{ name: "claude", displayName: "Claude" }]);
+    expect(d.models.update[0].where.id).toBe("m1");
+    expect(d.models.update[0].data.displayName).toBe("DeepSeek V3");
+  });
+
+  it("fetchModels 用明文 config 调 adapter.listModels", async () => {
+    listModels.mockResolvedValue(["m1", "m2"]);
+    const r = await fetchModels({ type: "OPENAI_COMPATIBLE", baseUrl: "https://x", apiKey: "sk" });
+    expect(r).toEqual(["m1", "m2"]);
+    expect(getAdapter).toHaveBeenCalled();
+  });
+
+  it("fetchModels Gemini 抛未接入", async () => {
+    await expect(fetchModels({ type: "GEMINI", apiKey: "sk" })).rejects.toThrow(/Gemini/);
   });
 });

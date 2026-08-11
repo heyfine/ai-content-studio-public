@@ -14,6 +14,7 @@ import {
 import { ProviderTypeBadge } from "./provider-type-badge";
 import { ProviderFormDialog } from "./provider-form-dialog";
 import { TestConnectionButton } from "./test-connection-button";
+import { ProviderToggle } from "./provider-toggle";
 
 export interface ProviderRow {
   id: string;
@@ -87,7 +88,7 @@ export function ProvidersTable() {
               <TableRow>
                 <TableHead>名称</TableHead>
                 <TableHead>类型</TableHead>
-                <TableHead>模型数</TableHead>
+                <TableHead>模型</TableHead>
                 <TableHead>状态</TableHead>
                 <TableHead className="w-80">操作</TableHead>
               </TableRow>
@@ -99,11 +100,28 @@ export function ProvidersTable() {
                   <TableCell>
                     <ProviderTypeBadge type={r.type} />
                   </TableCell>
-                  <TableCell>{r.models.length}</TableCell>
                   <TableCell>
-                    <span className={r.enabled ? "text-emerald-600" : "text-muted-foreground"}>
-                      {r.enabled ? "启用" : "禁用"}
-                    </span>
+                    {r.models.length === 0 ? (
+                      <span className="text-xs text-muted-foreground">暂无模型</span>
+                    ) : (
+                      <ul className="space-y-0.5">
+                        {r.models.map((m) => (
+                          <li key={m.id} className="text-sm">
+                            <span className="font-medium">{m.name}</span>
+                            {m.displayName && m.displayName !== m.name && (
+                              <span className="text-muted-foreground">（{m.displayName}）</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </TableCell>
+                  <TableCell>
+                    <ProviderToggle
+                      id={r.id}
+                      enabled={r.enabled}
+                      onToggled={() => void refresh()}
+                    />
                   </TableCell>
                   <TableCell className="space-x-2">
                     <TestConnectionButton providerId={r.id} />
@@ -119,6 +137,7 @@ export function ProvidersTable() {
                         type: r.type,
                         baseUrl: r.baseUrl ?? "",
                         enabled: r.enabled,
+                        models: r.models.map((m) => ({ name: m.name, displayName: m.displayName })),
                       }}
                       onSaved={refresh}
                     />

@@ -23,7 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { createProviderSchema, type CreateProviderValues } from "@/lib/schemas/provider";
+import {
+  createProviderSchema,
+  type CreateProviderValues,
+  type CreateProviderInputValues,
+  type ModelItem,
+} from "@/lib/schemas/provider";
+import { ProviderModelsEditor } from "./provider-models-editor";
 
 export interface ProviderFormDialogProps {
   trigger: React.ReactNode;
@@ -43,7 +49,7 @@ export function ProviderFormDialog({ trigger, initialValues, onSaved }: Provider
     watch,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<CreateProviderValues>({
+  } = useForm<CreateProviderInputValues, unknown, CreateProviderValues>({
     resolver: zodResolver(createProviderSchema),
     defaultValues: {
       name: initialValues?.name ?? "",
@@ -51,10 +57,14 @@ export function ProviderFormDialog({ trigger, initialValues, onSaved }: Provider
       baseUrl: initialValues?.baseUrl ?? "",
       apiKey: "",
       enabled: initialValues?.enabled ?? true,
+      models: (initialValues?.models as ModelItem[] | undefined) ?? [],
     },
   });
 
   const type = watch("type");
+  const baseUrl = watch("baseUrl") ?? "";
+  const apiKey = watch("apiKey") ?? "";
+  const models = watch("models") ?? [];
 
   async function onSubmit(values: CreateProviderValues) {
     setSubmitError(null);
@@ -139,6 +149,11 @@ export function ProviderFormDialog({ trigger, initialValues, onSaved }: Provider
               </p>
             )}
           </div>
+          <ProviderModelsEditor
+            models={models}
+            onChange={(next) => setValue("models", next, { shouldDirty: true })}
+            providerConfig={{ type, baseUrl, apiKey }}
+          />
           <DialogFooter>
             <DialogClose
               render={
