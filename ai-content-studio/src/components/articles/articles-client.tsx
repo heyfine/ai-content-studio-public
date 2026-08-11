@@ -1,15 +1,37 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
-import { Pencil as PencilIcon, Plus as PlusIcon, Trash2 as Trash2Icon } from "lucide-react";
+import {
+  Pencil as PencilIcon,
+  Plus as PlusIcon,
+  RefreshCw as RefreshIcon,
+  Trash2 as Trash2Icon,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ArticleStatusBadge } from "./article-status-badge";
 import { ArticleEditorDialog, type ArticleRow } from "./article-editor-dialog";
+import { isStaleArticle } from "@/lib/article-staleness";
+
+interface RefreshOutcome {
+  articleId: string;
+  oldSeoScore: number | null;
+  newSeoScore: number;
+  delta: number;
+}
+
+function scoreCell(score: number | null): React.ReactNode {
+  if (score === null) return <span className="text-muted-foreground">—</span>;
+  const cls =
+    score >= 80 ? "text-emerald-600" : score >= 60 ? "text-amber-600" : "text-destructive";
+  return <span className={cls}>{score}</span>;
+}
 
 export function ArticlesClient() {
   const [rows, setRows] = useState<ArticleRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [refreshingId, setRefreshingId] = useState<string | null>(null);
+  const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -35,16 +57,49 @@ export function ArticlesClient() {
     void refresh();
   }
 
+  async function onRefresh(id: string) {
+    setRefreshingId(id);
+    setRefreshOutcome(null);
+    try {
+      const res = await fetch(`/api/articles/${id}/refresh`, { method: "POST" });
+      const data = (await res.json().catch(() => ({}))) as {
+        articleId?: string;
+        oldSeoScore?: number | null;
+        newSeoScore?: number;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data?.error ?? "刷新失败");
+      const oldScore = data.oldSeoScore ?? null;
+      const newScore = data.newSeoScore ?? 0;
+      setRefreshOutcome({
+        articleId: id,
+        oldSeoScore: oldScore,
+        newSeoScore: newScore,
+        delta: newScore - (oldScore ?? 0),
+      });
+      void refresh();
+    } catch (e) {
+      setError(e instanceof Error ? `AI 刷新失败：${e.message}` : String(e));
+    } finally {
+      setRefreshingId(null);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">加载中…</p>;
   if (error)
     return (
-      <p role="alert" className="text-destructive">
-        {error}
-      </p>
+      <div className="space-y-2">
+        <p role="alert" className="text-destructive">
+          {error}
+        </p>
+        <Button variant="outline" size="sm" onClick={() => void refresh()}>
+          重试
+        </Button>
+      </div>
     );
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4" data-testid="articles-client">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">文章管理</h2>
         <ArticleEditorDialog
@@ -56,6 +111,13 @@ export function ArticlesClient() {
           onSaved={refresh}
         />
       </div>
+      {refreshOutcome && (
+        <p className="text-sm text-emerald-600" data-testid="refresh-outcome">
+          AI 刷新完成：SEO 评分 {refreshOutcome.oldSeoScore ?? "—"} →{" "}
+          <span className="font-medium">{refreshOutcome.newSeoScore}</span>
+          {refreshOutcome.delta > 0 && <span className="ml-1">（+{refreshOutcome.delta}）</span>}
+        </p>
+      )}
       {rows.length === 0 ? (
         <p className="text-sm text-muted-foreground">暂无文章，点击右上角新建。</p>
       ) : (
@@ -65,43 +127,74 @@ export function ArticlesClient() {
               <tr>
                 <th className="px-4 py-2 font-medium">标题</th>
                 <th className="px-4 py-2 font-medium">状态</th>
+                <th className="px-4 py-2 font-medium">SEO</th>
+                <th className="px-4 py-2 font-medium">标记</th>
                 <th className="px-4 py-2 font-medium">更新时间</th>
-                <th className="w-28 px-4 py-2 font-medium text-right">操作</th>
+                <th className="w-36 px-4 py-2 font-medium text-right">操作</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={r.id} className="border-b last:border-0">
-                  <td className="px-4 py-2 font-medium">{r.title}</td>
-                  <td className="px-4 py-2">
-                    <ArticleStatusBadge status={r.status} />
-                  </td>
-                  <td className="px-4 py-2 text-muted-foreground">
-                    {r.updatedAt?.slice(0, 16).replace("T", " ")}
-                  </td>
-                  <td className="px-4 py-2">
-                    <div className="flex items-center justify-end gap-1">
-                      <ArticleEditorDialog
-                        trigger={
-                          <Button variant="ghost" size="icon" aria-label="编辑" render={<span />}>
-                            <PencilIcon className="size-4" />
-                          </Button>
-                        }
-                        initialValues={r}
-                        onSaved={refresh}
-                      />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="删除"
-                        onClick={() => onDelete(r.id)}
-                      >
-                        <Trash2Icon className="size-4" />
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                const stale = isStaleArticle({
+                  updatedAt: r.updatedAt ?? new Date(0),
+                  seoScore: r.seoScore,
+                });
+                return (
+                  <tr key={r.id} className="border-b last:border-0">
+                    <td className="px-4 py-2 font-medium">{r.title}</td>
+                    <td className="px-4 py-2">
+                      <ArticleStatusBadge status={r.status} />
+                    </td>
+                    <td className="px-4 py-2">{scoreCell(r.seoScore)}</td>
+                    <td className="px-4 py-2">
+                      {stale && (
+                        <span
+                          className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                          data-testid={`stale-mark-${r.id}`}
+                        >
+                          待刷新
+                        </span>
+                      )}
+                    </td>
+                    <td className="px-4 py-2 text-muted-foreground">
+                      {r.updatedAt?.slice(0, 16).replace("T", " ")}
+                    </td>
+                    <td className="px-4 py-2">
+                      <div className="flex items-center justify-end gap-1">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="AI 刷新"
+                          onClick={() => void onRefresh(r.id)}
+                          disabled={refreshingId === r.id}
+                          data-testid={`refresh-${r.id}`}
+                        >
+                          <RefreshIcon
+                            className={refreshingId === r.id ? "size-4 animate-spin" : "size-4"}
+                          />
+                        </Button>
+                        <ArticleEditorDialog
+                          trigger={
+                            <Button variant="ghost" size="icon" aria-label="编辑" render={<span />}>
+                              <PencilIcon className="size-4" />
+                            </Button>
+                          }
+                          initialValues={r}
+                          onSaved={refresh}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          aria-label="删除"
+                          onClick={() => onDelete(r.id)}
+                        >
+                          <Trash2Icon className="size-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
