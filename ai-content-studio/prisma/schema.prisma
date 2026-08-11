@@ -159,3 +159,28 @@ model WordPressConfig {
   createdAt    DateTime @default(now())
   updatedAt   DateTime @updatedAt
 }
+
+/// Workflow 运行记录：一次「选题→大纲→写作→SEO→审核→发布」全流程的执行快照
+model WorkflowRun {
+  id         String            @id @default(uuid())
+  topic      String
+  status     WorkflowRunStatus @default(RUNNING)
+  /// 各步产出快照（JSON：[{id,name,output:{status,content,data,...}}]）
+  steps      Json
+  /// 关联最终生成的文章（软关联，不强外键，免删文章级联丢历史）
+  articleId  String?
+  /// 发布到的 WordPress 配置 id（可选）
+  configId   String?
+  /// 失败原因（status=FAILED 时写）
+  error      String?
+  startedAt  DateTime          @default(now())
+  finishedAt DateTime?
+  createdAt  DateTime          @default(now())
+  updatedAt  DateTime          @updatedAt
+}
+
+enum WorkflowRunStatus {
+  RUNNING
+  SUCCEEDED
+  FAILED
+}

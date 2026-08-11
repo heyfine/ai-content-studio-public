@@ -1,5 +1,5 @@
-import { PlaceholderPage } from "@/components/layout/placeholder";
+import { WorkflowClient } from "@/components/workflows/workflow-client";
 
 export default function Page() {
-  return <PlaceholderPage title="工作流" description="AI 内容工作流（Phase 3 上线）。" />;
+  return <WorkflowClient />;
 }
