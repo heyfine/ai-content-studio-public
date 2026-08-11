@@ -94,3 +94,43 @@ describe("OpenAIAdapter", () => {
     expect(meta).toEqual({ inputTokens: 3, outputTokens: 2 });
   });
 });
+
+describe("OpenAIAdapter reasoning", () => {
+  beforeEach(() => {
+    create.mockReset();
+    list.mockReset();
+  });
+
+  it("generate 时 reasoningEffort 透传为 reasoning_effort", async () => {
+    create.mockResolvedValue({
+      choices: [{ message: { content: "ok" } }],
+      usage: { prompt_tokens: 1, completion_tokens: 1 },
+    });
+    const a = new OpenAIAdapter({ type: "OPENAI", apiKey: "k" });
+    await a.generate({
+      model: "o3-mini",
+      messages: [{ role: "user", content: "x" }],
+      reasoningEffort: "high",
+    });
+    expect(create.mock.calls[0][0]).toHaveProperty("reasoning_effort", "high");
+  });
+
+  it("generate 未传 reasoningEffort 时不带 reasoning_effort", async () => {
+    create.mockResolvedValue({ choices: [{ message: { content: "ok" } }] });
+    const a = new OpenAIAdapter({ type: "OPENAI", apiKey: "k" });
+    await a.generate({ model: "gpt-4o", messages: [] });
+    expect(create.mock.calls[0][0]).not.toHaveProperty("reasoning_effort");
+  });
+
+  it("streamGenerate 时 reasoningEffort 透传为 reasoning_effort", async () => {
+    create.mockResolvedValue(asyncIter([{ choices: [{ delta: { content: "a" } }] }]));
+    const a = new OpenAIAdapter({ type: "OPENAI", apiKey: "k" });
+    const gen = a.streamGenerate({
+      model: "o3-mini",
+      messages: [],
+      reasoningEffort: "low",
+    });
+    await consume(gen);
+    expect(create.mock.calls[0][0]).toHaveProperty("reasoning_effort", "low");
+  });
+});

@@ -20,6 +20,7 @@ export class OpenAIAdapter implements AIAdapter {
       messages: req.messages,
       temperature: req.temperature,
       max_tokens: req.maxTokens,
+      ...(req.reasoningEffort ? { reasoning_effort: req.reasoningEffort } : {}),
     });
     const choice = completion.choices[0]?.message?.content ?? "";
     return {
@@ -36,6 +37,7 @@ export class OpenAIAdapter implements AIAdapter {
       temperature: req.temperature,
       max_tokens: req.maxTokens,
       stream: true,
+      ...(req.reasoningEffort ? { reasoning_effort: req.reasoningEffort } : {}),
       stream_options: { include_usage: true },
     });
     let inputTokens: number | undefined;

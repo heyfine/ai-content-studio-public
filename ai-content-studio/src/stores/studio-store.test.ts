@@ -10,6 +10,8 @@ const initial = {
   isGenerating: false,
   error: null,
   articleId: null,
+  reasoningEnabled: false,
+  reasoningEffort: "medium" as const,
   articleStatus: null,
 };
 
@@ -91,5 +93,21 @@ describe("studio-store", () => {
     const a = nextId();
     const b = nextId();
     expect(a).not.toBe(b);
+  });
+});
+
+describe("studio-store reasoning", () => {
+  beforeEach(() => {
+    useStudioStore.setState(initial);
+  });
+  it("默认深度思考关闭、强度为 medium", () => {
+    expect(useStudioStore.getState().reasoningEnabled).toBe(false);
+    expect(useStudioStore.getState().reasoningEffort).toBe("medium");
+  });
+  it("setReasoningEnabled/setReasoningEffort 更新值", () => {
+    useStudioStore.getState().setReasoningEnabled(true);
+    useStudioStore.getState().setReasoningEffort("high");
+    expect(useStudioStore.getState().reasoningEnabled).toBe(true);
+    expect(useStudioStore.getState().reasoningEffort).toBe("high");
   });
 });

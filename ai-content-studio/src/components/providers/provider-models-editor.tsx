@@ -15,14 +15,17 @@ import type { ModelItem } from "@/lib/schemas/provider";
 export interface ProviderModelsEditorProps {
   models: ModelItem[];
   onChange: (models: ModelItem[]) => void;
-  /** 当前表单中的供应商配置（用于现场拉取模型列表） */
+  /** 当前表单中的供应商配置（用于新增场景现场拉取模型列表） */
   providerConfig: { type: string; baseUrl: string; apiKey: string };
+  /** 编辑场景：传入已存供应商 id，用库里 Key 拉取（无需重新输入 Key） */
+  providerId?: string;
 }
 
 export function ProviderModelsEditor({
   models,
   onChange,
   providerConfig,
+  providerId,
 }: ProviderModelsEditorProps) {
   const [name, setName] = useState("");
   const [displayName, setDisplayName] = useState("");
@@ -31,7 +34,9 @@ export function ProviderModelsEditor({
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
 
-  const canFetch = providerConfig.apiKey.trim().length > 0 && providerConfig.type !== "GEMINI";
+  const isEdit = !!providerId;
+  const canFetch =
+    providerConfig.type !== "GEMINI" && (isEdit || providerConfig.apiKey.trim().length > 0);
 
   function addManual() {
     const n = name.trim();
@@ -56,14 +61,17 @@ export function ProviderModelsEditor({
     setFetchedModels(null);
     setSelected(new Set());
     try {
+      const body = isEdit
+        ? { providerId }
+        : {
+            type: providerConfig.type,
+            baseUrl: providerConfig.baseUrl || undefined,
+            apiKey: providerConfig.apiKey,
+          };
       const res = await fetch("/api/providers/fetch-models", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          type: providerConfig.type,
-          baseUrl: providerConfig.baseUrl || undefined,
-          apiKey: providerConfig.apiKey,
-        }),
+        body: JSON.stringify(body),
       });
       const data = (await res.json()) as { models?: string[]; error?: string };
       if (!res.ok) throw new Error(data.error ?? "获取失败");
@@ -84,6 +92,15 @@ export function ProviderModelsEditor({
       else next.add(m);
       return next;
     });
+  }
+
+  function toggleAll() {
+    if (!fetchedModels) return;
+    if (selected.size === fetchedModels.length && fetchedModels.length > 0) {
+      setSelected(new Set());
+    } else {
+      setSelected(new Set(fetchedModels));
+    }
   }
 
   function addSelected() {
@@ -195,15 +212,26 @@ export function ProviderModelsEditor({
             <span className="text-xs text-muted-foreground">
               {fetchedModels.length} 个模型，勾选后加入
             </span>
-            <Button
-              type="button"
-              size="sm"
-              onClick={addSelected}
-              disabled={selected.size === 0}
-              data-testid="add-selected"
-            >
-              <CheckIcon className="size-3.5" /> 加入选中（{selected.size}）
-            </Button>
+            <div className="flex items-center gap-3">
+              <label className="flex items-center gap-1 text-xs">
+                <input
+                  type="checkbox"
+                  checked={fetchedModels.length > 0 && selected.size === fetchedModels.length}
+                  onChange={() => toggleAll()}
+                  data-testid="select-all-models"
+                />
+                全选
+              </label>
+              <Button
+                type="button"
+                size="sm"
+                onClick={addSelected}
+                disabled={selected.size === 0}
+                data-testid="add-selected"
+              >
+                <CheckIcon className="size-3.5" /> 加入选中（{selected.size}）
+              </Button>
+            </div>
           </div>
           <div className="max-h-48 space-y-1 overflow-auto">
             {fetchedModels.length === 0 && (

@@ -30,6 +30,8 @@ function resetStore(over: Partial<ReturnType<typeof useStudioStore.getState>> = 
     selectedPromptId: null,
     isGenerating: false,
     error: null,
+    reasoningEnabled: false,
+    reasoningEffort: "medium",
     ...over,
   });
 }
@@ -148,5 +150,33 @@ describe("AIChatPanel", () => {
     fireEvent.click(screen.getByText("发送"));
     await waitFor(() => expect(screen.getByText("生成中…")).toBeInTheDocument());
     await waitFor(() => expect(screen.queryByText("生成中…")).not.toBeInTheDocument());
+  });
+});
+
+describe("AIChatPanel reasoning", () => {
+  beforeEach(() => {
+    fetchMock.mockReset();
+    resetStore();
+  });
+
+  it("深度思考关闭时不传 reasoningEffort", async () => {
+    fetchMock.mockResolvedValue(sseResponse([{ type: "delta", content: "c" }, { type: "done" }]));
+    render(<AIChatPanel />);
+    fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
+    fireEvent.click(screen.getByText("发送"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).not.toHaveProperty("reasoningEffort");
+  });
+
+  it("深度思考开启时 body 含 reasoningEffort", async () => {
+    resetStore({ reasoningEnabled: true, reasoningEffort: "high" });
+    fetchMock.mockResolvedValue(sseResponse([{ type: "delta", content: "c" }, { type: "done" }]));
+    render(<AIChatPanel />);
+    fireEvent.change(screen.getByLabelText("AI 输入"), { target: { value: "x" } });
+    fireEvent.click(screen.getByText("发送"));
+    await waitFor(() => expect(fetchMock).toHaveBeenCalled());
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body).toHaveProperty("reasoningEffort", "high");
   });
 });

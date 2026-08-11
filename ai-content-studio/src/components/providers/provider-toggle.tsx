@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Power as PowerIcon } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
 export interface ProviderToggleProps {
   id: string;
@@ -38,18 +37,27 @@ export function ProviderToggle({ id, enabled, onToggled }: ProviderToggleProps) 
 
   return (
     <span className="inline-flex items-center gap-2">
-      <Button
+      <button
         type="button"
-        variant={enabled ? "secondary" : "outline"}
-        size="sm"
-        onClick={() => void toggle()}
-        disabled={loading}
-        aria-pressed={enabled}
+        role="switch"
+        aria-checked={enabled}
         aria-label={enabled ? "点击禁用" : "点击启用"}
+        data-testid="provider-toggle"
+        disabled={loading}
+        onClick={() => void toggle()}
+        className={cn(
+          "relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:opacity-50",
+          enabled ? "bg-emerald-500" : "bg-gray-300",
+        )}
       >
-        <PowerIcon className="size-3.5" />
-        {loading ? "切换中…" : enabled ? "启用" : "禁用"}
-      </Button>
+        <span
+          className={cn(
+            "inline-block size-5 transform rounded-full bg-white shadow transition-transform",
+            enabled ? "translate-x-5" : "translate-x-0.5",
+          )}
+        />
+      </button>
+      {loading && <span className="text-xs text-muted-foreground">切换中…</span>}
       {error && (
         <span role="alert" className="text-xs text-destructive">
           {error}

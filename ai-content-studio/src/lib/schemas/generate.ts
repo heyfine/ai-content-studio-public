@@ -8,6 +8,7 @@ export const generateSchema = z.object({
   maxTokens: z.number().int().positive().max(8192).optional(),
   promptId: z.string().optional(),
   articleId: z.string().optional(),
+  reasoningEffort: z.enum(["low", "medium", "high"]).optional(),
 });
 
 export type GenerateValues = z.infer<typeof generateSchema>;

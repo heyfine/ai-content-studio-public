@@ -36,9 +36,13 @@ export function AIChatPanel() {
     messages,
     selectedTask,
     selectedPromptId,
+    reasoningEnabled,
+    reasoningEffort,
     appendMessage,
     appendDelta,
     setSelectedTask,
+    setReasoningEnabled,
+    setReasoningEffort,
     setGenerating,
     setContent,
     setError,
@@ -62,6 +66,7 @@ export function AIChatPanel() {
         task: selectedTask,
         input: text,
         promptId: selectedPromptId ?? undefined,
+        ...(reasoningEnabled ? { reasoningEffort } : {}),
       })) {
         if (ev.type === "delta") {
           acc += ev.content;

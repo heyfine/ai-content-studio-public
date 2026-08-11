@@ -8,6 +8,8 @@ export interface AIGenerateArgs {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  /** 推理强度（深度思考） */
+  reasoningEffort?: "low" | "medium" | "high";
   /** 可选，关联到的文章（Phase 3） */
   articleId?: string;
   /** 可选，使用的 Prompt 模板 id */
@@ -50,6 +52,7 @@ export async function generate(args: AIGenerateArgs): Promise<AIGenerateResult> 
     systemPrompt,
     temperature: args.temperature,
     maxTokens: args.maxTokens,
+    reasoningEffort: args.reasoningEffort,
   });
   const duration = Date.now() - start;
 
@@ -90,6 +93,7 @@ export async function* generateStream(
     systemPrompt,
     temperature: args.temperature,
     maxTokens: args.maxTokens,
+    reasoningEffort: args.reasoningEffort,
   });
   let content = "";
   let inputTokens: number | undefined;

@@ -15,7 +15,7 @@ const providerBase = z.object({
   baseUrl: z.string().url("请输入合法 URL").optional().or(z.literal("")),
   apiKey: z.string().min(1, "请输入 API Key"),
   enabled: z.boolean().optional(),
-  models: z.array(modelItemSchema).default([]),
+  models: z.array(modelItemSchema).optional(),
 });
 
 const baseUrlRequired = (d: { type?: string; baseUrl?: string }) =>

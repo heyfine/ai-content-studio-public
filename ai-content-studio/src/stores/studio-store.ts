@@ -17,6 +17,10 @@ export interface StudioState {
   error: string | null;
   /** 当前编辑文章的数据库 id；为空表示未保存（新建中） */
   articleId: string | null;
+  /** 深度思考开关（OpenAI o 系列与兼容 reasoning 模型生效） */
+  reasoningEnabled: boolean;
+  /** 推理强度：低/中/高，reasoningEnabled 为 true 时生效 */
+  reasoningEffort: "low" | "medium" | "high";
   /** 当前编辑文章的状态，null 表示未保存 */
   articleStatus: "DRAFT" | "REVIEW" | "PUBLISHED" | "ARCHIVED" | null;
   setTitle: (v: string) => void;
@@ -26,6 +30,8 @@ export interface StudioState {
   clearMessages: () => void;
   setSelectedTask: (t: string) => void;
   setSelectedPromptId: (id: string | null) => void;
+  setReasoningEnabled: (b: boolean) => void;
+  setReasoningEffort: (e: "low" | "medium" | "high") => void;
   setGenerating: (b: boolean) => void;
   setError: (e: string | null) => void;
   /** 设置已保存文章的 id 与状态（保存/状态切换成功后调用） */
@@ -50,6 +56,8 @@ export const useStudioStore = create<StudioState>((set) => ({
   isGenerating: false,
   error: null,
   articleId: null,
+  reasoningEnabled: false,
+  reasoningEffort: "medium",
   articleStatus: null,
   setTitle: (v) => set({ title: v }),
   setContent: (v) => set({ content: v }),
@@ -61,6 +69,8 @@ export const useStudioStore = create<StudioState>((set) => ({
   clearMessages: () => set({ messages: [] }),
   setSelectedTask: (t) => set({ selectedTask: t }),
   setSelectedPromptId: (id) => set({ selectedPromptId: id }),
+  setReasoningEnabled: (b) => set({ reasoningEnabled: b }),
+  setReasoningEffort: (e) => set({ reasoningEffort: e }),
   setGenerating: (b) => set({ isGenerating: b }),
   setError: (e) => set({ error: e }),
   setSavedArticle: (id, status) => set({ articleId: id, articleStatus: status }),

@@ -56,6 +56,7 @@ export async function generateByTask(args: {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: "low" | "medium" | "high";
 }): Promise<{
   content: string;
   inputTokens?: number;
@@ -72,6 +73,7 @@ export async function generateByTask(args: {
     messages,
     temperature: args.temperature,
     maxTokens: args.maxTokens,
+    reasoningEffort: args.reasoningEffort,
   };
   const res: AIResponse = await adapter.generate(req);
   return {
@@ -88,6 +90,7 @@ export async function* streamByTask(args: {
   systemPrompt?: string;
   temperature?: number;
   maxTokens?: number;
+  reasoningEffort?: "low" | "medium" | "high";
 }): AsyncGenerator<
   string,
   { inputTokens?: number; outputTokens?: number; context: RouteContext },
@@ -103,6 +106,7 @@ export async function* streamByTask(args: {
     messages,
     temperature: args.temperature,
     maxTokens: args.maxTokens,
+    reasoningEffort: args.reasoningEffort,
   };
   const gen = adapter.streamGenerate(req);
   let inputTokens: number | undefined;

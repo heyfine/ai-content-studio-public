@@ -9,6 +9,8 @@ export interface AIRequest {
   messages: ChatMessage[];
   temperature?: number;
   maxTokens?: number;
+  /** 推理强度（深度思考）：OpenAI o 系列与兼容 reasoning 模型生效 */
+  reasoningEffort?: "low" | "medium" | "high";
 }
 
 export interface AIResponse {

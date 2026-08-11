@@ -90,8 +90,10 @@ describe("ProvidersTable", () => {
     });
     render(<ProvidersTable />);
     await waitFor(() => expect(screen.getByText("DeepSeek")).toBeInTheDocument());
-    expect(screen.getByText(/启/)).toBeInTheDocument();
-    expect(screen.getByText(/禁/)).toBeInTheDocument();
+    const switches = screen.getAllByRole("switch");
+    expect(switches).toHaveLength(2);
+    expect(switches[0]).toHaveAttribute("aria-checked", "true");
+    expect(switches[1]).toHaveAttribute("aria-checked", "false");
   });
 
   it("确认删除后发送 DELETE 并刷新", async () => {
