@@ -39,8 +39,7 @@ pnpm.cmd exec biome check .
 | UI 组件 | 15 | ~150 | jsdom + Testing Library |
 | 工具函数 | 5 | ~60 | 纯逻辑 100% 可测 |
 | Store | 2 | ~20 | Zustand persist 测试 |
-| **总计** | **82** | **588** | **Phase 10 后** |
-| **总计（含 sources）** | **107** | **753** | **最新** |
+| **总计** | **108** | **753** | **Phase 10 v2 后（含 sources）** |
 
 ## 覆盖率目标
 
