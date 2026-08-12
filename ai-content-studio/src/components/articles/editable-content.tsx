@@ -42,7 +42,6 @@ import {
   removeCalloutInMarkdown,
   scanCalloutSegments,
   segmentsToMarkdown,
-  type Segment,
 } from "@/lib/content/render";
 
 /**
@@ -63,7 +62,6 @@ function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) 
   useLayoutEffect(() => {
     resize();
   }, [props.value, resize]);
-  // biome-ignore lint/correctness/useExhaustiveDependencies: resize 是稳定引用，窗口尺寸变化时需重算
   useEffect(() => {
     const onResize = () => resize();
     window.addEventListener("resize", onResize, { passive: true });

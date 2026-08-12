@@ -40,10 +40,9 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
     status: "DRAFT" as ArticleStatus,
   });
 
-  // 编辑模式：拉取已有文章
+  // 编辑模式：拉取已有文章（初始 loading = isEdit，无需在此重置）
   useEffect(() => {
     if (!articleId) return;
-    setLoading(true);
     fetch(`/api/articles/${articleId}`)
       .then(async (res) => {
         if (!res.ok) throw new Error("加载失败");
