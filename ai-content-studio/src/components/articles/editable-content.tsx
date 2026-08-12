@@ -63,19 +63,35 @@ function SortableItem({ id, children }: { id: string; children: React.ReactNode 
   );
 }
 
-/** 段落间的插入点：hover 时显示「+ 高亮块」按钮 */
-function InsertPoint({ onInsert }: { onInsert: () => void }) {
+/** 段落间的插入点：hover 时显示「+ 文字块」「+ 高亮块」按钮，靠左对齐 */
+function InsertPoint({
+  onInsertText,
+  onInsertCallout,
+}: {
+  onInsertText: () => void;
+  onInsertCallout: () => void;
+}) {
   return (
-    <div className="group relative flex items-center justify-center py-0.5">
+    <div className="group relative flex items-center py-0.5">
       <div className="h-px w-full bg-transparent group-hover:bg-border" />
-      <button
-        type="button"
-        data-testid="insert-point"
-        onClick={onInsert}
-        className="absolute flex items-center gap-1 rounded-full border border-dashed border-muted-foreground px-3 py-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:border-foreground hover:text-foreground"
-      >
-        <Plus className="size-3" /> 高亮块
-      </button>
+      <div className="absolute left-0 top-1/2 flex -translate-y-1/2 items-center gap-1 opacity-0 transition-opacity group-hover:opacity-100">
+        <button
+          type="button"
+          data-testid="insert-point-text"
+          onClick={onInsertText}
+          className="flex items-center gap-0.5 rounded-full border border-dashed border-muted-foreground px-2.5 py-0.5 text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          <Plus className="size-3" /> 文字块
+        </button>
+        <button
+          type="button"
+          data-testid="insert-point-callout"
+          onClick={onInsertCallout}
+          className="flex items-center gap-0.5 rounded-full border border-dashed border-muted-foreground px-2.5 py-0.5 text-xs text-muted-foreground hover:border-foreground hover:text-foreground"
+        >
+          <Plus className="size-3" /> 高亮块
+        </button>
+      </div>
     </div>
   );
 }
@@ -93,11 +109,13 @@ export function EditableContent({
   onContentChange,
   onInsertCallout,
   onInsertCalloutAt,
+  onInsertTextAt,
 }: {
   content: string;
   onContentChange: (next: string) => void;
   onInsertCallout: () => void;
   onInsertCalloutAt: (position: number) => void;
+  onInsertTextAt: (position: number) => void;
 }) {
   const segments = useMemo(() => scanCalloutSegments(content), [content]);
   const ranges = useMemo(() => findCalloutRanges(content), [content]);
@@ -157,7 +175,12 @@ export function EditableContent({
               const idx = textIdx++;
               return (
                 <div key={id}>
-                  {i > 0 && <InsertPoint onInsert={() => onInsertCalloutAt(i)} />}
+                  {i > 0 && (
+                    <InsertPoint
+                      onInsertText={() => onInsertTextAt(i)}
+                      onInsertCallout={() => onInsertCalloutAt(i)}
+                    />
+                  )}
                   <SortableItem id={id}>
                     <textarea
                       data-testid={`text-segment-${idx}`}
@@ -185,7 +208,12 @@ export function EditableContent({
             const ci = calloutIdx++;
             return (
               <div key={id}>
-                {i > 0 && <InsertPoint onInsert={() => onInsertCalloutAt(i)} />}
+                {i > 0 && (
+                  <InsertPoint
+                    onInsertText={() => onInsertTextAt(i)}
+                    onInsertCallout={() => onInsertCalloutAt(i)}
+                  />
+                )}
                 <SortableItem id={id}>
                   <div
                     className={`callout callout-${type} relative`}
@@ -287,7 +315,10 @@ export function EditableContent({
           })}
         </SortableContext>
       </DndContext>
-      <InsertPoint onInsert={() => onInsertCalloutAt(segments.length)} />
+      <InsertPoint
+        onInsertText={() => onInsertTextAt(segments.length)}
+        onInsertCallout={() => onInsertCalloutAt(segments.length)}
+      />
       <Button
         type="button"
         variant="outline"

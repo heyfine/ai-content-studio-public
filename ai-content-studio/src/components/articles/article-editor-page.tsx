@@ -181,6 +181,15 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
                 setInsertPosition(pos);
                 setPickerOpen(true);
               }}
+              onInsertTextAt={(pos) => {
+                const segs = scanCalloutSegments(form.content);
+                const reordered = [
+                  ...segs.slice(0, pos),
+                  { kind: "text" as const, value: "" },
+                  ...segs.slice(pos),
+                ];
+                setField("content", segmentsToMarkdown(reordered));
+              }}
             />
           ) : (
             <div className="min-h-[40vh] w-full overflow-y-auto rounded-md border p-3">

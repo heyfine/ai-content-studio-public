@@ -6,15 +6,17 @@ function renderWith(content: string) {
   const onContentChange = vi.fn();
   const onInsertCallout = vi.fn();
   const onInsertCalloutAt = vi.fn();
+  const onInsertTextAt = vi.fn();
   const utils = render(
     <EditableContent
       content={content}
       onContentChange={onContentChange}
       onInsertCallout={onInsertCallout}
       onInsertCalloutAt={onInsertCalloutAt}
+      onInsertTextAt={onInsertTextAt}
     />,
   );
-  return { onContentChange, onInsertCallout, onInsertCalloutAt, ...utils };
+  return { onContentChange, onInsertCallout, onInsertCalloutAt, onInsertTextAt, ...utils };
 }
 
 const calloutMd = '前文\n:::callout{type="warning" title="注意" icon="⚠️"}\n警告正文\n:::\n后文';
