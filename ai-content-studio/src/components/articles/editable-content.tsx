@@ -40,22 +40,24 @@ export function EditableContent({
   const ranges = useMemo(() => findCalloutRanges(content), [content]);
 
   // 计算 text 段在 content 中的字节区间，用于回写
+  // 按 segments 同步追踪：text 段直接用 seg.value 长度推算，callout 段用 ranges 的 end 跳进
   const textRanges = useMemo(() => {
     const tr: { start: number; end: number }[] = [];
     let pos = 0;
     let rIdx = 0;
     for (const seg of segments) {
-      if (seg.kind === "callout") {
+      if (seg.kind === "text") {
+        tr.push({ start: pos, end: pos + seg.value.length });
+        pos += seg.value.length;
+      } else {
         const r = ranges[rIdx];
         if (r) {
-          if (r.start > pos) tr.push({ start: pos, end: r.start });
           pos = r.end;
           if (content[pos] === "\n") pos += 1;
           rIdx++;
         }
       }
     }
-    if (pos < content.length) tr.push({ start: pos, end: content.length });
     return tr;
   }, [segments, ranges, content]);
 

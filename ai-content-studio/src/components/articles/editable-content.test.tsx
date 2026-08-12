@@ -93,4 +93,12 @@ describe("EditableContent", () => {
     expect(screen.getByTestId("callout-card-0")).toBeInTheDocument();
     expect(screen.getByTestId("callout-card-1")).toBeInTheDocument();
   });
+
+  it("空内容时 text 段可正常输入（不被吞掉）", () => {
+    const { onContentChange } = renderWith("");
+    const ta = screen.getByTestId("text-segment-0");
+    fireEvent.change(ta, { target: { value: "输入的内容" } });
+    expect(onContentChange).toHaveBeenCalledTimes(1);
+    expect(onContentChange.mock.calls[0][0]).toBe("输入的内容");
+  });
 });
