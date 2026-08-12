@@ -8,6 +8,7 @@ import {
   Search as SearchIcon,
   Send as SendIcon,
   ChartColumn as ChartColumnIcon,
+  Webhook as WebhookIcon,
   Settings as SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -29,6 +30,12 @@ export const navItems: NavItem[] = [
   { title: "AI Studio", href: "/studio", icon: PenLineIcon, description: "AI 辅助创作工作台" },
   { title: "文章管理", href: "/articles", icon: FileTextIcon, description: "草稿与已发布文章" },
   { title: "AI 模型", href: "/providers", icon: CpuIcon, description: "供应商与模型管理" },
+  {
+    title: "API 中转",
+    href: "/relay",
+    icon: WebhookIcon,
+    description: "对外 OpenAI 兼容接口与中转密钥",
+  },
   { title: "Prompt", href: "/prompts", icon: MessageSquareTextIcon, description: "提示词模板库" },
   {
     title: "工作流",

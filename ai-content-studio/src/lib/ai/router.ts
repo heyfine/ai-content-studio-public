@@ -122,3 +122,53 @@ export async function* streamByTask(args: {
   }
   return { inputTokens, outputTokens, context };
 }
+
+export class ModelNotFoundError extends Error {
+  constructor(relayId: string) {
+    super(`模型不存在：${relayId}`);
+    this.name = "ModelNotFoundError";
+  }
+}
+
+export interface RelayRouteContext {
+  providerId: string;
+  modelId: string;
+  providerName: string;
+  modelName: string;
+  providerType: AIProviderConfig["type"];
+}
+
+/** 按中转模型 id（供应商名/模型名）反查到具体 AIModel 与对应 adapter。 */
+export async function resolveByModelId(relayId: string): Promise<{
+  adapter: AIAdapter;
+  model: string;
+  context: RelayRouteContext;
+}> {
+  const providers = await prisma.aIProvider.findMany({
+    where: { enabled: true },
+    include: { models: { where: { enabled: true } } },
+  });
+  for (const p of providers) {
+    for (const m of p.models) {
+      if (`${p.name}/${m.name}` === relayId) {
+        const providerConfig: AIProviderConfig = {
+          type: p.type,
+          baseUrl: p.baseUrl ?? undefined,
+          apiKey: decrypt(p.apiKey),
+        };
+        return {
+          adapter: getAdapter(providerConfig),
+          model: m.name,
+          context: {
+            providerId: p.id,
+            modelId: m.id,
+            providerName: p.name,
+            modelName: m.name,
+            providerType: p.type,
+          },
+        };
+      }
+    }
+  }
+  throw new ModelNotFoundError(relayId);
+}
