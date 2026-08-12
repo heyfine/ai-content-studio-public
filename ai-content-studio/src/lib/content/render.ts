@@ -42,7 +42,7 @@ interface CalloutAttrs {
   icon?: string;
 }
 
-type Segment =
+export type Segment =
   | { kind: "text"; value: string }
   | { kind: "callout"; attrs: CalloutAttrs; body: string };
 
@@ -106,6 +106,22 @@ export function scanCalloutSegments(md: string): Segment[] {
   }
   flushText();
   return parts;
+}
+
+/** 把 segments 重新拼接回 markdown 文本（与 scanCalloutSegments 配对）。 */
+export function segmentsToMarkdown(segments: Segment[]): string {
+  return segments
+    .map((seg) => {
+      if (seg.kind === "text") return seg.value;
+      const type: CalloutType = isCalloutType(seg.attrs.type)
+        ? seg.attrs.type
+        : CALLOUT_FALLBACK_TYPE;
+      const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
+      const title = seg.attrs.title?.trim() || config.label;
+      const icon = seg.attrs.icon?.trim() || config.icon;
+      return `:::callout{type="${type}" title="${title}" icon="${icon}"}\n${seg.body}\n:::`;
+    })
+    .join("\n");
 }
 
 function renderCallout(seg: Extract<Segment, { kind: "callout" }>): string {

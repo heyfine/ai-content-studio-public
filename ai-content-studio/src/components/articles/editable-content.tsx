@@ -1,7 +1,21 @@
 "use client";
 
-import { Highlighter as HighlighterIcon, Trash2 } from "lucide-react";
-import { useMemo } from "react";
+import { CSSProperties, useMemo } from "react";
+import {
+  DndContext,
+  type DragEndEvent,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { GripVertical, Highlighter as HighlighterIcon, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -19,28 +33,81 @@ import {
   findCalloutRanges,
   removeCalloutInMarkdown,
   scanCalloutSegments,
+  segmentsToMarkdown,
+  type Segment,
 } from "@/lib/content/render";
+
+/** 可拖动的单个段（text 或 callout） */
+function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  const style: CSSProperties = {
+    transform: transform ? `translate3d(0, ${transform.y}px, 0)` : undefined,
+    transition,
+    opacity: isDragging ? 0.4 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="relative">
+      <button
+        type="button"
+        className="absolute -left-6 top-2 cursor-grab p-0.5 text-muted-foreground/40 hover:text-muted-foreground"
+        aria-label="拖动排序"
+        {...attributes}
+        {...listeners}
+      >
+        <GripVertical className="size-4" />
+      </button>
+      {children}
+    </div>
+  );
+}
+
+/** 段落间的插入点：hover 时显示「+ 高亮块」按钮 */
+function InsertPoint({ onInsert }: { onInsert: () => void }) {
+  return (
+    <div className="group relative flex items-center justify-center py-0.5">
+      <div className="h-px w-full bg-transparent group-hover:bg-border" />
+      <button
+        type="button"
+        data-testid="insert-point"
+        onClick={onInsert}
+        className="absolute flex items-center gap-1 rounded-full border border-dashed border-muted-foreground px-3 py-1 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 hover:border-foreground hover:text-foreground"
+      >
+        <Plus className="size-3" /> 高亮块
+      </button>
+    </div>
+  );
+}
 
 /**
  * 编辑模式下的正文区：把 Markdown 切成 text / callout 交替段。
- * text 段渲染为小 textarea；callout 段渲染为彩色卡片，标题/正文/图标就地编辑，类型按钮组切换，可删除。
- * 底部有「插入高亮块」按钮。
- * 底层数据仍是 :::callout Markdown 文本，编辑只是回写对应字节区间。
+ * - text 段渲染为 textarea
+ * - callout 段渲染为彩色卡片，标题/正文/图标就地编辑，类型按钮组切换，可删除
+ * - 所有段可拖动排序（dnd-kit）
+ * - 段之间有插入点（hover 显示「+ 高亮块」）
+ * - 底层仍是 :::callout Markdown 文本
  */
 export function EditableContent({
   content,
   onContentChange,
   onInsertCallout,
+  onInsertCalloutAt,
 }: {
   content: string;
   onContentChange: (next: string) => void;
   onInsertCallout: () => void;
+  onInsertCalloutAt: (position: number) => void;
 }) {
   const segments = useMemo(() => scanCalloutSegments(content), [content]);
   const ranges = useMemo(() => findCalloutRanges(content), [content]);
 
-  // 计算 text 段在 content 中的字节区间，用于回写
-  // 按 segments 同步追踪：text 段直接用 seg.value 长度推算，callout 段用 ranges 的 end 跳进
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  // 段的稳定 ID（用序号，每次 content 变化会重建）
+  const itemIds = useMemo(() => segments.map((_, i) => `seg-${i}`), [segments]);
+
+  // text 段字节区间
   const textRanges = useMemo(() => {
     const tr: { start: number; end: number }[] = [];
     let pos = 0;
@@ -67,139 +134,160 @@ export function EditableContent({
     onContentChange(content.slice(0, target.start) + value + content.slice(target.end));
   }
 
+  function handleDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = Number(String(active.id).replace("seg-", ""));
+    const newIndex = Number(String(over.id).replace("seg-", ""));
+    const reordered = arrayMove(segments, oldIndex, newIndex);
+    onContentChange(segmentsToMarkdown(reordered));
+  }
+
   let textIdx = 0;
   let calloutIdx = 0;
-  let seq = 0;
 
   return (
-    <div className="space-y-2" data-testid="editable-content">
+    <div className="space-y-1 pl-6" data-testid="editable-content">
       <style>{CALLOUT_CSS}</style>
-      {segments.map((seg) => {
-        const key = seq++;
-        if (seg.kind === "text") {
-          const idx = textIdx++;
-          return (
-            <textarea
-              key={`text-${key}`}
-              data-testid={`text-segment-${idx}`}
-              className="min-h-[6vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
-              value={seg.value}
-              onChange={(e) => setTextRange(idx, e.target.value)}
-              placeholder="在此输入 Markdown 正文…"
-            />
-          );
-        }
-        const r = ranges[calloutIdx];
-        const cfg =
-          CALLOUT_TYPES.find((t) => t.type === r?.attrs.type) ??
-          CALLOUT_TYPES.find((t) => t.type === "neutral") ??
-          CALLOUT_TYPES[0];
-        const type: CalloutType =
-          r?.attrs.type && CALLOUT_TYPES.some((t) => t.type === r.attrs.type)
-            ? (r.attrs.type as CalloutType)
-            : cfg.type;
-        const title = r?.attrs.title ?? "";
-        const icon = r?.attrs.icon ?? "";
-        const body = r?.body ?? "";
-        const ci = calloutIdx++;
-        return (
-          <div
-            key={`callout-${key}`}
-            className={`callout callout-${type} relative`}
-            data-testid={`callout-card-${ci}`}
-          >
-            <div className="mb-1 flex items-center gap-1">
-              <div className="flex flex-wrap gap-1" data-testid={`callout-card-type-${ci}`}>
-                {CALLOUT_TYPES.map((t) => (
-                  <button
-                    key={t.type}
-                    type="button"
-                    data-testid={`callout-card-type-${ci}-${t.type}`}
-                    onClick={() =>
-                      onContentChange(
-                        editCalloutInMarkdown(content, ci, {
-                          type: t.type,
-                          title,
-                          icon,
-                          body,
-                        }),
-                      )
-                    }
-                    className={
-                      "flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs " +
-                      (type === t.type
-                        ? "border-foreground bg-black/5 font-medium"
-                        : "border-muted")
-                    }
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={itemIds} strategy={verticalListSortingStrategy}>
+          {segments.map((seg, i) => {
+            const id = `seg-${i}`;
+            if (seg.kind === "text") {
+              const idx = textIdx++;
+              return (
+                <div key={id}>
+                  {i > 0 && <InsertPoint onInsert={() => onInsertCalloutAt(i)} />}
+                  <SortableItem id={id}>
+                    <textarea
+                      data-testid={`text-segment-${idx}`}
+                      className="min-h-[6vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+                      value={seg.value}
+                      onChange={(e) => setTextRange(idx, e.target.value)}
+                      placeholder="在此输入 Markdown 正文…"
+                    />
+                  </SortableItem>
+                </div>
+              );
+            }
+            const r = ranges[calloutIdx];
+            const cfg =
+              CALLOUT_TYPES.find((t) => t.type === r?.attrs.type) ??
+              CALLOUT_TYPES.find((t) => t.type === "neutral") ??
+              CALLOUT_TYPES[0];
+            const type: CalloutType =
+              r?.attrs.type && CALLOUT_TYPES.some((t) => t.type === r.attrs.type)
+                ? (r.attrs.type as CalloutType)
+                : cfg.type;
+            const title = r?.attrs.title ?? "";
+            const icon = r?.attrs.icon ?? "";
+            const body = r?.body ?? "";
+            const ci = calloutIdx++;
+            return (
+              <div key={id}>
+                {i > 0 && <InsertPoint onInsert={() => onInsertCalloutAt(i)} />}
+                <SortableItem id={id}>
+                  <div
+                    className={`callout callout-${type} relative`}
+                    data-testid={`callout-card-${ci}`}
                   >
-                    <span aria-hidden="true">{t.icon}</span>
-                    {t.label}
-                  </button>
-                ))}
+                    <div className="mb-1 flex items-center gap-1">
+                      <div className="flex flex-wrap gap-1" data-testid={`callout-card-type-${ci}`}>
+                        {CALLOUT_TYPES.map((t) => (
+                          <button
+                            key={t.type}
+                            type="button"
+                            data-testid={`callout-card-type-${ci}-${t.type}`}
+                            onClick={() =>
+                              onContentChange(
+                                editCalloutInMarkdown(content, ci, {
+                                  type: t.type,
+                                  title,
+                                  icon,
+                                  body,
+                                }),
+                              )
+                            }
+                            className={
+                              "flex items-center gap-0.5 rounded border px-1.5 py-0.5 text-xs " +
+                              (type === t.type
+                                ? "border-foreground bg-black/5 font-medium"
+                                : "border-muted")
+                            }
+                          >
+                            <span aria-hidden="true">{t.icon}</span>
+                            {t.label}
+                          </button>
+                        ))}
+                      </div>
+                      <button
+                        type="button"
+                        data-testid={`callout-card-delete-${ci}`}
+                        onClick={() => onContentChange(removeCalloutInMarkdown(content, ci))}
+                        className="ml-auto rounded p-1 text-muted-foreground hover:text-destructive"
+                        title="删除该高亮块"
+                      >
+                        <Trash2 className="size-3.5" />
+                      </button>
+                    </div>
+                    <div className="callout-title items-center gap-1.5">
+                      <input
+                        data-testid={`callout-card-icon-${ci}`}
+                        className="w-8 border-none bg-transparent text-lg leading-none outline-none"
+                        value={icon}
+                        onChange={(e) =>
+                          onContentChange(
+                            editCalloutInMarkdown(content, ci, {
+                              type,
+                              title,
+                              icon: e.target.value,
+                              body,
+                            }),
+                          )
+                        }
+                        placeholder={cfg.icon}
+                      />
+                      <input
+                        data-testid={`callout-card-title-${ci}`}
+                        className="flex-1 border-none bg-transparent font-semibold outline-none"
+                        value={title}
+                        onChange={(e) =>
+                          onContentChange(
+                            editCalloutInMarkdown(content, ci, {
+                              type,
+                              title: e.target.value,
+                              icon,
+                              body,
+                            }),
+                          )
+                        }
+                        placeholder={cfg.label}
+                      />
+                    </div>
+                    <textarea
+                      data-testid={`callout-card-body-${ci}`}
+                      className="callout-content mt-1 w-full resize-y border-none bg-transparent text-sm leading-6 outline-none"
+                      value={body}
+                      onChange={(e) =>
+                        onContentChange(
+                          editCalloutInMarkdown(content, ci, {
+                            type,
+                            title,
+                            icon,
+                            body: e.target.value,
+                          }),
+                        )
+                      }
+                      placeholder="输入高亮块内容…"
+                    />
+                  </div>
+                </SortableItem>
               </div>
-              <button
-                type="button"
-                data-testid={`callout-card-delete-${ci}`}
-                onClick={() => onContentChange(removeCalloutInMarkdown(content, ci))}
-                className="ml-auto rounded p-1 text-muted-foreground hover:text-destructive"
-                title="删除该高亮块"
-              >
-                <Trash2 className="size-3.5" />
-              </button>
-            </div>
-            <div className="callout-title items-center gap-1.5">
-              <input
-                data-testid={`callout-card-icon-${ci}`}
-                className="w-8 border-none bg-transparent text-lg leading-none outline-none"
-                value={icon}
-                onChange={(e) =>
-                  onContentChange(
-                    editCalloutInMarkdown(content, ci, {
-                      type,
-                      title,
-                      icon: e.target.value,
-                      body,
-                    }),
-                  )
-                }
-                placeholder={cfg.icon}
-              />
-              <input
-                data-testid={`callout-card-title-${ci}`}
-                className="flex-1 border-none bg-transparent font-semibold outline-none"
-                value={title}
-                onChange={(e) =>
-                  onContentChange(
-                    editCalloutInMarkdown(content, ci, {
-                      type,
-                      title: e.target.value,
-                      icon,
-                      body,
-                    }),
-                  )
-                }
-                placeholder={cfg.label}
-              />
-            </div>
-            <textarea
-              data-testid={`callout-card-body-${ci}`}
-              className="callout-content mt-1 w-full resize-y border-none bg-transparent text-sm leading-6 outline-none"
-              value={body}
-              onChange={(e) =>
-                onContentChange(
-                  editCalloutInMarkdown(content, ci, {
-                    type,
-                    title,
-                    icon,
-                    body: e.target.value,
-                  }),
-                )
-              }
-              placeholder="输入高亮块内容…"
-            />
-          </div>
-        );
-      })}
+            );
+          })}
+        </SortableContext>
+      </DndContext>
+      <InsertPoint onInsert={() => onInsertCalloutAt(segments.length)} />
       <Button
         type="button"
         variant="outline"
@@ -232,7 +320,7 @@ export function CalloutPickerDialog({
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>插入高亮块</DialogTitle>
-          <DialogDescription>选择语义类型，在正文末尾插入彩色高亮块。</DialogDescription>
+          <DialogDescription>选择语义类型，插入彩色高亮块。</DialogDescription>
         </DialogHeader>
         <div className="space-y-2 py-1" data-testid="callout-type-list">
           {CALLOUT_TYPES.map((t) => (

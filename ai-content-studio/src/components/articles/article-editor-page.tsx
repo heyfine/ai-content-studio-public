@@ -7,7 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
-import { calloutTemplate } from "@/lib/content/render";
+import { calloutTemplate, scanCalloutSegments, segmentsToMarkdown } from "@/lib/content/render";
 import type { CalloutType } from "@/lib/content/callout-types";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
 import { CalloutPickerDialog, EditableContent } from "./editable-content";
@@ -23,6 +23,7 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
   const [loading, setLoading] = useState(isEdit);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [insertPosition, setInsertPosition] = useState<number | null>(null);
   const [form, setForm] = useState({
     title: "",
     content: "",
@@ -54,12 +55,29 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
   }
 
   function appendCallout(type: CalloutType) {
-    const template = calloutTemplate(type);
-    const next =
-      form.content.endsWith("\n") || form.content === ""
-        ? form.content + template
-        : `${form.content}\n${template}`;
-    setField("content", next);
+    if (insertPosition !== null) {
+      // 在指定段前插入
+      const segs = scanCalloutSegments(form.content);
+      const template = calloutTemplate(type);
+      const newSegs = scanCalloutSegments(template).filter((s) => s.kind === "callout");
+      if (newSegs.length > 0) {
+        const reordered = [
+          ...segs.slice(0, insertPosition),
+          ...newSegs,
+          ...segs.slice(insertPosition),
+        ];
+        setField("content", segmentsToMarkdown(reordered));
+      }
+    } else {
+      // 末尾插入
+      const template = calloutTemplate(type);
+      const next =
+        form.content.endsWith("\n") || form.content === ""
+          ? form.content + template
+          : `${form.content}\n${template}`;
+      setField("content", next);
+    }
+    setInsertPosition(null);
   }
 
   async function onSubmit() {
@@ -159,6 +177,10 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
               content={form.content}
               onContentChange={(next) => setField("content", next)}
               onInsertCallout={() => setPickerOpen(true)}
+              onInsertCalloutAt={(pos) => {
+                setInsertPosition(pos);
+                setPickerOpen(true);
+              }}
             />
           ) : (
             <div className="min-h-[40vh] w-full overflow-y-auto rounded-md border p-3">

@@ -29,8 +29,8 @@ export const CALLOUT_TYPES: CalloutTypeConfig[] = [
 
 export const CALLOUT_TYPE_KEYS: CalloutType[] = CALLOUT_TYPES.map((t) => t.type);
 
-export function isCalloutType(v: string): v is CalloutType {
-  return (CALLOUT_TYPE_KEYS as string[]).includes(v);
+export function isCalloutType(v: string | undefined): v is CalloutType {
+  return v !== undefined && (CALLOUT_TYPE_KEYS as string[]).includes(v);
 }
 
 /** 未知类型降级目标（不允许非法类型破坏整篇渲染） */
