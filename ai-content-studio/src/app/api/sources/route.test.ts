@@ -63,15 +63,29 @@ describe("POST /api/sources", () => {
   });
   it("新建成功 → 201", async () => {
     mocks.auth.mockResolvedValueOnce({ user: { name: "a" } });
-    mocks.ingestSource.mockResolvedValueOnce({ source: { id: "s1" }, created: true, versionBumped: true, versionNumber: 1 });
-    const r = await POST(mkReq("POST", "http://localhost/api/sources", { url: "https://example.com/a" }));
+    mocks.ingestSource.mockResolvedValueOnce({
+      source: { id: "s1" },
+      created: true,
+      versionBumped: true,
+      versionNumber: 1,
+    });
+    const r = await POST(
+      mkReq("POST", "http://localhost/api/sources", { url: "https://example.com/a" }),
+    );
     expect(r.status).toBe(201);
     expect(mocks.ingestSource.mock.calls[0][0]).toBe("https://example.com/a");
   });
   it("去重命中 → 200（不新建）", async () => {
     mocks.auth.mockResolvedValueOnce({ user: { name: "a" } });
-    mocks.ingestSource.mockResolvedValueOnce({ source: { id: "s1" }, created: false, versionBumped: false, versionNumber: 0 });
-    const r = await POST(mkReq("POST", "http://localhost/api/sources", { url: "https://example.com/a" }));
+    mocks.ingestSource.mockResolvedValueOnce({
+      source: { id: "s1" },
+      created: false,
+      versionBumped: false,
+      versionNumber: 0,
+    });
+    const r = await POST(
+      mkReq("POST", "http://localhost/api/sources", { url: "https://example.com/a" }),
+    );
     expect(r.status).toBe(200);
   });
   it("service 抛 URL 校验错 → 400", async () => {

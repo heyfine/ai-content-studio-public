@@ -29,7 +29,13 @@ vi.mock("@/lib/sources/pipeline", () => ({
 }));
 
 import { runFetchPipeline } from "@/lib/sources/pipeline";
-import { deleteSource, getSource, ingestSource, listSources, refreshSource } from "./source-service";
+import {
+  deleteSource,
+  getSource,
+  ingestSource,
+  listSources,
+  refreshSource,
+} from "./source-service";
 
 function mkOk(overrides: Record<string, unknown> = {}) {
   return {
@@ -63,7 +69,10 @@ function mkOk(overrides: Record<string, unknown> = {}) {
   };
 }
 
-function mkBlocked(fetchStatus: "blocked" | "requires_access" | "failed", overrides: Record<string, unknown> = {}) {
+function mkBlocked(
+  fetchStatus: "blocked" | "requires_access" | "failed",
+  overrides: Record<string, unknown> = {},
+) {
   return {
     kind: "blocked" as const,
     reason: `阻断理由：${fetchStatus}`,
@@ -126,7 +135,9 @@ describe("ingestSource", () => {
   });
 
   it("去重命中：相同 contentHash → 仅 update，不新增版本", async () => {
-    mocks.source.findUnique.mockResolvedValueOnce(mkSourceRow({ contentHash: "hash-aaa", id: "exist-id" }));
+    mocks.source.findUnique.mockResolvedValueOnce(
+      mkSourceRow({ contentHash: "hash-aaa", id: "exist-id" }),
+    );
     mocks.source.update.mockResolvedValueOnce(mkSourceRow({ id: "exist-id" }));
     vi.mocked(runFetchPipeline).mockResolvedValueOnce(mkOk({ hash: "hash-aaa" }));
     const r = await ingestSource("https://example.com/article");
@@ -152,7 +163,9 @@ describe("ingestSource", () => {
 
   it("SSRF/Robots 阻断 + 无现有 Source → 创建 blocked 记录", async () => {
     mocks.source.findUnique.mockResolvedValueOnce(null);
-    mocks.source.create.mockResolvedValueOnce(mkSourceRow({ fetchStatus: "blocked", contentHash: null }));
+    mocks.source.create.mockResolvedValueOnce(
+      mkSourceRow({ fetchStatus: "blocked", contentHash: null }),
+    );
     vi.mocked(runFetchPipeline).mockResolvedValueOnce(mkBlocked("blocked"));
     const r = await ingestSource("https://example.com/a");
     expect(r.created).toBe(true);
@@ -162,8 +175,12 @@ describe("ingestSource", () => {
 
   it("HTTP 403 + 无现有 Source → 创建 requires_access 记录", async () => {
     mocks.source.findUnique.mockResolvedValueOnce(null);
-    mocks.source.create.mockResolvedValueOnce(mkSourceRow({ fetchStatus: "requires_access", httpStatus: 403 as unknown as number }));
-    vi.mocked(runFetchPipeline).mockResolvedValueOnce(mkBlocked("requires_access", { httpStatus: 403 }));
+    mocks.source.create.mockResolvedValueOnce(
+      mkSourceRow({ fetchStatus: "requires_access", httpStatus: 403 as unknown as number }),
+    );
+    vi.mocked(runFetchPipeline).mockResolvedValueOnce(
+      mkBlocked("requires_access", { httpStatus: 403 }),
+    );
     const r = await ingestSource("https://example.com/a");
     expect(r.created).toBe(true);
     const createArg = mocks.source.create.mock.calls[0][0];
@@ -200,7 +217,10 @@ describe("listSources", () => {
   it("按 domain + status 筛选", async () => {
     mocks.source.findMany.mockResolvedValueOnce([]);
     await listSources({ domain: "ex.com", status: "parsed" });
-    expect(mocks.source.findMany.mock.calls[0][0].where).toEqual({ domain: "ex.com", fetchStatus: "parsed" });
+    expect(mocks.source.findMany.mock.calls[0][0].where).toEqual({
+      domain: "ex.com",
+      fetchStatus: "parsed",
+    });
   });
 });
 

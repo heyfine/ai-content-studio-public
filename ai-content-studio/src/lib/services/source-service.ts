@@ -1,6 +1,10 @@
 import { prisma } from "@/lib/prisma";
 import { extractDomain, normalizeUrl } from "@/lib/sources/url-normalize";
-import { runFetchPipeline, type PipelineBlocked, type PipelineSuccess } from "@/lib/sources/pipeline";
+import {
+  runFetchPipeline,
+  type PipelineBlocked,
+  type PipelineSuccess,
+} from "@/lib/sources/pipeline";
 import type { FetchStatus } from "@/lib/sources/source-types";
 
 /**
@@ -34,11 +38,21 @@ export type SourceRow = {
 };
 
 function toRow(s: {
-  id: string; url: string; canonicalUrl: string; domain: string;
-  title: string | null; description: string | null; author: string | null;
-  sourceType: string; robotsStatus: string; fetchStatus: string;
-  httpStatus: number | null; contentHash: string | null; wordCount: number | null;
-  normalizedContent: string | null; fetchError: string | null;
+  id: string;
+  url: string;
+  canonicalUrl: string;
+  domain: string;
+  title: string | null;
+  description: string | null;
+  author: string | null;
+  sourceType: string;
+  robotsStatus: string;
+  fetchStatus: string;
+  httpStatus: number | null;
+  contentHash: string | null;
+  wordCount: number | null;
+  normalizedContent: string | null;
+  fetchError: string | null;
 }): SourceRow {
   return { ...s };
 }
@@ -116,11 +130,16 @@ export async function ingestSource(urlInput: string): Promise<IngestResult> {
     throw new Error(e instanceof Error ? e.message : "URL 校验失败");
   }
   const result = await runFetchPipeline(normalizedInput);
-  const canonicalUrl = result.kind === "ok" && result.parsed.meta.canonical
-    ? (() => {
-        try { return normalizeUrl(result.parsed.meta.canonical as string); } catch { return normalizedInput; }
-      })()
-    : normalizedInput;
+  const canonicalUrl =
+    result.kind === "ok" && result.parsed.meta.canonical
+      ? (() => {
+          try {
+            return normalizeUrl(result.parsed.meta.canonical as string);
+          } catch {
+            return normalizedInput;
+          }
+        })()
+      : normalizedInput;
 
   const existing = await prisma.source.findUnique({ where: { canonicalUrl } });
 
@@ -141,7 +160,19 @@ export async function ingestSource(urlInput: string): Promise<IngestResult> {
       data: {
         url: normalizedInput,
         ...data,
-        versions: { create: [{ versionNumber: 1, contentHash: data.contentHash, normalizedContent: data.normalizedContent, httpStatus: data.httpStatus, contentType: data.contentType, wordCount: data.wordCount, metadataJson: data.metadataJson }] },
+        versions: {
+          create: [
+            {
+              versionNumber: 1,
+              contentHash: data.contentHash,
+              normalizedContent: data.normalizedContent,
+              httpStatus: data.httpStatus,
+              contentType: data.contentType,
+              wordCount: data.wordCount,
+              metadataJson: data.metadataJson,
+            },
+          ],
+        },
       },
     });
     return { source: toRow(source), created: true, versionBumped: true, versionNumber: 1 };
@@ -202,11 +233,16 @@ export async function refreshSource(id: string): Promise<IngestResult> {
     throw new Error("来源 URL 无效");
   }
   const result = await runFetchPipeline(normalizedInput);
-  const canonicalUrl = result.kind === "ok" && result.parsed.meta.canonical
-    ? (() => {
-        try { return normalizeUrl(result.parsed.meta.canonical as string); } catch { return normalizedInput; }
-      })()
-    : normalizedInput;
+  const canonicalUrl =
+    result.kind === "ok" && result.parsed.meta.canonical
+      ? (() => {
+          try {
+            return normalizeUrl(result.parsed.meta.canonical as string);
+          } catch {
+            return normalizedInput;
+          }
+        })()
+      : normalizedInput;
 
   if (result.kind === "blocked") {
     const data = buildBlockedSourceData(result, canonicalUrl, normalizedInput);
@@ -227,7 +263,16 @@ export async function refreshSource(id: string): Promise<IngestResult> {
   await prisma.$transaction([
     prisma.source.update({ where: { id: existing.id }, data }),
     prisma.sourceVersion.create({
-      data: { sourceId: existing.id, versionNumber: nextVersion, contentHash: data.contentHash, normalizedContent: data.normalizedContent, httpStatus: data.httpStatus, contentType: data.contentType, wordCount: data.wordCount, metadataJson: data.metadataJson },
+      data: {
+        sourceId: existing.id,
+        versionNumber: nextVersion,
+        contentHash: data.contentHash,
+        normalizedContent: data.normalizedContent,
+        httpStatus: data.httpStatus,
+        contentType: data.contentType,
+        wordCount: data.wordCount,
+        metadataJson: data.metadataJson,
+      },
     }),
   ]);
   const source = await prisma.source.findUnique({ where: { id: existing.id } });

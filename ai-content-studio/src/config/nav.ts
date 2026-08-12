@@ -8,6 +8,7 @@ import {
   Search as SearchIcon,
   Send as SendIcon,
   ChartColumn as ChartColumnIcon,
+  Link as LinkIcon,
   Settings as SettingsIcon,
   type LucideIcon,
 } from "lucide-react";
@@ -39,5 +40,11 @@ export const navItems: NavItem[] = [
   { title: "SEO", href: "/seo", icon: SearchIcon, description: "SEO 分析（Phase 2）" },
   { title: "发布", href: "/publish", icon: SendIcon, description: "WordPress 发布（Phase 2）" },
   { title: "统计", href: "/analytics", icon: ChartColumnIcon, description: "数据分析（Phase 2）" },
+  {
+    title: "来源库",
+    href: "/sources",
+    icon: LinkIcon,
+    description: "外部来源采集（AI Research & Rewrite）",
+  },
   { title: "设置", href: "/settings", icon: SettingsIcon, description: "系统设置" },
 ];
