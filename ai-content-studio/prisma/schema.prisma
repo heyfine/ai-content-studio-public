@@ -197,3 +197,53 @@ enum WorkflowRunStatus {
   SUCCEEDED
   FAILED
 }
+
+
+/// Source Crawler：外部来源（Phase 1 AI Research & Rewrite）。状态/类型用字符串字段便于后续扩展
+model Source {
+  id               String   @id @default(uuid())
+  /// 用户原始输入 URL（规范化前）
+  url              String
+  /// 规范化后的去重键
+  canonicalUrl     String   @unique
+  domain           String
+  title            String?
+  description      String?
+  author           String?
+  publisher        String?
+  publishedAt      DateTime?
+  language         String?
+  sourceType       String   @default("unknown")
+  licenseType      String   @default("unknown")
+  copyrightStatus  String   @default("unknown")
+  robotsStatus     String   @default("unknown")
+  fetchStatus      String   @default("pending")
+  httpStatus       Int?
+  contentType      String?
+  contentHash      String?
+  wordCount        Int?
+  normalizedContent String?
+  metadataJson     Json?
+  fetchError       String?
+  fetchedAt        DateTime?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  versions         SourceVersion[]
+}
+
+model SourceVersion {
+  id               String   @id @default(uuid())
+  sourceId         String
+  source           Source   @relation(fields: [sourceId], references: [id], onDelete: Cascade)
+  versionNumber    Int
+  contentHash      String?
+  normalizedContent String?
+  httpStatus       Int?
+  contentType      String?
+  wordCount        Int?
+  metadataJson     Json?
+  /// 抓取时间（与 fetchedAt 一致，便于版本查询）
+  fetchedAt        DateTime @default(now())
+  createdAt        DateTime @default(now())
+  @@unique([sourceId, versionNumber])
+}

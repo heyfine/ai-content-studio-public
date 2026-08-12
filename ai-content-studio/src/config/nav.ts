@@ -1,16 +1,17 @@
 import {
-  LayoutDashboard as LayoutDashboardIcon,
-  PenLine as PenLineIcon,
-  FileText as FileTextIcon,
+  ChartColumn as ChartColumnIcon,
   Cpu as CpuIcon,
+  FileText as FileTextIcon,
+  LayoutDashboard as LayoutDashboardIcon,
+  Link as LinkIcon,
+  type LucideIcon,
   MessageSquareText as MessageSquareTextIcon,
-  Workflow as WorkflowIcon,
+  PenLine as PenLineIcon,
   Search as SearchIcon,
   Send as SendIcon,
-  ChartColumn as ChartColumnIcon,
-  Webhook as WebhookIcon,
   Settings as SettingsIcon,
-  type LucideIcon,
+  Webhook as WebhookIcon,
+  Workflow as WorkflowIcon,
 } from "lucide-react";
 
 export interface NavItem {
@@ -46,5 +47,11 @@ export const navItems: NavItem[] = [
   { title: "SEO", href: "/seo", icon: SearchIcon, description: "SEO 分析（Phase 2）" },
   { title: "发布", href: "/publish", icon: SendIcon, description: "WordPress 发布（Phase 2）" },
   { title: "统计", href: "/analytics", icon: ChartColumnIcon, description: "数据分析（Phase 2）" },
+  {
+    title: "来源库",
+    href: "/sources",
+    icon: LinkIcon,
+    description: "外部来源采集（AI Research & Rewrite）",
+  },
   { title: "设置", href: "/settings", icon: SettingsIcon, description: "系统设置" },
 ];
