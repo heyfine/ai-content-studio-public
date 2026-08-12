@@ -40,6 +40,7 @@ pnpm.cmd exec biome check .
 | 工具函数 | 5 | ~60 | 纯逻辑 100% 可测 |
 | Store | 2 | ~20 | Zustand persist 测试 |
 | **总计** | **82** | **588** | **Phase 10 后** |
+| **总计（含 sources）** | **107** | **753** | **最新** |
 
 ## 覆盖率目标
 
@@ -61,3 +62,7 @@ pnpm.cmd exec biome check .
 
 - `render.test.ts`：findCalloutRanges(3) / editCalloutInMarkdown(5) / removeCalloutInMarkdown(3) / XSS 修复(1)
 - `article-editor-dialog.test.tsx`：管理面板显示(1) / 列表渲染(1) / 编辑回写(1) / 删除(1)
+
+## Relay Key 查看问题修复测试
+
+- `relay-key-cell.test.tsx`：API 返回非 ok 时显示错误提示(1) / API 失败不会显示明文(1)
