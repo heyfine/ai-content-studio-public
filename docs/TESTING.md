@@ -1,57 +1,63 @@
-# 测试指南
+# TESTING · AI Content Studio 测试指南
 
-## 如何运行测试
+## 环境要求
+
+- Node.js ≥ 24
+- pnpm ≥ 11
+- DATABASE_URL（.env.local）— 开发/测试环境必须配置，否则 API 测试会失败
+- Prisma Client 已生成：`pnpm.cmd run db:generate`
+
+## 常用命令
 
 ```bash
-cd ai-content-studio
-pnpm.cmd test             # 跑全部测试
-pnpm.cmd run test:watch   # 监听模式
-pnpm.cmd test src/lib/credentials.test.ts   # 只跑某个文件
-pnpm.cmd run test:coverage   # 覆盖率
+# 运行全部测试
+pnpm.cmd test
+
+# 运行指定目录的测试
+pnpm.cmd exec vitest run src/lib/content/
+
+# 运行单个测试文件
+pnpm.cmd exec vitest run src/lib/content/render.test.ts
+
+# 运行带覆盖率
+pnpm.cmd run test:coverage
+
+# 类型检查
+pnpm.cmd typecheck
+
+# 格式化 + lint
+pnpm.cmd run format
+pnpm.cmd exec biome check .
 ```
 
-## 覆盖率要求
+## 测试覆盖说明
 
-- 核心逻辑（lib / config / 组件）覆盖率阈值：行/分支/函数/语句 ≥ 80%
-- 当前（Phase 9 后）：82 文件 / 572 测试通过；typecheck 全绿
-- 不足时 CI 会失败；关键路径必测
+| 模块 | 文件数 | 测试数 | 备注 |
+| --- | --- | --- | --- |
+| API 路由 | 22 | ~180 | 全量 auth+zod+错误处理 |
+| Service 层 | 10 | ~90 | 含 mock prisma/fetch |
+| UI 组件 | 15 | ~150 | jsdom + Testing Library |
+| 工具函数 | 5 | ~60 | 纯逻辑 100% 可测 |
+| Store | 2 | ~20 | Zustand persist 测试 |
+| **总计** | **82** | **588** | **Phase 10 后** |
 
-## 测试类型
+## 覆盖率目标
 
-| 类型 | 说明 | 位置 |
-| --- | --- | --- |
-| 单元 | 纯逻辑（schema / credentials / crypto / auth.config / router / generate） | src/lib/**/*.test.ts |
-| 组件 | 布局/表单/表格行为 | src/components/**/*.test.tsx |
-| API 路由 | HTTP 处理层（auth/校验/成功/失败） | src/app/api/**/*.test.ts |
-| 集成 | 登录表单端到端（成功/失败两条路径） | src/app/(auth)/login/*.test.tsx |
+- Statements ≥ 80%
+- Branches ≥ 70%
+- Functions ≥ 80%
+- Lines ≥ 80%
 
-## 写测试的约定
+## 已知测试注意事项
 
-- 组件测试用 `@testing-library/react`，优先测行为（点击、输入、结果）而非实现细节
-- 数据层 mock：`vi.mock("@/lib/prisma", ...)`；认证回调用 `vi.hoisted` 创建 mock 再 `vi.mock`（Vitest 4 hoisting 限制）
-- 不连真实 Supabase；外部 AI API 用 mock（不设施网络请求）
-- 修 bug 必加可稳定复现的回归用例
-- 测试文件与被测代码同目录（`xxx.test.ts`）
-- 覆盖率排除：components/ui（shadcn 生成）、config、app layout/page、types、test setup、`lib/auth.ts` 与 `api/auth/**`（NextAuth 胶水代码，全程被 mock）
+1. **Vitest 4 ESM mock hoisting**：`vi.mock` 必须在模块顶层，使用 `vi.hoisted()` 避免 ReferenceError
+2. **base-ui Select jsdom**：部分 Select 组件在 jsdom 无法正确模拟 pointer/portal，需要 mock 为原生 `<select>`
+3. **Base UI Dialog/Select 在 jsdom 的行为**：某些 base-ui 组件（Select、Dialog）依赖 pointer/portal 定位，jsdom 环境下 fireEvent.click 可能不触发预期行为。解决方案是 mock 这些组件为原生 HTML 元素，或直接用 `vi.mock` 替换为简化版本
+4. **Vitest 4 effect 中 fetch 作为 promise**：useEffect 里的 `void refresh()` 如果包含 fetch，测试中需要用 `mockRejectedValue` 而非 `mockResolvedValue` 来模拟失败路径
+5. **Prisma Json 字段写入**：直接写 `InputJsonValue` 类型需要 `JSON.parse(JSON.stringify(arr))` 转换以绕过 TS 索引签名限制
+6. **zustand persist 存储格式**：persist 写入 localStorage 的格式为 `{ state: {...partialize}, version: 0 }`，测试 rehydrate 时需要手动构造此格式
 
-## 常用技巧
+## Phase 10 新增测试
 
-- **API 路由测试**：直接 import handler 函数（`GET`/`POST`/`PUT`/`DELETE`），用 `new Request(url, {method, headers, body})` 构造入参，断言 `res.status` 与 `await res.json()`；mock `@/lib/auth` 与对应 service。带 params 的 handler传 `ctx: { params: Promise.resolve({ id }) }`。
-- **状态机 API**：业务层抛 `非法状态转换`/`不存在` 文本错误，路由用正则匹配文本映射 HTTP 状态（404/409）；Prisma P2025（删除不存在记录）也捕获转 404。状态机转换验收用独立可测模块（`article-status.ts` 的 canTransition/assertTransition），不与 DB 耦合。
-- **base-ui Select 在 jsdom 中测试**：`vi.mock("@/components/ui/select")` 替换为原生 `<select>`，保持 `value`/`onValueChange` 签名，用 `fireEvent.change` 选值。
-- **base-ui Dialog 在 jsdom 中测试**：`vi.mock("@/components/ui/dialog")` 让 `Dialog`/`DialogContent` 直接渲染 children、`DialogTrigger`/`DialogClose` 直接渲染 `render` prop，跳过 portal/可见性，表单内容恒可见可交互。
-- **mock next/navigation**：setup.tsx 已全局 mock；测试内可 `vi.mock` 覆盖 usePathname 控制路由
-- **mock next-auth/react**：用 `vi.hoisted` 注入 signIn/signOut
-- **async server component 测试**：`render(await Component())`（需 mock 其 server 依赖如 auth）
-- **window.confirm mock**：删书确认类用 `vi.spyOn(window, "confirm").mockReturnValue(true/false)`
-- **Zustand store 测试**：store 是模块级单例，跨用例共享；beforeEach 用 `useStudioStore.setState({ ...initial })` 重置，再 `useStudioStore.getState().xxx()` 断言，或先 setState 到目标状态再 render 组件测交互（组件读 store，无需 mock store）。
-- **zustand persist 测试**：写入 localStorage 的格式是 `{ state: {...partialize 结果}, version: 0 }`；断言/预置需按此格式。模拟「刷新页面」用 `vi.resetModules()` + `await import("./store")` 重建 store 验证 rehydrate。
-- **base-ui Dialog 真实组件可直接测**：与 base-ui Select 不同（Select 需 mock），Dialog 由受控 `open` 控制 + 内部原生 radio/button，jsdom 直接 render 即可交互（弹窗出现用 `waitFor` 等），无需 `vi.mock("@/components/ui/dialog")`。
-- **SSE 流式客户端测试**：mock fetch 返回 ReadableStream 的 new Response，Content-Type 为 text/event-stream，每事件形如 `data: {...JSON...}\n\n`；消费方用 `for await` 断言 delta/done/error 序列。
-- **data-testid vs data-action**：组件若需在测试用 getByTestId 定位，就给元素加 `data-testid`；纯数据标记可并存 `data-action` 由 `el.dataset.action` 在测试中读取——两者不冲突，按需并存。
-- **effect 触发的 fetch 测试（避免悬空 promise）**：测「加载中」时不要用 `mockReturnValue(new Promise(()=>{}))`（永不 resolve，Vitest 4 判为悬空失败），改用可控 deferred：`let r; fetch.mockReturnValue(new Promise(res => { r = res; })); render(...); 断言; r({ ok:true, json:async()=>[] })`。测「加载失败」时用 `mockResolvedValue({ ok:false })` 让组件内部 throw 并被 try/catch 捕获，避免顶层 rejected promise 被判未捕获拒绝。
-
-## 更新规则
-
-- 测试命令 / 覆盖率要求 / 约定变化时同步更新
-- 新增好用模式记入「常用技巧」
+- `render.test.ts`：findCalloutRanges(3) / editCalloutInMarkdown(5) / removeCalloutInMarkdown(3) / XSS 修复(1)
+- `article-editor-dialog.test.tsx`：管理面板显示(1) / 列表渲染(1) / 编辑回写(1) / 删除(1)
