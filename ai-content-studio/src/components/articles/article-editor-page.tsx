@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
+import { ARTICLE_STATUS_LABELS, ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
 import { calloutTemplate, scanCalloutSegments, segmentsToMarkdown } from "@/lib/content/render";
 import type { CalloutType } from "@/lib/content/callout-types";
@@ -143,7 +143,7 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
           >
             {ARTICLE_STATUS_LIST.map((s) => (
               <option key={s} value={s}>
-                {s}
+                {ARTICLE_STATUS_LABELS[s]}
               </option>
             ))}
           </select>
