@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import {
   Pencil as PencilIcon,
   Plus as PlusIcon,
@@ -9,7 +10,7 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ArticleStatusBadge } from "./article-status-badge";
-import { ArticleEditorDialog, type ArticleRow } from "./article-editor-dialog";
+import type { ArticleRow } from "@/lib/article-types";
 import { isStaleArticle } from "@/lib/article-staleness";
 
 interface RefreshOutcome {
@@ -102,14 +103,11 @@ export function ArticlesClient() {
     <div className="space-y-4" data-testid="articles-client">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">文章管理</h2>
-        <ArticleEditorDialog
-          trigger={
-            <Button size="sm" render={<span />}>
-              <PlusIcon className="size-4" /> 新建文章
-            </Button>
-          }
-          onSaved={refresh}
-        />
+        <Link href="/articles/new" data-testid="new-article-link">
+          <Button size="sm">
+            <PlusIcon className="size-4" /> 新建文章
+          </Button>
+        </Link>
       </div>
       {refreshOutcome && (
         <p className="text-sm text-emerald-600" data-testid="refresh-outcome">
@@ -173,15 +171,11 @@ export function ArticlesClient() {
                             className={refreshingId === r.id ? "size-4 animate-spin" : "size-4"}
                           />
                         </Button>
-                        <ArticleEditorDialog
-                          trigger={
-                            <Button variant="ghost" size="icon" aria-label="编辑" render={<span />}>
-                              <PencilIcon className="size-4" />
-                            </Button>
-                          }
-                          initialValues={r}
-                          onSaved={refresh}
-                        />
+                        <Link href={`/articles/${r.id}/edit`} data-testid={`edit-${r.id}`}>
+                          <Button variant="ghost" size="icon" aria-label="编辑">
+                            <PencilIcon className="size-4" />
+                          </Button>
+                        </Link>
                         <Button
                           variant="ghost"
                           size="icon"
