@@ -1,6 +1,14 @@
 "use client";
 
-import { CSSProperties, useMemo } from "react";
+import {
+  type CSSProperties,
+  type TextareaHTMLAttributes,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+} from "react";
 import {
   DndContext,
   type DragEndEvent,
@@ -34,8 +42,34 @@ import {
   removeCalloutInMarkdown,
   scanCalloutSegments,
   segmentsToMarkdown,
-  type Segment,
 } from "@/lib/content/render";
+
+/**
+ * 自动增高 textarea：内容变化或初次渲染时把 height 设为 scrollHeight，
+ * 并在窗口尺寸变化时重算。min-h 通过 className 的 min-h-[...] 控制。
+ */
+function AutoResizeTextarea(props: TextareaHTMLAttributes<HTMLTextAreaElement>) {
+  const ref = useRef<HTMLTextAreaElement>(null);
+
+  const resize = useCallback(() => {
+    const ta = ref.current;
+    if (!ta) return;
+    ta.style.height = "auto";
+    ta.style.height = `${ta.scrollHeight}px`;
+  }, []);
+
+  // biome-ignore lint/correctness/useExhaustiveDependencies: resize 是稳定引用，props.value 变化时需重算高度
+  useLayoutEffect(() => {
+    resize();
+  }, [props.value, resize]);
+  useEffect(() => {
+    const onResize = () => resize();
+    window.addEventListener("resize", onResize, { passive: true });
+    return () => window.removeEventListener("resize", onResize);
+  }, [resize]);
+
+  return <textarea {...props} ref={ref} onInput={resize} />;
+}
 
 /** 可拖动的单个段（text 或 callout） */
 function SortableItem({ id, children }: { id: string; children: React.ReactNode }) {
@@ -182,9 +216,9 @@ export function EditableContent({
                     />
                   )}
                   <SortableItem id={id}>
-                    <textarea
+                    <AutoResizeTextarea
                       data-testid={`text-segment-${idx}`}
-                      className="min-h-[6vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+                      className="min-h-[6vh] w-full overflow-hidden rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
                       value={seg.value}
                       onChange={(e) => setTextRange(idx, e.target.value)}
                       placeholder="在此输入 Markdown 正文…"
@@ -292,9 +326,9 @@ export function EditableContent({
                         placeholder={cfg.label}
                       />
                     </div>
-                    <textarea
+                    <AutoResizeTextarea
                       data-testid={`callout-card-body-${ci}`}
-                      className="callout-content mt-1 w-full resize-y border-none bg-transparent text-sm leading-6 outline-none"
+                      className="callout-content mt-1 w-full overflow-hidden border-none bg-transparent text-sm leading-6 outline-none"
                       value={body}
                       onChange={(e) =>
                         onContentChange(
