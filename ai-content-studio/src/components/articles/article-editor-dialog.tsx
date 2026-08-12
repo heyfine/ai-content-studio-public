@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { Highlighter as HighlighterIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -15,6 +16,9 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
+import { CALLOUT_TYPES, type CalloutType } from "@/lib/content/callout-types";
+import { calloutTemplate } from "@/lib/content/render";
+import { MarkdownPreview } from "@/components/studio/markdown-preview";
 
 export interface ArticleRow {
   id: string;
@@ -37,6 +41,9 @@ export interface ArticleEditorDialogProps {
 export function ArticleEditorDialog({ trigger, initialValues, onSaved }: ArticleEditorDialogProps) {
   const [open, setOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
+  const [mode, setMode] = useState<"edit" | "preview">("edit");
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const isEdit = !!initialValues?.id;
   const [form, setForm] = useState({
     title: initialValues?.title ?? "",
@@ -46,6 +53,24 @@ export function ArticleEditorDialog({ trigger, initialValues, onSaved }: Article
 
   function setField<K extends keyof typeof form>(key: K, value: (typeof form)[K]) {
     setForm((prev) => ({ ...prev, [key]: value }));
+  }
+
+  /** 在光标位置插入高亮块模板，保持编辑器焦点与后续编辑位置 */
+  function insertCallout(type: CalloutType) {
+    const ta = textareaRef.current;
+    const start = ta?.selectionStart ?? form.content.length;
+    const end = ta?.selectionEnd ?? start;
+    const template = calloutTemplate(type);
+    const next = form.content.slice(0, start) + template + form.content.slice(end);
+    setField("content", next);
+    setPickerOpen(false);
+    setMode("edit");
+    requestAnimationFrame(() => {
+      ta?.focus();
+      if (ta) {
+        ta.selectionStart = ta.selectionEnd = start + template.length;
+      }
+    });
   }
 
   async function onSubmit() {
@@ -71,14 +96,14 @@ export function ArticleEditorDialog({ trigger, initialValues, onSaved }: Article
   return (
     <Dialog open={open} onOpenChange={setOpen}>
       <DialogTrigger render={trigger as never} />
-      <DialogContent>
-        <DialogHeader>
+      <DialogContent className="flex max-h-[85vh] flex-col sm:max-w-3xl">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{isEdit ? "编辑文章" : "新建文章"}</DialogTitle>
           <DialogDescription>
             填写标题与正文，保存为草稿后可在 Studio 中用 AI 继续完善。
           </DialogDescription>
         </DialogHeader>
-        <div className="space-y-4">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto pr-1">
           {submitError && (
             <p role="alert" className="text-sm text-destructive">
               {submitError}
@@ -108,16 +133,47 @@ export function ArticleEditorDialog({ trigger, initialValues, onSaved }: Article
             </select>
           </div>
           <div className="space-y-2">
-            <Label htmlFor="article-content">正文（Markdown）</Label>
-            <textarea
-              id="article-content"
-              className="min-h-[200px] w-full rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
-              value={form.content}
-              onChange={(e) => setField("content", e.target.value)}
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="article-content">正文（Markdown）</Label>
+              <div className="flex items-center gap-1">
+                {mode === "edit" && (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="xs"
+                    data-testid="open-callout-picker"
+                    onClick={() => setPickerOpen(true)}
+                  >
+                    <HighlighterIcon className="size-3.5" /> 高亮块
+                  </Button>
+                )}
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="xs"
+                  data-testid="toggle-preview"
+                  onClick={() => setMode((m) => (m === "edit" ? "preview" : "edit"))}
+                >
+                  {mode === "edit" ? "预览" : "编辑"}
+                </Button>
+              </div>
+            </div>
+            {mode === "edit" ? (
+              <textarea
+                id="article-content"
+                ref={textareaRef}
+                className="min-h-[40vh] w-full resize-y rounded-md border border-input bg-transparent px-3 py-2 font-mono text-sm"
+                value={form.content}
+                onChange={(e) => setField("content", e.target.value)}
+              />
+            ) : (
+              <div className="min-h-[40vh] w-full overflow-y-auto rounded-md border p-3">
+                <MarkdownPreview content={form.content} />
+              </div>
+            )}
           </div>
         </div>
-        <DialogFooter>
+        <DialogFooter className="shrink-0">
           <DialogClose
             render={
               <Button type="button" variant="ghost">
@@ -130,6 +186,40 @@ export function ArticleEditorDialog({ trigger, initialValues, onSaved }: Article
           </Button>
         </DialogFooter>
       </DialogContent>
+
+      {/* 高亮块类型选择 */}
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>插入高亮块</DialogTitle>
+            <DialogDescription>选择语义类型，在光标位置插入彩色高亮块。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1" data-testid="callout-type-list">
+            {CALLOUT_TYPES.map((t) => (
+              <button
+                key={t.type}
+                type="button"
+                data-testid={`callout-type-${t.type}`}
+                onClick={() => insertCallout(t.type)}
+                className="flex w-full items-start gap-3 rounded-md border p-3 text-left text-sm hover:bg-muted/40"
+              >
+                <span aria-hidden="true" className="text-lg leading-none">
+                  {t.icon}
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-medium">{t.label}</span>
+                  <span className="block text-xs text-muted-foreground">{t.description}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="ghost" onClick={() => setPickerOpen(false)}>
+              取消
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </Dialog>
   );
 }

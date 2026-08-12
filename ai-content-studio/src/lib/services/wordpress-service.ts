@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
+import { renderArticleContent } from "@/lib/content/render";
 import { assertTransition, type ArticleStatus } from "@/lib/article-status";
 
 export interface WpConfigInput {
@@ -117,7 +118,12 @@ export async function publishRawContent(
 ): Promise<PublishResult> {
   const config = await getActiveConfig(configId);
   const status: "publish" | "draft" = wpStatus ?? "publish";
-  const post = await publishPost(config, { title, content, status });
+  // Markdown + 高亮块 → 安全 HTML（含样式），不把 :::callout 原语法发上博客
+  const post = await publishPost(config, {
+    title,
+    content: renderArticleContent(content, { includeCalloutCss: true }),
+    status,
+  });
   return { wpPostId: String(post.id), link: post.link, status: post.status, articleId: null };
 }
 
@@ -138,7 +144,11 @@ export async function publishArticle(
     wpStatus ?? (article.status === "PUBLISHED" ? "publish" : "draft");
   const post = await publishPost(
     config,
-    { title: article.title, content: article.content, status },
+    {
+      title: article.title,
+      content: renderArticleContent(article.content, { includeCalloutCss: true }),
+      status,
+    },
     article.wpPostId ?? undefined,
   );
 

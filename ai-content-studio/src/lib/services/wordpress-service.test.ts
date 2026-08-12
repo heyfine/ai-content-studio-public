@@ -284,11 +284,12 @@ describe("wordpress-service", () => {
       });
       const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(called[0]).toBe("https://blog.example.com/wp-json/wp/v2/posts");
-      expect(JSON.parse(called[1].body)).toEqual({
-        title: "标题",
-        content: "正文",
-        status: "publish",
-      });
+      const body = JSON.parse(called[1].body);
+      expect(body.title).toBe("标题");
+      expect(body.status).toBe("publish");
+      // Markdown + 高亮块 → 安全 HTML（含 <style>），不把 :::callout 原语法发上博客
+      expect(body.content).toContain("<p>正文</p>");
+      expect(body.content).toContain("<style>");
     });
     it("显式 wpStatus=draft 时按草稿发布", async () => {
       mocks.findFirst.mockResolvedValue(config);
