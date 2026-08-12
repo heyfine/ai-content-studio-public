@@ -1,14 +1,21 @@
 "use client";
 
+import { Sparkles, Check, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { ARTICLE_STATUS_LABELS, ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
+import {
+  ARTICLE_STATUS_LABELS,
+  ARTICLE_STATUS_LIST,
+  type ArticleStatus,
+} from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
 import { calloutTemplate, scanCalloutSegments, segmentsToMarkdown } from "@/lib/content/render";
 import type { CalloutType } from "@/lib/content/callout-types";
+import { CALLOUT_TYPES } from "@/lib/content/callout-types";
+import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-suggest-ui";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
 import { CalloutPickerDialog, EditableContent } from "./editable-content";
 
@@ -24,6 +31,9 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
   const [mode, setMode] = useState<"edit" | "preview">("edit");
   const [pickerOpen, setPickerOpen] = useState(false);
   const [insertPosition, setInsertPosition] = useState<number | null>(null);
+  const [suggesting, setSuggesting] = useState(false);
+  const [suggestions, setSuggestions] = useState<CalloutSuggestion[]>([]);
+  const [suggestError, setSuggestError] = useState<string | null>(null);
   const [form, setForm] = useState({
     title: "",
     content: "",
@@ -78,6 +88,57 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
       setField("content", next);
     }
     setInsertPosition(null);
+  }
+
+  async function onSuggestCallouts() {
+    setSuggestError(null);
+    if (form.content.trim().length === 0) {
+      setSuggestError("正文为空，无法生成建议");
+      return;
+    }
+    setSuggesting(true);
+    try {
+      const res = await fetch("/api/articles/suggest-callouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: form.content, title: form.title }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        setSuggestError(err.error ?? "AI 建议失败");
+        return;
+      }
+      const data = (await res.json()) as { suggestions: CalloutSuggestion[] };
+      setSuggestions(data.suggestions ?? []);
+      if ((data.suggestions ?? []).length === 0) {
+        setSuggestError("AI 未发现需要高亮的段落");
+      }
+    } catch (e) {
+      setSuggestError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSuggesting(false);
+    }
+  }
+
+  function onAcceptSuggestion(idx: number) {
+    const s = suggestions[idx];
+    if (!s) return;
+    const next = acceptSuggestion(form.content, s);
+    setField("content", next);
+    setSuggestions((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function onRejectSuggestion(idx: number) {
+    setSuggestions((prev) => prev.filter((_, i) => i !== idx));
+  }
+
+  function onAcceptAll() {
+    let content = form.content;
+    for (const s of [...suggestions]) {
+      content = acceptSuggestion(content, s);
+    }
+    setField("content", content);
+    setSuggestions([]);
   }
 
   async function onSubmit() {
@@ -156,6 +217,17 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
                 type="button"
                 variant="outline"
                 size="xs"
+                data-testid="ai-suggest-callouts"
+                onClick={onSuggestCallouts}
+                disabled={suggesting || mode !== "edit"}
+              >
+                <Sparkles className="size-3.5" />
+                {suggesting ? "分析中…" : "AI 建议"}
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
                 data-testid="open-callout-picker"
                 onClick={() => setPickerOpen(true)}
               >
@@ -172,6 +244,86 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
               </Button>
             </div>
           </div>
+          {mode === "edit" && suggestions.length > 0 && (
+            <div
+              className="space-y-2 rounded-md border border-dashed border-muted-foreground p-3"
+              data-testid="suggestion-list"
+            >
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-medium">AI 建议高亮 {suggestions.length} 处</p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    data-testid="accept-all-suggestions"
+                    onClick={onAcceptAll}
+                  >
+                    全部接受
+                  </Button>
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    data-testid="reject-all-suggestions"
+                    onClick={() => setSuggestions([])}
+                  >
+                    全部忽略
+                  </Button>
+                </div>
+              </div>
+              {suggestions.map((s, idx) => {
+                const cfg = CALLOUT_TYPES.find((t) => t.type === s.type);
+                const key = `${s.originalText.slice(0, 20)}-${idx}`;
+                return (
+                  <div
+                    key={key}
+                    className="flex items-start gap-2 rounded-md border p-2 text-sm"
+                    data-testid={`suggestion-${idx}`}
+                  >
+                    <span aria-hidden="true" className="text-lg leading-none">
+                      {cfg?.icon ?? "📌"}
+                    </span>
+                    <div className="min-w-0 flex-1">
+                      <p className="font-medium">
+                        {cfg?.label ?? "补充"} · {s.title}
+                      </p>
+                      <p className="text-xs text-muted-foreground line-clamp-2">
+                        「{s.originalText.slice(0, 50)}
+                        {s.originalText.length > 50 ? "…" : ""}」
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">{s.reason}</p>
+                    </div>
+                    <div className="flex shrink-0 items-center gap-1">
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        data-testid={`accept-suggestion-${idx}`}
+                        onClick={() => onAcceptSuggestion(idx)}
+                      >
+                        <Check className="size-3.5 text-green-600" />
+                      </Button>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="xs"
+                        data-testid={`reject-suggestion-${idx}`}
+                        onClick={() => onRejectSuggestion(idx)}
+                      >
+                        <X className="size-3.5 text-red-500" />
+                      </Button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+          {mode === "edit" && suggestError && !suggesting && (
+            <p className="text-sm text-muted-foreground" data-testid="suggest-error">
+              {suggestError}
+            </p>
+          )}
           {mode === "edit" ? (
             <EditableContent
               content={form.content}
