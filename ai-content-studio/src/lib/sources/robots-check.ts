@@ -62,7 +62,8 @@ export async function checkRobots(input: RobotsCheckInput): Promise<RobotsCheckR
   if (entry) {
     const ttl = entry.kind === "err" ? ERR_TTL_MS : TTL_MS;
     if (now - entry.ts < ttl) {
-      if (entry.kind === "parser") return statusFromAllowed(entry.parser.isAllowed(u.href, BOT_USER_AGENT));
+      if (entry.kind === "parser")
+        return statusFromAllowed(entry.parser.isAllowed(u.href, BOT_USER_AGENT));
       if (entry.kind === "noRobots") return { status: "allowed" };
       return { status: "unavailable", reason: "robots 不可达（缓存）" };
     }

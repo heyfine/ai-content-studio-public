@@ -41,20 +41,37 @@ describe("checkSsrf", () => {
   });
 
   it("解析到私网 IP 阻断", async () => {
-    expect((await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["127.0.0.1"]) })).safe).toBe(false);
-    expect((await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["169.254.169.254"]) })).safe).toBe(false);
-    expect((await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["::1"]) })).safe).toBe(false);
+    expect(
+      (await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["127.0.0.1"]) }))
+        .safe,
+    ).toBe(false);
+    expect(
+      (
+        await checkSsrf({
+          url: "https://ex.com",
+          resolve: () => Promise.resolve(["169.254.169.254"]),
+        })
+      ).safe,
+    ).toBe(false);
+    expect(
+      (await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["::1"]) })).safe,
+    ).toBe(false);
   });
 
   it("任一解析地址私网即阻断（混入）", async () => {
-    const r = await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve(["142.250.0.1", "10.0.0.1"]) });
+    const r = await checkSsrf({
+      url: "https://ex.com",
+      resolve: () => Promise.resolve(["142.250.0.1", "10.0.0.1"]),
+    });
     expect(r.safe).toBe(false);
     expect(r.reason).toMatch(/10\.0\.0\.1/);
   });
 
   it("主机黑名单阻断（localhost / 云元数据主机）", async () => {
     expect((await checkSsrf({ url: "http://localhost/x", resolve: pubIp })).safe).toBe(false);
-    expect((await checkSsrf({ url: "http://metadata.google.internal/x", resolve: pubIp })).safe).toBe(false);
+    expect(
+      (await checkSsrf({ url: "http://metadata.google.internal/x", resolve: pubIp })).safe,
+    ).toBe(false);
     expect((await checkSsrf({ url: "http://169.254.169.254/x", resolve: pubIp })).safe).toBe(false);
   });
 
@@ -68,7 +85,16 @@ describe("checkSsrf", () => {
   });
 
   it("DNS 失败/无记录阻断", async () => {
-    expect((await checkSsrf({ url: "https://ex.com", resolve: () => Promise.reject(new Error("enoent")) })).safe).toBe(false);
-    expect((await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve([]) })).safe).toBe(false);
+    expect(
+      (
+        await checkSsrf({
+          url: "https://ex.com",
+          resolve: () => Promise.reject(new Error("enoent")),
+        })
+      ).safe,
+    ).toBe(false);
+    expect(
+      (await checkSsrf({ url: "https://ex.com", resolve: () => Promise.resolve([]) })).safe,
+    ).toBe(false);
   });
 });

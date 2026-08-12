@@ -19,7 +19,9 @@ describe("runFetchPipeline", () => {
   it("成功路径：返回 normalizedContent + hash + httpStatus", async () => {
     const html = `<html lang="zh"><head><meta property="og:title" content="T"></head>
       <body><article><p>${"示例正文段落 ".repeat(40)}</p></article></body></html>`;
-    const fetchMock = vi.fn(async () => mockResponse(200, html, { "content-type": "text/html; charset=utf-8" }));
+    const fetchMock = vi.fn(async () =>
+      mockResponse(200, html, { "content-type": "text/html; charset=utf-8" }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     try {
       const r = await runFetchPipeline("https://example.com/a", {
@@ -62,7 +64,10 @@ describe("runFetchPipeline", () => {
     const fetchMock = vi.fn(async () => mockResponse(403, "forbidden"));
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const r = await runFetchPipeline("https://example.com/a", { resolve: pubResolve, robotsFetcher: mkRobotsFetcher(404, "") });
+      const r = await runFetchPipeline("https://example.com/a", {
+        resolve: pubResolve,
+        robotsFetcher: mkRobotsFetcher(404, ""),
+      });
       expect(r.kind).toBe("blocked");
       if (r.kind === "blocked") expect(r.fetchStatus).toBe("requires_access");
     } finally {
@@ -74,7 +79,10 @@ describe("runFetchPipeline", () => {
     const fetchMock = vi.fn(async () => mockResponse(500, "err"));
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const r = await runFetchPipeline("https://example.com/a", { resolve: pubResolve, robotsFetcher: mkRobotsFetcher(404, "") });
+      const r = await runFetchPipeline("https://example.com/a", {
+        resolve: pubResolve,
+        robotsFetcher: mkRobotsFetcher(404, ""),
+      });
       expect(r.kind).toBe("blocked");
       if (r.kind === "blocked") expect(r.fetchStatus).toBe("failed");
     } finally {
@@ -83,10 +91,15 @@ describe("runFetchPipeline", () => {
   });
 
   it("无正文 → failed", async () => {
-    const fetchMock = vi.fn(async () => mockResponse(200, "<html><head></head><body></body></html>", { "content-type": "text/html" }));
+    const fetchMock = vi.fn(async () =>
+      mockResponse(200, "<html><head></head><body></body></html>", { "content-type": "text/html" }),
+    );
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const r = await runFetchPipeline("https://example.com/a", { resolve: pubResolve, robotsFetcher: mkRobotsFetcher(404, "") });
+      const r = await runFetchPipeline("https://example.com/a", {
+        resolve: pubResolve,
+        robotsFetcher: mkRobotsFetcher(404, ""),
+      });
       expect(r.kind).toBe("blocked");
       if (r.kind === "blocked") {
         expect(r.reason).toMatch(/无可提取正文|正文解析失败/);
@@ -101,7 +114,10 @@ describe("runFetchPipeline", () => {
     const fetchMock = vi.fn();
     vi.stubGlobal("fetch", fetchMock);
     try {
-      const r = await runFetchPipeline("https://example.com/a", { resolve: () => Promise.resolve(["10.0.0.1"]), robotsFetcher: mkRobotsFetcher(404, "") });
+      const r = await runFetchPipeline("https://example.com/a", {
+        resolve: () => Promise.resolve(["10.0.0.1"]),
+        robotsFetcher: mkRobotsFetcher(404, ""),
+      });
       expect(r.kind).toBe("blocked");
       if (r.kind === "blocked") expect(r.fetchStatus).toBe("blocked");
     } finally {

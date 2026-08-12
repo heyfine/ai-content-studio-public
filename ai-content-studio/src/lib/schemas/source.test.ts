@@ -31,7 +31,9 @@ describe("listSourcesSchema", () => {
     expect(listSourcesSchema.safeParse({}).success).toBe(true);
   });
   it("domain + status 通过", () => {
-    expect(listSourcesSchema.safeParse({ domain: "example.com", status: "fetched" }).success).toBe(true);
+    expect(listSourcesSchema.safeParse({ domain: "example.com", status: "fetched" }).success).toBe(
+      true,
+    );
   });
   it("非法 status 失败", () => {
     expect(listSourcesSchema.safeParse({ status: "weird" }).success).toBe(false);

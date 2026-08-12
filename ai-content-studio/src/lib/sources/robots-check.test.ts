@@ -41,7 +41,10 @@ describe("checkRobots", () => {
 
   it("User-agent 指定：对本 bot 单独 Disallow 生效", async () => {
     const text = `User-agent: ${BOT_USER_AGENT}\nDisallow: /agent-only\nUser-agent: *\nAllow: /`;
-    const r1 = await checkRobots({ url: "https://ex.com/agent-only", fetcher: mkFetcher(200, text) });
+    const r1 = await checkRobots({
+      url: "https://ex.com/agent-only",
+      fetcher: mkFetcher(200, text),
+    });
     expect(r1.status).toBe("disallowed");
     const r2 = await checkRobots({ url: "https://ex.com/other", fetcher: mkFetcher(200, text) });
     expect(r2.status).toBe("allowed");
@@ -52,7 +55,11 @@ describe("checkRobots", () => {
     await checkRobots({ url: "https://ex.com/x", fetcher, now: 1_000_000 });
     await checkRobots({ url: "https://ex.com/y", fetcher, now: 1_000_000 + 60_000 });
     expect(fetcher).toHaveBeenCalledTimes(1);
-    const r = await checkRobots({ url: "https://ex.com/z", fetcher, now: 1_000_000 + 2 * 60 * 60 * 1000 });
+    const r = await checkRobots({
+      url: "https://ex.com/z",
+      fetcher,
+      now: 1_000_000 + 2 * 60 * 60 * 1000,
+    });
     expect(fetcher).toHaveBeenCalledTimes(2);
     expect(r.status).toBe("disallowed");
   });

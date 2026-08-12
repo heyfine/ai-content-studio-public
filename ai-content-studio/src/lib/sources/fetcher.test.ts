@@ -39,8 +39,13 @@ describe("fetchDocument", () => {
   });
 
   it("重定向超过上限 → blocked", async () => {
-    fetchMock.mockImplementation(async () => mockResponse(302, "", { location: "https://example.com/loop" }));
-    const r = await fetchDocument("https://example.com/a", { resolve: pubResolve, maxRedirects: 2 });
+    fetchMock.mockImplementation(async () =>
+      mockResponse(302, "", { location: "https://example.com/loop" }),
+    );
+    const r = await fetchDocument("https://example.com/a", {
+      resolve: pubResolve,
+      maxRedirects: 2,
+    });
     expect(r.blocked).toBe(true);
     expect(r.reason).toMatch(/重定向超过/);
   });
@@ -53,7 +58,9 @@ describe("fetchDocument", () => {
   });
 
   it("SSRF 解析到私网 IP → blocked", async () => {
-    const r = await fetchDocument("https://example.com/a", { resolve: () => Promise.resolve(["10.0.0.1"]) });
+    const r = await fetchDocument("https://example.com/a", {
+      resolve: () => Promise.resolve(["10.0.0.1"]),
+    });
     expect(r.blocked).toBe(true);
     expect(r.reason).toMatch(/私有/);
   });

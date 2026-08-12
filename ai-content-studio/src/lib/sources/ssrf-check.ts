@@ -32,22 +32,22 @@ export function isPrivateIp(ip: string): boolean {
   if (/^\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3}$/.test(ip)) {
     const parts = ip.split(".").map(Number);
     const [a, b] = parts;
-    if (a === 127) return true;          // 127/8 loopback
-    if (a === 10) return true;           // 10/8
-    if (a === 0) return true;            // 0/8
+    if (a === 127) return true; // 127/8 loopback
+    if (a === 10) return true; // 10/8
+    if (a === 0) return true; // 0/8
     if (a === 169 && b === 254) return true; // 169.254/16 link-local + 云元数据
     if (a === 172 && b >= 16 && b <= 31) return true; // 172.16-31
     if (a === 192 && b === 168) return true; // 192.168/16
-    if (a === 192 && b === 0) return true;   // 192.0.0/24+
+    if (a === 192 && b === 0) return true; // 192.0.0/24+
     if (a === 198 && (b === 51 || b === 18)) return true; // benchmark/doc
-    if (a === 203 && b === 0) return true;   // 203.0.113 test
+    if (a === 203 && b === 0) return true; // 203.0.113 test
     if (a === 100 && b >= 64 && b <= 127) return true; // carrier-grade NAT
     return false;
   }
   const low = ip.toLowerCase();
   if (low === "::1" || low === "::") return true;
   if (low.startsWith("fc") || low.startsWith("fd")) return true; // fc00::/7 ULA
-  if (/^fe[89ab]/.test(low)) return true;                        // fe80::/10 link-local
+  if (/^fe[89ab]/.test(low)) return true; // fe80::/10 link-local
   return false;
 }
 

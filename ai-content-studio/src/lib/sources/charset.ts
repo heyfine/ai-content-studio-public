@@ -23,7 +23,10 @@ function charsetFromMeta(buffer?: ArrayBuffer): string | undefined {
   const head = new TextDecoder("latin1").decode(new Uint8Array(buffer, 0, len));
   const m1 = /<meta\s+charset=["']?\s*([a-zA-Z0-9_-]+)/i.exec(head);
   if (m1) return normalizeCharset(m1[1]);
-  const m2 = /<meta[^>]*http-equiv=["']?\s*content-type["']?[^>]*content=["'][^"']*charset=([a-zA-Z0-9_-]+)/i.exec(head);
+  const m2 =
+    /<meta[^>]*http-equiv=["']?\s*content-type["']?[^>]*content=["'][^"']*charset=([a-zA-Z0-9_-]+)/i.exec(
+      head,
+    );
   if (m2) return normalizeCharset(m2[1]);
   return undefined;
 }

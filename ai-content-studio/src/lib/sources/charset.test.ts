@@ -46,7 +46,9 @@ describe("decodeBuffer", () => {
 
   it("不支持的 charset 回退 UTF-8 不抛", () => {
     const buf = new TextEncoder().encode("ok").buffer;
-    expect(() => decodeBuffer(buf, "text/html; charset=this-encoding-does-not-exist")).not.toThrow();
+    expect(() =>
+      decodeBuffer(buf, "text/html; charset=this-encoding-does-not-exist"),
+    ).not.toThrow();
     expect(decodeBuffer(buf, "text/html; charset=this-encoding-does-not-exist")).toContain("ok");
   });
 });

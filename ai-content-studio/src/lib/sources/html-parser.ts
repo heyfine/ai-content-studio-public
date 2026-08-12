@@ -43,6 +43,16 @@ function stripTags(html: string): string {
     .trim();
 }
 
+/** Readability.parse 返回结构（T=string） */
+type ReadabilityResult = {
+  title: string | null | undefined;
+  content: string | null | undefined;
+  textContent: string | null | undefined;
+  length: number | null | undefined;
+  excerpt: string | null | undefined;
+  byline: string | null | undefined;
+};
+
 export function parseHtml(html: string, baseUrl?: string): ParsedArticle | null {
   if (!html) return null;
   const dom = new JSDOM(html, { url: baseUrl });
@@ -59,9 +69,9 @@ export function parseHtml(html: string, baseUrl?: string): ParsedArticle | null 
   };
   const fallbackTitle = meta.title ?? doc.title ?? "";
 
-  let article: Awaited<ReturnType<InstanceType<typeof Readability>["parse"]>> | null = null;
+  let article: ReadabilityResult | null = null;
   try {
-    article = new Readability(doc.cloneNode(true) as Document).parse();
+    article = new Readability(doc.cloneNode(true) as Document).parse() as ReadabilityResult | null;
   } catch {
     article = null;
   }

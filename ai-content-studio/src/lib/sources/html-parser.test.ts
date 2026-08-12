@@ -41,7 +41,9 @@ describe("parseHtml", () => {
   });
 
   it("标题优先 og:title，无 og 用 doc.title", () => {
-    const r = parseHtml(`<html><head><title>常规标题</title></head><body><article><p>${"正文 ".repeat(200)}</p></article></body></html>`);
+    const r = parseHtml(
+      `<html><head><title>常规标题</title></head><body><article><p>${"正文 ".repeat(200)}</p></article></body></html>`,
+    );
     expect(r?.title).toBe("常规标题");
   });
 
@@ -55,7 +57,9 @@ describe("parseHtml", () => {
   });
 
   it("author 回退到 meta name=author", () => {
-    const r = parseHtml(`<html><head><meta name="author" content="李四"></head><body><article><p>${"a ".repeat(200)}</p></article></body></html>`);
+    const r = parseHtml(
+      `<html><head><meta name="author" content="李四"></head><body><article><p>${"a ".repeat(200)}</p></article></body></html>`,
+    );
     expect(r?.byline).toBe("李四");
   });
 
