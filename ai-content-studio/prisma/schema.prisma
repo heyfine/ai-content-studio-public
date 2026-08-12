@@ -160,6 +160,19 @@ model WordPressConfig {
   updatedAt   DateTime @updatedAt
 }
 
+/// API 中转密钥：对外暴露 OpenAI 兼容接口的调用凭证（单 Key 调全部已启用供应商模型）
+model RelayApiKey {
+  id        String   @id @default(uuid())
+  name      String
+  /// AES-256-GCM 加密后的密钥（base64），复用 crypto.ts
+  key       String
+  /// 明文密钥前 12 字符，非机密，用于列表展示与候选筛选
+  keyPrefix String
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
 /// Workflow 运行记录：一次「选题→大纲→写作→SEO→审核→发布」全流程的执行快照
 model WorkflowRun {
   id         String            @id @default(uuid())
