@@ -39,7 +39,7 @@ pnpm.cmd exec biome check .
 | UI 组件 | 15 | ~150 | jsdom + Testing Library |
 | 工具函数 | 5 | ~60 | 纯逻辑 100% 可测 |
 | Store | 2 | ~20 | Zustand persist 测试 |
-| **总计** | **108** | **753** | **Phase 10 v2 后（含 sources）** |
+| **总计** | **110** | **769** | **Phase 11 后（含 sources）** |
 
 ## 覆盖率目标
 
@@ -61,6 +61,11 @@ pnpm.cmd exec biome check .
 
 - `render.test.ts`：findCalloutRanges(3) / editCalloutInMarkdown(5) / removeCalloutInMarkdown(3) / XSS 修复(1)
 - `article-editor-dialog.test.tsx`：管理面板显示(1) / 列表渲染(1) / 编辑回写(1) / 删除(1)
+
+## Phase 11 新增测试
+
+- `callout-suggest-service.test.ts`（8）：正常 JSON / ```json 包裹 / 前后多余文本 / 非法 type 降级 / 空数组 / 无效 JSON / 空 originalText 过滤 / 超长字段截断
+- `callout-suggest-ui.test.ts`（8）：findOriginalTextRange 精确/trim/空白通配/找不到/空片段 + acceptSuggestion 包裹/找不到原样返回/多条依次接受
 
 ## Relay Key 查看问题修复测试
 
