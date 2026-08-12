@@ -14,8 +14,8 @@ import { marked } from "marked";
 import {
   CALLOUT_FALLBACK_TYPE,
   CALLOUT_TYPES,
-  isCalloutType,
   type CalloutType,
+  isCalloutType,
 } from "./callout-types";
 
 marked.setOptions({ gfm: true, breaks: true });
@@ -62,8 +62,7 @@ function parseCalloutAttrs(raw: string): CalloutAttrs {
   const out: CalloutAttrs = {};
   const inner = raw.replace(/^\{/, "").replace(/\}$/, "");
   const re = /(\w+)\s*=\s*"([^"]*)"|(\w+)\s*=\s*'([^']*)'/g;
-  let m: RegExpExecArray | null;
-  while ((m = re.exec(inner)) !== null) {
+  for (let m = re.exec(inner); m !== null; m = re.exec(inner)) {
     const key = m[1] ?? m[3];
     const value = m[2] ?? m[4];
     if (key === "type" || key === "title" || key === "icon") {
@@ -155,4 +154,101 @@ export function calloutTemplate(type: CalloutType): string {
     `:::`,
     ``,
   ].join("\n");
+}
+
+/** 高亮块在原文中的字节范围（含开/闭行）。 */
+export interface CalloutRange {
+  /** 第几个高亮块，从 0 开始（用于 UI 列表序号与定位） */
+  index: number;
+  /** 开头 `:::callout{...}` 所在起始字节 */
+  start: number;
+  /** 结尾 `:::` 所在结束字节（不含其后换行） */
+  end: number;
+  /** 已解析的属性（type/title/icon，缺省为 undefined） */
+  attrs: CalloutAttrs;
+  /** 块正文（开闭行之间的文本） */
+  body: string;
+}
+
+/**
+ * 扫描 markdown，返回全部合法（已闭合）高亮块的字节范围与属性。
+ * 未闭合的高亮块不计入（与 renderArticleContent 的保留为普通文本一致）。
+ */
+export function findCalloutRanges(md: string): CalloutRange[] {
+  const lines = md.split("\n");
+  const ranges: CalloutRange[] = [];
+  let lineStart = 0; // 当前行在 md 中的起始字节
+  let idx = 0;
+  let i = 0;
+  while (i < lines.length) {
+    const line = lines[i];
+    const lineEnd = lineStart + line.length; // 不含换行
+    const open = line.match(OPEN_RE);
+    if (open) {
+      let j = i + 1;
+      while (j < lines.length && !CLOSE_RE.test(lines[j])) j++;
+      if (j < lines.length) {
+        // 闭合行字节范围：从开头行的起始到闭合行末尾
+        let closeLineStart = lineEnd + 1; // 跳过开头行末的 \n
+        for (let k = i + 1; k < j; k++) closeLineStart += lines[k].length + 1;
+        ranges.push({
+          index: idx++,
+          start: lineStart,
+          end: closeLineStart + lines[j].length,
+          attrs: parseCalloutAttrs(open[1] ?? "{}"),
+          body: lines.slice(i + 1, j).join("\n"),
+        });
+        i = j + 1;
+        // 同步 lineStart：跳过中间行 + 闭合行 + 各自换行
+        lineStart = closeLineStart + lines[j].length + 1;
+        continue;
+      }
+      // 未闭合：按普通文本处理
+    }
+    lineStart = lineEnd + 1;
+    i++;
+  }
+  return ranges;
+}
+
+/** 高亮块可编辑属性。type 必须为白名单，否则序列化时降级 neutral。 */
+export interface CalloutEditValue {
+  type: CalloutType;
+  title: string;
+  icon: string;
+  body: string;
+}
+
+/**
+ * 把指定序号的高亮块替换为新属性/正文，返回新 markdown。
+ * 索引越界或未找到时原样返回 md（防御性，UI 应保证索引合法）。
+ * 序列化结果保持 :::callout{type="..." title="..." icon="..."} 三属性顺序与 calloutTemplate 一致，
+ * 便于编辑器回写后再被 findCalloutRanges 正确解析。
+ */
+export function editCalloutInMarkdown(md: string, index: number, value: CalloutEditValue): string {
+  const ranges = findCalloutRanges(md);
+  const target = ranges.find((r) => r.index === index);
+  if (!target) return md;
+  const type: CalloutType = isCalloutType(value.type) ? value.type : CALLOUT_FALLBACK_TYPE;
+  const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
+  const title = value.title.trim() || config.label;
+  const icon = value.icon.trim() || config.icon;
+  const body = value.body.replace(/\r\n/g, "\n");
+  const replacement = `:::callout{type="${type}" title="${title}" icon="${icon}"}\n${body}\n:::`;
+  return md.slice(0, target.start) + replacement + md.slice(target.end);
+}
+
+/** 供编辑器「删除某个高亮块」使用：移除指定序号块，并清理一个相邻换行以免前后文粘连。 */
+export function removeCalloutInMarkdown(md: string, index: number): string {
+  const ranges = findCalloutRanges(md);
+  const target = ranges.find((r) => r.index === index);
+  if (!target) return md;
+  let start = target.start;
+  let end = target.end;
+  const hasPrevNl = start > 0 && md[start - 1] === "\n";
+  const hasNextNl = end < md.length && md[end] === "\n";
+  // 只吞一个换行：优先块前换行；块前没有再吞块后换行；都没有则原样裁剪
+  if (hasPrevNl) start -= 1;
+  else if (hasNextNl) end += 1;
+  return md.slice(0, start) + md.slice(end);
 }

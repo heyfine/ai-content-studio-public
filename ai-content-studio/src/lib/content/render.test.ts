@@ -1,6 +1,13 @@
-import { describe, it, expect } from "vitest";
-import { calloutTemplate, renderArticleContent, scanCalloutSegments } from "./render";
-import { CALLOUT_TYPES, CALLOUT_TYPE_KEYS } from "./callout-types";
+import { describe, expect, it } from "vitest";
+import { CALLOUT_TYPE_KEYS, CALLOUT_TYPES } from "./callout-types";
+import {
+  calloutTemplate,
+  editCalloutInMarkdown,
+  findCalloutRanges,
+  removeCalloutInMarkdown,
+  renderArticleContent,
+  scanCalloutSegments,
+} from "./render";
 
 describe("scanCalloutSegments", () => {
   it("切分普通文本与高亮块", () => {
@@ -44,7 +51,7 @@ describe("renderArticleContent", () => {
 
   it("title/icon 注入脚本被转义，不产生 XSS", () => {
     const md =
-      ':::callout{type="info" title="<script>alert(1)</script>" icon="\"><img src=x>"}\n内容\n:::';
+      ':::callout{type="info" title="<script>alert(1)</script>" icon=""><img src=x>"}\n内容\n:::';
     const html = renderArticleContent(md);
     expect(html).not.toContain("<script>alert(1)</script>");
     expect(html).not.toContain("<img src=x>");
@@ -102,5 +109,138 @@ describe("calloutTemplate", () => {
       expect(scanCalloutSegments(tpl)[0]).toMatchObject({ kind: "callout" });
       expect(tpl).toContain(`type="${t}"`);
     }
+  });
+});
+
+describe("findCalloutRanges", () => {
+  it("返回每个合法高亮块的字节范围与属性", () => {
+    const md = '开头\n:::callout{type="warning" title="注意" icon="⚠️"}\n块A\n:::\n结尾';
+    const ranges = findCalloutRanges(md);
+    expect(ranges).toHaveLength(1);
+    const r = ranges[0];
+    expect(r.index).toBe(0);
+    expect(r.attrs).toEqual({ type: "warning", title: "注意", icon: "⚠️" });
+    expect(r.body).toBe("块A");
+    expect(md.slice(r.start, r.end)).toBe(
+      ':::callout{type="warning" title="注意" icon="⚠️"}\n块A\n:::',
+    );
+  });
+
+  it("多个高亮块按出现顺序编号，字节范围互不重叠", () => {
+    const md = [
+      "正文0",
+      ':::callout{type="info"}',
+      "A",
+      ":::",
+      "正文1",
+      ':::callout{type="tip"}',
+      "B",
+      ":::",
+      "正文2",
+    ].join("\n");
+    const ranges = findCalloutRanges(md);
+    expect(ranges).toHaveLength(2);
+    expect(ranges[0].index).toBe(0);
+    expect(ranges[1].index).toBe(1);
+    expect(ranges[0].end).toBeLessThanOrEqual(ranges[1].start);
+    expect(md.slice(ranges[0].start, ranges[0].end)).toContain("A");
+    expect(md.slice(ranges[1].start, ranges[1].end)).toContain("B");
+  });
+
+  it("未闭合高亮块不计入范围", () => {
+    const md = ':::callout{type="info"}\n没闭合';
+    expect(findCalloutRanges(md)).toHaveLength(0);
+  });
+
+  it("缺省属性以 undefined 保留，不臆造默认值", () => {
+    const md = ":::callout\n内容\n:::";
+    const ranges = findCalloutRanges(md);
+    expect(ranges[0].attrs).toEqual({});
+  });
+});
+
+describe("editCalloutInMarkdown", () => {
+  const md = '开头\n:::callout{type="warning" title="注意" icon="⚠️"}\n旧内容\n:::\n结尾';
+
+  it("替换指定序号块的 type/title/icon/body", () => {
+    const next = editCalloutInMarkdown(md, 0, {
+      type: "tip",
+      title: "推荐",
+      icon: "💡",
+      body: "新内容",
+    });
+    expect(next).toBe('开头\n:::callout{type="tip" title="推荐" icon="💡"}\n新内容\n:::\n结尾');
+    // 字节范围可被再次解析
+    const ranges = findCalloutRanges(next);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0].attrs).toEqual({ type: "tip", title: "推荐", icon: "💡" });
+    expect(ranges[0].body).toBe("新内容");
+  });
+
+  it("非法 type 降级 neutral", () => {
+    const next = editCalloutInMarkdown(md, 0, {
+      type: "evil" as never,
+      title: "",
+      icon: "",
+      body: "x",
+    });
+    expect(next).toContain('type="neutral"');
+  });
+
+  it("title/icon 为空时回退到类型默认值", () => {
+    const next = editCalloutInMarkdown(md, 0, {
+      type: "info",
+      title: "  ",
+      icon: "",
+      body: "y",
+    });
+    expect(next).toContain('title="信息"');
+    expect(next).toContain('icon="ℹ️"');
+  });
+
+  it("索引越界时原样返回 md（防御性）", () => {
+    expect(editCalloutInMarkdown(md, 99, { type: "info", title: "x", icon: "y", body: "z" })).toBe(
+      md,
+    );
+  });
+
+  it("不改写目标块之外的文本", () => {
+    const next = editCalloutInMarkdown(md, 0, {
+      type: "warning",
+      title: "注意",
+      icon: "⚠️",
+      body: "旧内容",
+    });
+    expect(next).toBe(md);
+  });
+});
+
+describe("removeCalloutInMarkdown", () => {
+  it("移除指定序号块并清理多余空行", () => {
+    const md = '前文\n:::callout{type="info"}\nA\n:::\n后文';
+    expect(removeCalloutInMarkdown(md, 0)).toBe("前文\n后文");
+  });
+
+  it("连续两个块移除一个后另一个仍可正确定位", () => {
+    const md = [
+      "正文0",
+      ':::callout{type="info"}',
+      "A",
+      ":::",
+      "正文1",
+      ':::callout{type="tip"}',
+      "B",
+      ":::",
+      "正文2",
+    ].join("\n");
+    const after = removeCalloutInMarkdown(md, 0);
+    const ranges = findCalloutRanges(after);
+    expect(ranges).toHaveLength(1);
+    expect(ranges[0].body).toBe("B");
+  });
+
+  it("索引越界时不改动原文", () => {
+    const md = '前文\n:::callout{type="info"}\nA\n:::\n后文';
+    expect(removeCalloutInMarkdown(md, 99)).toBe(md);
   });
 });
