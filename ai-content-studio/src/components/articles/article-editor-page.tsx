@@ -16,8 +16,11 @@ import { calloutTemplate, scanCalloutSegments, segmentsToMarkdown } from "@/lib/
 import type { CalloutType } from "@/lib/content/callout-types";
 import { CALLOUT_TYPES } from "@/lib/content/callout-types";
 import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-suggest-ui";
+import type { LayoutSuggestion, LayoutStyle } from "@/lib/content/layout-suggest-types";
+import { LAYOUT_STYLE_LABELS, LAYOUT_STYLES } from "@/lib/content/layout-suggest-types";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
 import { CalloutPickerDialog, EditableContent } from "./editable-content";
+import { LayoutSuggestPanel } from "./layout-suggest-panel";
 
 export interface ArticleEditorPageProps {
   articleId: string | null;
@@ -34,6 +37,10 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<CalloutSuggestion[]>([]);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>("standard");
+  const [layoutLoading, setLayoutLoading] = useState(false);
+  const [layoutError, setLayoutError] = useState<string | null>(null);
+  const [layoutSuggestions, setLayoutSuggestions] = useState<LayoutSuggestion[] | null>(null);
   const [form, setForm] = useState({
     title: "",
     content: "",
@@ -140,6 +147,36 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
     setSuggestions([]);
   }
 
+  async function onSuggestLayout() {
+    setLayoutError(null);
+    if (form.content.trim().length === 0) {
+      setLayoutError("正文为空，无法排版");
+      return;
+    }
+    setLayoutLoading(true);
+    try {
+      const res = await fetch("/api/articles/suggest-layout", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ content: form.content, title: form.title, style: layoutStyle }),
+      });
+      if (!res.ok) {
+        const err = (await res.json().catch(() => ({}))) as { error?: string };
+        setLayoutError(err.error ?? "AI 排版失败");
+        return;
+      }
+      const data = (await res.json()) as { suggestions: LayoutSuggestion[] };
+      setLayoutSuggestions(data.suggestions ?? []);
+      if ((data.suggestions ?? []).length === 0) {
+        setLayoutError("AI 认为当前排版已足够，无需调整");
+      }
+    } catch (e) {
+      setLayoutError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLayoutLoading(false);
+    }
+  }
+
   async function onSubmit() {
     setSubmitError(null);
     try {
@@ -212,6 +249,31 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
           <div className="flex items-center justify-between">
             <Label htmlFor="article-content">正文</Label>
             <div className="flex items-center gap-1">
+              <select
+                aria-label="排版强度"
+                className="rounded-md border border-input bg-transparent px-2 py-1.5 text-xs"
+                value={layoutStyle}
+                onChange={(e) => setLayoutStyle(e.target.value as LayoutStyle)}
+                disabled={layoutLoading || mode !== "edit"}
+                data-testid="layout-style-select"
+              >
+                {LAYOUT_STYLES.map((s) => (
+                  <option key={s} value={s}>
+                    {LAYOUT_STYLE_LABELS[s]}
+                  </option>
+                ))}
+              </select>
+              <Button
+                type="button"
+                variant="outline"
+                size="xs"
+                data-testid="ai-layout"
+                onClick={onSuggestLayout}
+                disabled={layoutLoading || mode !== "edit"}
+              >
+                <Sparkles className="size-3.5" />
+                {layoutLoading ? "排版中…" : "AI 智能排版"}
+              </Button>
               <Button
                 type="button"
                 variant="outline"
@@ -322,6 +384,22 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
             <p className="text-sm text-muted-foreground" data-testid="suggest-error">
               {suggestError}
             </p>
+          )}
+          {mode === "edit" && layoutError && !layoutLoading && (
+            <p className="text-sm text-muted-foreground" data-testid="layout-error">
+              {layoutError}
+            </p>
+          )}
+          {mode === "edit" && layoutSuggestions && (
+            <LayoutSuggestPanel
+              content={form.content}
+              suggestions={layoutSuggestions}
+              onCancel={() => setLayoutSuggestions(null)}
+              onApply={(next) => {
+                setField("content", next);
+                setLayoutSuggestions(null);
+              }}
+            />
           )}
           {mode === "edit" ? (
             <EditableContent
