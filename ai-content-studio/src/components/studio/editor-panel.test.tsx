@@ -3,6 +3,21 @@ import { render, screen, fireEvent } from "@testing-library/react";
 import { useStudioStore } from "@/stores/studio-store";
 import { EditorPanel } from "./editor-panel";
 
+// 富文本模式依赖 Tiptap：mock useMarkdownEditor/EditorContent，聚焦数据流与切换 UI。
+// 经典模式（默认）不渲染 EditorContent，现有断言不受影响。
+const richEditorMock = {
+  commands: { setContent: vi.fn() },
+  setEditable: vi.fn(),
+  getJSON: vi.fn(() => ({ type: "doc", content: [] })),
+  getHTML: vi.fn(() => "<p>x</p>"),
+};
+vi.mock("@tiptap/react", () => ({
+  EditorContent: () => <div data-testid="rich-editor-mount" />,
+}));
+vi.mock("@/lib/editor/use-markdown-editor", () => ({
+  useMarkdownEditor: () => richEditorMock,
+}));
+
 function resetStore() {
   useStudioStore.setState({
     title: "",
@@ -122,5 +137,47 @@ describe("EditorPanel", () => {
     fireEvent.click(screen.getByLabelText("复制生成结果"));
     expect(writeText).toHaveBeenCalledWith("可复制内容");
     expect(await screen.findByText("已复制")).toBeInTheDocument();
+  });
+});
+
+describe("EditorPanel 富文本模式", () => {
+  beforeEach(() => {
+    resetStore();
+    richEditorMock.commands.setContent.mockClear();
+  });
+
+  it("默认经典模式，切换到富文本渲染编辑器挂载点", () => {
+    render(<EditorPanel />);
+    // 默认经典：原文 textarea 存在，富文本挂载点不存在
+    expect(screen.getByLabelText("原文")).toBeInTheDocument();
+    expect(screen.queryByTestId("rich-editor-mount")).not.toBeInTheDocument();
+    // 切换到富文本
+    fireEvent.click(screen.getByLabelText("富文本编辑器"));
+    expect(screen.queryByTestId("rich-editor-mount")).toBeInTheDocument();
+    expect(screen.queryByLabelText("原文")).not.toBeInTheDocument();
+  });
+
+  it("富文本模式切回经典恢复 textarea", () => {
+    render(<EditorPanel />);
+    fireEvent.click(screen.getByLabelText("富文本编辑器"));
+    fireEvent.click(screen.getByLabelText("经典编辑器"));
+    expect(screen.getByLabelText("原文")).toBeInTheDocument();
+    expect(screen.queryByTestId("rich-editor-mount")).not.toBeInTheDocument();
+  });
+
+  it("富文本模式「应用到原文」直刷 editor 且同步 store", () => {
+    useStudioStore.setState({
+      generations: [
+        { id: "g1", task: "article_generate", index: 1, content: "新生成", createdAt: "14:32:05" },
+      ],
+    });
+    render(<EditorPanel />);
+    fireEvent.click(screen.getByLabelText("富文本编辑器"));
+    fireEvent.click(screen.getByLabelText("应用到原文"));
+    expect(richEditorMock.commands.setContent).toHaveBeenCalledWith(
+      "新生成",
+      { emitUpdate: false },
+    );
+    expect(useStudioStore.getState().content).toBe("新生成");
   });
 });
