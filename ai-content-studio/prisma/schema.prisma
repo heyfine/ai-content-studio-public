@@ -112,6 +112,12 @@ model Article {
   title     String
   slug      String        @unique
   content   String        @default("")
+  /// Tiptap 块编辑器主存：ProseMirror doc JSON（Phase 13 引入，子任务 2）
+  contentJson Json?
+  /// Tiptap 派生字段：编辑后即时同步的 HTML（发布/SEO 直接用）
+  contentHtml String?
+  /// Tiptap 派生字段：编辑后即时同步的 Markdown（AI 提示词 / 导出用）
+  contentMd   String?
   status    ArticleStatus @default(DRAFT)
   /// SEO 评分（SEO 模块 Phase 4 写入）
   seoScore  Int?

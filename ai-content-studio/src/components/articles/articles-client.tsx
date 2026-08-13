@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import {
   Pencil as PencilIcon,
+  PenLine as PenLineIcon,
   Plus as PlusIcon,
   RefreshCw as RefreshIcon,
   Trash2 as Trash2Icon,
@@ -103,11 +104,18 @@ export function ArticlesClient() {
     <div className="space-y-4" data-testid="articles-client">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">文章管理</h2>
-        <Link href="/articles/new" data-testid="new-article-link">
-          <Button size="sm">
-            <PlusIcon className="size-4" /> 新建文章
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          <Link href="/articles/tiptap/new" data-testid="new-tiptap-article-link">
+            <Button variant="outline" size="sm">
+              <PenLineIcon className="size-4" /> 新建（Tiptap）
+            </Button>
+          </Link>
+          <Link href="/articles/new" data-testid="new-article-link">
+            <Button size="sm">
+              <PlusIcon className="size-4" /> 新建文章
+            </Button>
+          </Link>
+        </div>
       </div>
       {refreshOutcome && (
         <p className="text-sm text-emerald-600" data-testid="refresh-outcome">
@@ -174,6 +182,11 @@ export function ArticlesClient() {
                         <Link href={`/articles/${r.id}/edit`} data-testid={`edit-${r.id}`}>
                           <Button variant="ghost" size="icon" aria-label="编辑">
                             <PencilIcon className="size-4" />
+                          </Button>
+                        </Link>
+                        <Link href={`/articles/tiptap/${r.id}/edit`} data-testid={`tiptap-edit-${r.id}`}>
+                          <Button variant="ghost" size="icon" aria-label="Tiptap 编辑">
+                            <PenLineIcon className="size-4" />
                           </Button>
                         </Link>
                         <Button

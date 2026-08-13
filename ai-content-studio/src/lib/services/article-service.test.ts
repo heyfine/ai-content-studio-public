@@ -117,4 +117,57 @@ describe("article-service", () => {
     await deleteArticle("a1");
     expect(del).toHaveBeenCalledWith({ where: { id: "a1" } });
   });
+
+  it("createArticle 带 Tiptap 三字段（contentJson/Html/Md）", async () => {
+    create.mockResolvedValue({ id: "a1" });
+    const json = { type: "doc", content: [] };
+    await createArticle({
+      title: "Tiptap 文章",
+      content: ":::callout{type=\"info\"}\n内容\n:::",
+      contentJson: json,
+      contentHtml: "<p>内容</p>",
+      contentMd: ":::callout{type=\"info\"}\n内容\n:::",
+    });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        title: "Tiptap 文章",
+        contentJson: json,
+        contentHtml: "<p>内容</p>",
+        contentMd: ":::callout{type=\"info\"}\n内容\n:::",
+      }),
+    });
+  });
+
+  it("createArticle 不带新字段时 payload 不含它们（兼容旧调用）", async () => {
+    create.mockResolvedValue({ id: "a1" });
+    await createArticle({ title: "X" });
+    expect(create).toHaveBeenCalledWith({
+      data: expect.not.objectContaining({
+        contentJson: expect.anything(),
+        contentHtml: expect.anything(),
+        contentMd: expect.anything(),
+      }),
+    });
+  });
+
+  it("updateArticle 写入 Tiptap 三字段", async () => {
+    findUnique.mockResolvedValue({ id: "a1", status: "DRAFT", content: "", version: 1 });
+    update.mockResolvedValue({ id: "a1" });
+    const json = { type: "doc", content: [] };
+    await updateArticle("a1", {
+      content: "# 标题",
+      contentJson: json,
+      contentHtml: "<h1>标题</h1>",
+      contentMd: "# 标题",
+    });
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "a1" },
+      data: {
+        content: "# 标题",
+        contentJson: json,
+        contentHtml: "<h1>标题</h1>",
+        contentMd: "# 标题",
+      },
+    });
+  });
 });

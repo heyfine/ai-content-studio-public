@@ -5,6 +5,9 @@ export interface ArticleRow {
   title: string;
   slug: string;
   content: string;
+  contentJson?: unknown | null;
+  contentHtml?: string | null;
+  contentMd?: string | null;
   status: ArticleStatus;
   seoScore: number | null;
   wpPostId: string | null;

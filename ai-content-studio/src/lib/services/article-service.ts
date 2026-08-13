@@ -1,3 +1,4 @@
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { assertTransition, type ArticleStatus } from "@/lib/article-status";
 
@@ -5,6 +6,10 @@ export interface CreateArticleInput {
   title: string;
   slug?: string;
   content?: string;
+  /** ProseMirror doc JSON（Prisma Json 字段）；API 层是 unknown，service 内 cast */
+  contentJson?: unknown;
+  contentHtml?: string;
+  contentMd?: string;
   status?: ArticleStatus;
   seoScore?: number;
   wpPostId?: string;
@@ -15,6 +20,9 @@ export type UpdateArticleInput = {
   title?: string;
   slug?: string;
   content?: string;
+  contentJson?: unknown | null;
+  contentHtml?: string | null;
+  contentMd?: string | null;
   status?: ArticleStatus;
   seoScore?: number | null;
   wpPostId?: string | null;
@@ -44,17 +52,21 @@ export async function getArticle(id: string) {
 }
 
 export async function createArticle(input: CreateArticleInput) {
-  return prisma.article.create({
-    data: {
-      title: input.title,
-      slug: input.slug ?? slugify(input.title),
-      content: input.content ?? "",
-      status: input.status ?? "DRAFT",
-      seoScore: input.seoScore,
-      wpPostId: input.wpPostId,
-      promptId: input.promptId,
-    },
-  });
+  const data: Record<string, unknown> = {
+    title: input.title,
+    slug: input.slug ?? slugify(input.title),
+    content: input.content ?? "",
+    status: input.status ?? "DRAFT",
+  };
+  // 新字段只在显式提供时写入，保持旧调用（无 contentJson 等）的 create payload 不变
+  if (input.contentJson !== undefined)
+    data.contentJson = input.contentJson as Prisma.InputJsonValue;
+  if (input.contentHtml !== undefined) data.contentHtml = input.contentHtml;
+  if (input.contentMd !== undefined) data.contentMd = input.contentMd;
+  if (input.seoScore !== undefined) data.seoScore = input.seoScore;
+  if (input.wpPostId !== undefined) data.wpPostId = input.wpPostId;
+  if (input.promptId !== undefined) data.promptId = input.promptId;
+  return prisma.article.create({ data: data as Prisma.ArticleCreateInput });
 }
 
 export async function updateArticle(id: string, input: UpdateArticleInput) {
@@ -69,6 +81,10 @@ export async function updateArticle(id: string, input: UpdateArticleInput) {
   if (input.title !== undefined) data.title = input.title;
   if (input.slug !== undefined) data.slug = input.slug;
   if (input.content !== undefined) data.content = input.content;
+  if (input.contentJson !== undefined)
+    data.contentJson = input.contentJson as Prisma.InputJsonValue | null;
+  if (input.contentHtml !== undefined) data.contentHtml = input.contentHtml;
+  if (input.contentMd !== undefined) data.contentMd = input.contentMd;
   if (input.status !== undefined) data.status = input.status;
   if (input.seoScore !== undefined) data.seoScore = input.seoScore;
   if (input.wpPostId !== undefined) data.wpPostId = input.wpPostId;
