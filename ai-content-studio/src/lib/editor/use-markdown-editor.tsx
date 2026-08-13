@@ -19,6 +19,7 @@ import { Callout } from "./extensions/callout/callout";
 import { DragHandle } from "./extensions/drag-handle/drag-handle";
 import { Markdown } from "./extensions/markdown";
 import { SlashCommand } from "./extensions/slash-command/slash-command";
+import { EditorToolbar } from "./components/editor-toolbar";
 
 const lowlight = createLowlight(common);
 
@@ -90,6 +91,7 @@ export function useMarkdownEditor(options: {
 
 /**
  * 可直接渲染的 Tiptap 编辑器组件（文章页可作新板块插入，不动原编辑器）。
+ * 顶部带图形化工具栏（EditorToolbar），覆盖 slash 菜单全部能力。
  */
 export function MarkdownEditor({
   initialContent,
@@ -104,5 +106,10 @@ export function MarkdownEditor({
     editable,
     onChange,
   });
-  return <EditorContent editor={editor} className={className} />;
+  return (
+    <div className="flex flex-col gap-2">
+      {editable !== false && <EditorToolbar editor={editor} />}
+      <EditorContent editor={editor} className={className} />
+    </div>
+  );
 }

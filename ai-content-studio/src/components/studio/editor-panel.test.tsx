@@ -6,10 +6,29 @@ import { EditorPanel } from "./editor-panel";
 // 富文本模式依赖 Tiptap：mock useMarkdownEditor/EditorContent，聚焦数据流与切换 UI。
 // 经典模式（默认）不渲染 EditorContent，现有断言不受影响。
 const richEditorMock = {
-  commands: { setContent: vi.fn() },
+  commands: { setContent: vi.fn(), setImage: vi.fn() },
   setEditable: vi.fn(),
   getJSON: vi.fn(() => ({ type: "doc", content: [] })),
   getHTML: vi.fn(() => "<p>x</p>"),
+  isActive: vi.fn(() => false),
+  chain: vi.fn(() => ({
+    focus: vi.fn(() => ({
+      toggleBold: vi.fn(() => ({ run: vi.fn() })),
+      toggleItalic: vi.fn(() => ({ run: vi.fn() })),
+      toggleStrike: vi.fn(() => ({ run: vi.fn() })),
+      toggleUnderline: vi.fn(() => ({ run: vi.fn() })),
+      setParagraph: vi.fn(() => ({ run: vi.fn() })),
+      setHeading: vi.fn(() => ({ run: vi.fn() })),
+      toggleBulletList: vi.fn(() => ({ run: vi.fn() })),
+      toggleOrderedList: vi.fn(() => ({ run: vi.fn() })),
+      toggleTaskList: vi.fn(() => ({ run: vi.fn() })),
+      insertTable: vi.fn(() => ({ run: vi.fn() })),
+      setCodeBlock: vi.fn(() => ({ run: vi.fn() })),
+      setHorizontalRule: vi.fn(() => ({ run: vi.fn() })),
+      insertContent: vi.fn(() => ({ run: vi.fn() })),
+      run: vi.fn(),
+    })),
+  })),
 };
 vi.mock("@tiptap/react", () => ({
   EditorContent: () => <div data-testid="rich-editor-mount" />,

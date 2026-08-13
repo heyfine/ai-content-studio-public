@@ -17,6 +17,7 @@ import { useStudioStore, type GenerationItem } from "@/stores/studio-store";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { MarkdownPreview } from "./markdown-preview";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
+import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 import {
   applyMarkdownToEditor,
   registerEditor,
@@ -150,10 +151,13 @@ export function EditorPanel() {
             />
           ) : (
             <div
-              className="min-h-[120px] flex-1 overflow-y-auto rounded-md border border-input px-3 py-2 text-sm [&_.ProseMirror]:min-h-[80px] [&_.ProseMirror]:outline-none"
+              className="flex min-h-[120px] flex-1 flex-col gap-2"
               data-testid="rich-editor-host"
             >
-              <EditorContent editor={richEditor} className="rich-editor" />
+              <EditorToolbar editor={richEditor} />
+              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-input px-3 py-2 text-sm [&_.ProseMirror]:min-h-[80px] [&_.ProseMirror]:outline-none">
+                <EditorContent editor={richEditor} className="rich-editor" />
+              </div>
             </div>
           )}
         </section>
