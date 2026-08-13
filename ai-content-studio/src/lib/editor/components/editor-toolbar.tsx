@@ -4,6 +4,9 @@ import type { Editor } from "@tiptap/react";
 import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { useEffect, useRef, useState } from "react";
 import {
+  AlignCenter as AlignCenterIcon,
+  AlignLeft as AlignLeftIcon,
+  AlignRight as AlignRightIcon,
   Bold as BoldIcon,
   CodeXml as CodeXmlIcon,
   Heading1 as H1Icon,
@@ -11,18 +14,22 @@ import {
   Heading3 as H3Icon,
   Highlighter as HighlighterIcon,
   Image as ImageIcon,
+  IndentDecrease as IndentDecreaseIcon,
+  IndentIncrease as IndentIncreaseIcon,
   Italic as ItalicIcon,
   List as ListIcon,
   ListOrdered as ListOrderedIcon,
   ListTodo as TaskListIcon,
   Minus as MinusIcon,
   Pilcrow as PilcrowIcon,
+  Quote as QuoteIcon,
   Strikethrough as StrikethroughIcon,
   Table as TableIcon,
   Underline as UnderlineIcon,
 } from "lucide-react";
 
 import { CALLOUT_TYPES, type CalloutType } from "@/lib/content/callout-types";
+import { CalloutColorPicker } from "../extensions/callout/callout-color-picker";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -55,6 +62,7 @@ function focusEditor(ed: Editor): void {
 
 export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
   const [calloutOpen, setCalloutOpen] = useState(false);
+  const [colorPanel, setColorPanel] = useState<"text" | "bg" | null>(null);
   const editorRef = useRef<Editor | null>(null);
 
   useEffect(() => {
@@ -67,6 +75,42 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
   const isItalic = editor.isActive("italic");
   const isStrike = editor.isActive("strike");
   const isUnderline = editor.isActive("underline");
+  const isAlignLeft = editor.isActive({ textAlign: "left" });
+  const isAlignCenter = editor.isActive({ textAlign: "center" });
+  const isAlignRight = editor.isActive({ textAlign: "right" });
+  const isQuote = editor.isActive("blockquote");
+  const textStyleAttrs = editor.getAttributes("textStyle") as Record<string, unknown>;
+  const textColor = typeof textStyleAttrs.color === "string" ? textStyleAttrs.color : "";
+  const textBg = typeof textStyleAttrs.backgroundColor === "string" ? textStyleAttrs.backgroundColor : "";
+
+  function applyTextColor(color: string) {
+    const ed = editorRef.current ?? editor;
+    if (!ed) return;
+    focusEditor(ed);
+    ed.chain().focus().setColor(color).run();
+  }
+
+  function clearTextColor() {
+    const ed = editorRef.current ?? editor;
+    if (!ed) return;
+    focusEditor(ed);
+    ed.chain().focus().unsetColor().run();
+  }
+
+  function applyTextBg(color: string) {
+    const ed = editorRef.current ?? editor;
+    if (!ed) return;
+    focusEditor(ed);
+    ed.chain().focus().setBackgroundColor(color).run();
+  }
+
+  /** 清除文字背景色（保留文字色） */
+  function clearTextBg() {
+    const ed = editorRef.current ?? editor;
+    if (!ed) return;
+    focusEditor(ed);
+    ed.chain().focus().unsetBackgroundColor().run();
+  }
 
   function insertCallout(type: CalloutType) {
     const ed = editorRef.current ?? editor;
@@ -182,6 +226,71 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         <UnderlineIcon className="size-4" />
       </button>
 
+      {/* 文字颜色 / 背景颜色 */}
+      <div className="toolbar-color" style={{ position: "relative" }}>
+        <button
+          type="button"
+          aria-label="文字颜色"
+          title="文字颜色"
+          onClick={() => {
+            setColorPanel((v) => (v === "text" ? null : "text"));
+            setCalloutOpen(false);
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent"
+        >
+          <span className="toolbar-color-letter" style={{ color: textColor || undefined }}>
+            A
+          </span>
+        </button>
+        {colorPanel === "text" && (
+          <>
+            <div className="callout-color-backdrop" onClick={() => setColorPanel(null)} />
+            <CalloutColorPicker
+              value={textColor}
+              onPick={applyTextColor}
+              onClear={() => {
+                clearTextColor();
+                setColorPanel(null);
+              }}
+            />
+          </>
+        )}
+      </div>
+      <div className="toolbar-color" style={{ position: "relative" }}>
+        <button
+          type="button"
+          aria-label="背景颜色"
+          title="背景颜色"
+          onClick={() => {
+            setColorPanel((v) => (v === "bg" ? null : "bg"));
+            setCalloutOpen(false);
+          }}
+          onMouseDown={(e) => e.stopPropagation()}
+          className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent"
+        >
+          <span
+            className="toolbar-color-letter toolbar-color-letter-bg"
+            style={{ backgroundColor: textBg || undefined }}
+          >
+            A
+          </span>
+        </button>
+        {colorPanel === "bg" && (
+          <>
+            <div className="callout-color-backdrop" onClick={() => setColorPanel(null)} />
+            <CalloutColorPicker
+              value={textBg}
+              onPick={applyTextBg}
+              onClear={() => {
+                clearTextBg();
+                setColorPanel(null);
+              }}
+            />
+          </>
+        )}
+      </div>
+
       <div className="mx-1 h-5 w-px bg-border" />
 
       {/* 块类型 */}
@@ -230,6 +339,78 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
         <H3Icon className="size-4" />
+      </button>
+
+      <div className="mx-1 h-5 w-px bg-border" />
+
+      {/* 对齐 / 缩进 / 引用 */}
+      <button
+        type="button"
+        aria-label="左对齐"
+        title="左对齐"
+        onClick={() => runCommand("左对齐", (ed) => ed.commands.setTextAlign("left"))}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
+          isAlignLeft ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <AlignLeftIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="居中对齐"
+        title="居中对齐"
+        onClick={() => runCommand("居中对齐", (ed) => ed.commands.setTextAlign("center"))}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
+          isAlignCenter ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <AlignCenterIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="右对齐"
+        title="右对齐"
+        onClick={() => runCommand("右对齐", (ed) => ed.commands.setTextAlign("right"))}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
+          isAlignRight ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <AlignRightIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="增加缩进"
+        title="增加缩进"
+        onClick={() => runCommand("增加缩进", (ed) => ed.commands.indent())}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        <IndentIncreaseIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="减小缩进"
+        title="减小缩进"
+        onClick={() => runCommand("减小缩进", (ed) => ed.commands.outdent())}
+        onMouseDown={(e) => e.stopPropagation()}
+        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
+      >
+        <IndentDecreaseIcon className="size-4" />
+      </button>
+      <button
+        type="button"
+        aria-label="引用"
+        title="引用"
+        onClick={() => runCommand("引用", (ed) => ed.commands.toggleBlockquote())}
+        onMouseDown={(e) => e.stopPropagation()}
+        className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
+          isQuote ? "bg-accent text-accent-foreground" : "text-muted-foreground"
+        }`}
+      >
+        <QuoteIcon className="size-4" />
       </button>
 
       <DropdownMenu open={calloutOpen} onOpenChange={setCalloutOpen}>

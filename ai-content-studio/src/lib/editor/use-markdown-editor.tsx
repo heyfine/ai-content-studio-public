@@ -11,12 +11,16 @@ import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
+import TextAlign from "@tiptap/extension-text-align";
+// text-style 包内含 TextStyle mark + Color + BackgroundColor（文字色/背景色命令）
+import { BackgroundColor, Color, TextStyle } from "@tiptap/extension-text-style";
 import { EditorContent, useEditor, type Editor } from "@tiptap/react";
 import { createLowlight, common } from "lowlight";
 import { type ReactNode } from "react";
 
 import { Callout } from "./extensions/callout/callout";
 import { DragHandle } from "./extensions/drag-handle/drag-handle";
+import { Indent } from "./extensions/indent";
 import { Markdown } from "./extensions/markdown";
 import { SlashCommand } from "./extensions/slash-command/slash-command";
 import { EditorToolbar } from "./components/editor-toolbar";
@@ -46,6 +50,11 @@ const baseExtensions = (placeholder?: string) => [
     // 代码块低亮替代默认 codeBlock
     codeBlock: false,
   }),
+  TextStyle,
+  Color,
+  BackgroundColor,
+  TextAlign.configure({ types: ["heading", "paragraph"] }),
+  Indent,
   Callout,
   Image,
   Table.configure({ resizable: true }),

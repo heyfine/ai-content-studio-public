@@ -30,6 +30,7 @@ function makeChainMock() {
   const editor = {
     chain,
     isActive: vi.fn(() => false),
+    getAttributes: vi.fn(() => ({})),
     isEditable: true,
     isFocused: false,
     view: { dom: null },

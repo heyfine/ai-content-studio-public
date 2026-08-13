@@ -262,6 +262,17 @@
 .ProseMirror .callout-icon { font-size: 1.125rem; }
 .ProseMirror .callout-handle { margin-left: auto; }
 
+/* 工具栏文字色/背景色按钮 */
+.toolbar-color-letter {
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+}
+.toolbar-color-letter-bg {
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.25rem;
+}
+
 /* 文字/边框/填充颜色按钮与面板 */
 .ProseMirror .callout-color-btn {
   display: inline-flex;

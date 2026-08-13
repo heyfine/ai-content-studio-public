@@ -11,6 +11,7 @@ const richEditorMock = {
   getJSON: vi.fn(() => ({ type: "doc", content: [] })),
   getHTML: vi.fn(() => "<p>x</p>"),
   isActive: vi.fn(() => false),
+  getAttributes: vi.fn(() => ({})),
   chain: vi.fn(() => ({
     focus: vi.fn(() => ({
       toggleBold: vi.fn(() => ({ run: vi.fn() })),
