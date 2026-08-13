@@ -225,11 +225,27 @@
 .ProseMirror img { max-width: 100%; height: auto; border-radius: 0.375rem; }
 
 /* 高亮块（Callout） */
+:root {
+  --callout-info: oklch(0.623 0.214 259.815);
+  --callout-tip: oklch(0.627 0.194 149.214);
+  --callout-warning: oklch(0.666 0.179 58.318);
+  --callout-danger: oklch(0.704 0.191 22.216);
+  --callout-note: oklch(0.606 0.25 292.717);
+  --callout-insight: oklch(0.695 0.17 162.48);
+  --callout-neutral: oklch(0.552 0.016 285.938);
+}
+.dark {
+  --callout-info: oklch(0.685 0.169 259.815);
+  --callout-tip: oklch(0.72 0.19 162.48);
+  --callout-warning: oklch(0.769 0.188 70.08);
+  --callout-danger: oklch(0.717 0.202 22.216);
+  --callout-note: oklch(0.685 0.169 292.717);
+  --callout-insight: oklch(0.746 0.161 195.5);
+  --callout-neutral: oklch(0.607 0.018 285.938);
+}
 .ProseMirror .callout {
-  border: 1px solid var(--border);
-  border-left-width: 4px;
+  border: 1px solid;
   border-radius: 0.5rem;
-  background: var(--muted);
   padding: 0.75rem 1rem;
   margin: 0.75rem 0;
   display: flex;
@@ -241,16 +257,69 @@
   align-items: center;
   gap: 0.5rem;
   font-weight: 600;
+  color: var(--callout-info);
 }
 .ProseMirror .callout-icon { font-size: 1.125rem; }
 .ProseMirror .callout-handle { margin-left: auto; }
-.ProseMirror .callout-info    { border-left-color: oklch(0.623 0.214 259.815); }
-.ProseMirror .callout-tip     { border-left-color: oklch(0.627 0.194 149.214); }
-.ProseMirror .callout-warning { border-left-color: oklch(0.666 0.179 58.318); }
-.ProseMirror .callout-danger  { border-left-color: oklch(0.704 0.191 22.216); }
-.ProseMirror .callout-note    { border-left-color: oklch(0.606 0.25 292.717); }
-.ProseMirror .callout-insight { border-left-color: oklch(0.695 0.17 162.48); }
-.ProseMirror .callout-neutral { border-left-color: var(--border); }
+.ProseMirror .callout-info {
+  border-color: color-mix(in oklab, var(--callout-info) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-info) 10%, transparent);
+}
+.ProseMirror .callout-info .callout-title { color: var(--callout-info); }
+.ProseMirror .callout-tip {
+  border-color: color-mix(in oklab, var(--callout-tip) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-tip) 10%, transparent);
+}
+.ProseMirror .callout-tip .callout-title { color: var(--callout-tip); }
+.ProseMirror .callout-warning {
+  border-color: color-mix(in oklab, var(--callout-warning) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-warning) 10%, transparent);
+}
+.ProseMirror .callout-warning .callout-title { color: var(--callout-warning); }
+.ProseMirror .callout-danger {
+  border-color: color-mix(in oklab, var(--callout-danger) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-danger) 10%, transparent);
+}
+.ProseMirror .callout-danger .callout-title { color: var(--callout-danger); }
+.ProseMirror .callout-note {
+  border-color: color-mix(in oklab, var(--callout-note) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-note) 10%, transparent);
+}
+.ProseMirror .callout-note .callout-title { color: var(--callout-note); }
+.ProseMirror .callout-insight {
+  border-color: color-mix(in oklab, var(--callout-insight) 55%, transparent);
+  background: color-mix(in oklab, var(--callout-insight) 10%, transparent);
+}
+.ProseMirror .callout-insight .callout-title { color: var(--callout-insight); }
+.ProseMirror .callout-neutral {
+  border-color: var(--border);
+  background: var(--muted);
+}
+.ProseMirror .callout-neutral .callout-title { color: var(--muted-foreground); }
+.dark .ProseMirror .callout-info {
+  border-color: color-mix(in oklab, var(--callout-info) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-info) 18%, transparent);
+}
+.dark .ProseMirror .callout-tip {
+  border-color: color-mix(in oklab, var(--callout-tip) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-tip) 18%, transparent);
+}
+.dark .ProseMirror .callout-warning {
+  border-color: color-mix(in oklab, var(--callout-warning) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-warning) 18%, transparent);
+}
+.dark .ProseMirror .callout-danger {
+  border-color: color-mix(in oklab, var(--callout-danger) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-danger) 18%, transparent);
+}
+.dark .ProseMirror .callout-note {
+  border-color: color-mix(in oklab, var(--callout-note) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-note) 18%, transparent);
+}
+.dark .ProseMirror .callout-insight {
+  border-color: color-mix(in oklab, var(--callout-insight) 60%, transparent);
+  background: color-mix(in oklab, var(--callout-insight) 18%, transparent);
+}
 
 /* 空文档/空段落占位（Placeholder 扩展） */
 .ProseMirror p.is-editor-empty:first-child::before,

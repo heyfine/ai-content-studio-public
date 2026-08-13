@@ -1,6 +1,7 @@
 "use client";
 
 import type { Editor } from "@tiptap/react";
+import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
 import { useEffect, useRef, useState } from "react";
 import {
   Bold as BoldIcon,
@@ -71,11 +72,27 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
     const ed = editorRef.current ?? editor;
     if (!ed) return;
     focusEditor(ed);
-    ed.commands.insertContent({
-      type: "callout",
-      attrs: { type, title: "", icon: "" },
-      content: [{ type: "paragraph" }],
-    });
+
+    // 把选中内容作为 callout 内容（Tiptap insertContent 会 replaceWith 替换
+    // selection，若直接用空 callout 会把选中的文字吞掉）。空选择则插入空 callout。
+    const { state, schema } = ed;
+    const slice = state.selection.content();
+    let content: Fragment | ProseMirrorNode;
+    if (slice.content.size === 0) {
+      content = schema.nodes.paragraph.create();
+    } else if (slice.content.childCount === 1 && slice.content.firstChild!.isTextblock) {
+      content = slice.content;
+    } else {
+      let allBlocks = true;
+      slice.content.forEach((n) => {
+        if (!n.isBlock) allBlocks = false;
+      });
+      content = allBlocks ? slice.content : schema.nodes.paragraph.create(null, slice.content);
+    }
+
+    ed.commands.insertContent(
+      schema.nodes.callout.create({ type, title: "", icon: "" }, content),
+    );
   }
 
   function insertImage() {

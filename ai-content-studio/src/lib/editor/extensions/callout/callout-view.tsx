@@ -1,6 +1,10 @@
 "use client";
 
-import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
+import {
+  NodeViewContent,
+  NodeViewWrapper,
+  type NodeViewProps,
+} from "@tiptap/react";
 
 import { CALLOUT_TYPES, type CalloutType, isCalloutType } from "@/lib/content/callout-types";
 
@@ -70,7 +74,8 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
           删除
         </button>
       </div>
-      {/* NodeView 自动注入正文 contentEditable 区域，此处留空 */}
+      {/* 正文：NodeViewContent 让 ProseMirror 把内容注入到块内 */}
+      <NodeViewContent className="callout-content" />
     </NodeViewWrapper>
   );
 }
