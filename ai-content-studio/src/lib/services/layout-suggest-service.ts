@@ -19,6 +19,8 @@ export interface SuggestLayoutArgs {
   content: string;
   title?: string;
   style?: LayoutStyle;
+  /** 可选：用户选择的 Prompt 模板 id；未提供时使用内置排版 prompt */
+  promptId?: string;
 }
 
 export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
@@ -31,7 +33,10 @@ export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
   const gen = await generate({
     task: "layout_suggest",
     input,
-    systemPrompt: buildLayoutSuggestPrompt(style),
+    // 用户显式选择了 Prompt 模板时尊重模板（generate 的 resolveSystemPrompt 中
+    // systemPrompt 优先级最高，因此只有未选模板时才注入内置排版 prompt，含克制规则）
+    systemPrompt: args.promptId ? undefined : buildLayoutSuggestPrompt(style),
+    ...(args.promptId ? { promptId: args.promptId } : {}),
     temperature: 0.3,
     maxTokens: 2500,
   });

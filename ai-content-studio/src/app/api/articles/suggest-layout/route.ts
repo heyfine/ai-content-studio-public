@@ -21,6 +21,7 @@ export async function POST(request: Request) {
       content?: string;
       title?: string;
       style?: string;
+      promptId?: string;
     };
     if (!body.content || body.content.trim().length === 0) {
       return NextResponse.json({ error: "正文不能为空" }, { status: 400 });
@@ -34,6 +35,7 @@ export async function POST(request: Request) {
       content: body.content,
       title: body.title,
       style,
+      ...(body.promptId ? { promptId: body.promptId } : {}),
     });
 
     return NextResponse.json({ suggestions, style });

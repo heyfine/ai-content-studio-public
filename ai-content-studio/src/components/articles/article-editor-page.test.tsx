@@ -16,6 +16,37 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogTitle: ({ children }: { children: React.ReactNode }) => <h2>{children}</h2>,
 }));
 
+// 模板选择弹窗：mock 为可控组件，便于断言 open/task 与确认回调
+vi.mock("@/components/studio/template-picker-dialog", () => ({
+  TemplatePickerDialog: ({
+    open,
+    task,
+    templates,
+    onConfirm,
+    onCancel,
+  }: {
+    open: boolean;
+    task: string | null;
+    templates: unknown[];
+    onConfirm: (promptId: string | null) => void;
+    onCancel: () => void;
+  }) => (
+    <div data-testid="template-picker-dialog" data-open={String(open)} data-task={task ?? ""}>
+      <span>templates:{templates.length}</span>
+      <button type="button" onClick={() => onConfirm("p1")}>
+        confirm-p1
+      </button>
+      <button type="button" onClick={() => onConfirm(null)}>
+        confirm-none
+      </button>
+      <button type="button" onClick={onCancel}>
+        cancel
+      </button>
+    </div>
+  ),
+  PromptOption: {},
+}));
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -25,6 +56,8 @@ describe("ArticleEditorPage", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     pushMock.mockReset();
+    // 默认所有 fetch 返回空数组（prompts 列表等），具体请求再用 mockResolvedValueOnce 覆盖
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
   });
 
   it("新建模式：标题为空时提交按钮禁用", () => {
@@ -51,6 +84,10 @@ describe("ArticleEditorPage", () => {
   it("编辑模式：加载已有文章并回填", async () => {
     fetchMock.mockResolvedValueOnce({
       ok: true,
+      json: async () => [],
+    }); // prompts 列表
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
       json: async () => ({
         id: "a1",
         title: "旧标题",
@@ -67,6 +104,10 @@ describe("ArticleEditorPage", () => {
   });
 
   it("编辑模式：提交调用 PUT /api/articles/a1", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [],
+    }); // prompts 列表
     fetchMock.mockResolvedValueOnce({
       ok: true,
       json: async () => ({
@@ -103,5 +144,59 @@ describe("ArticleEditorPage", () => {
     render(<ArticleEditorPage articleId={null} />);
     expect(screen.getByTestId("editable-content")).toBeInTheDocument();
     expect(screen.getByTestId("insert-callout-inline")).toBeInTheDocument();
+  });
+
+  it("AI 智能排版：点击后先弹出模板选择，确认后携带 promptId 请求", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: "p1", name: "排版模板A", type: "layout_suggest" }],
+    }); // prompts 列表
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ suggestions: [] }),
+    }); // suggest-layout 响应
+    render(<ArticleEditorPage articleId={null} />);
+
+    // 初始：弹窗关闭
+    expect(screen.getByTestId("template-picker-dialog")).toHaveAttribute("data-open", "false");
+
+    // 填正文（点击 AI 排版要求正文非空）
+    fireEvent.change(screen.getByTestId("text-segment-0"), {
+      target: { value: "第一段正文内容" },
+    });
+
+    // 点击「AI 智能排版」→ 弹出模板选择（task=layout_suggest）
+    fireEvent.click(screen.getByTestId("ai-layout"));
+    expect(screen.getByTestId("template-picker-dialog")).toHaveAttribute("data-open", "true");
+    expect(screen.getByTestId("template-picker-dialog")).toHaveAttribute(
+      "data-task",
+      "layout_suggest",
+    );
+
+    // 此时尚未发起排版请求
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/articles/suggest-layout",
+      expect.anything(),
+    );
+
+    // 确认模板 → 请求带 promptId
+    fireEvent.click(screen.getByText("confirm-p1"));
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/articles/suggest-layout",
+        expect.objectContaining({
+          method: "POST",
+          body: expect.stringContaining('"promptId":"p1"'),
+        }),
+      );
+    });
+    // 确认后弹窗关闭
+    expect(screen.getByTestId("template-picker-dialog")).toHaveAttribute("data-open", "false");
+  });
+
+  it("AI 智能排版：正文为空时点击不弹模板选择", () => {
+    render(<ArticleEditorPage articleId={null} />);
+    fireEvent.click(screen.getByTestId("ai-layout"));
+    expect(screen.getByTestId("template-picker-dialog")).toHaveAttribute("data-open", "false");
   });
 });

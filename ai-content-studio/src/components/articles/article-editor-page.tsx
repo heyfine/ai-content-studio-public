@@ -19,6 +19,9 @@ import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-
 import type { LayoutSuggestion, LayoutStyle } from "@/lib/content/layout-suggest-types";
 import { LAYOUT_STYLE_LABELS, LAYOUT_STYLES } from "@/lib/content/layout-suggest-types";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
+import { TemplatePickerDialog, type PromptOption } from "@/components/studio/template-picker-dialog";
+import { taskRouteDefinitions } from "@/config/task-routes";
+import { useStudioStore } from "@/stores/studio-store";
 import { CalloutPickerDialog, EditableContent } from "./editable-content";
 import { LayoutSuggestPanel } from "./layout-suggest-panel";
 
@@ -41,11 +44,37 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
   const [layoutLoading, setLayoutLoading] = useState(false);
   const [layoutError, setLayoutError] = useState<string | null>(null);
   const [layoutSuggestions, setLayoutSuggestions] = useState<LayoutSuggestion[] | null>(null);
+  /** AI 智能排版：是否已弹 Prompt 模板选择框 */
+  const [layoutPending, setLayoutPending] = useState(false);
+  /** Prompt 模板列表（供模板选择弹窗过滤展示） */
+  const [prompts, setPrompts] = useState<PromptOption[]>([]);
+  /** 该任务最近一次确认使用的模板（与 AI Studio 共享同一记忆） */
+  const lastLayoutPrompt = useStudioStore((s) => s.lastPromptByTask.layout_suggest ?? null);
+  const setLastPrompt = useStudioStore((s) => s.setLastPrompt);
   const [form, setForm] = useState({
     title: "",
     content: "",
     status: "DRAFT" as ArticleStatus,
   });
+
+  // 加载 Prompt 模板列表（供「AI 智能排版」选择模板时使用）
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const res = await fetch("/api/prompts");
+        if (!res.ok) throw new Error("加载 Prompt 失败");
+        const data = (await res.json()) as unknown;
+        // 防御：接口异常或返回非数组时不破坏模板弹窗
+        setPrompts(Array.isArray(data) ? (data as PromptOption[]) : []);
+      } catch {
+        if (!cancelled) setPrompts([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   // 编辑模式：拉取已有文章（初始 loading = isEdit，无需在此重置）
   useEffect(() => {
@@ -147,18 +176,29 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
     setSuggestions([]);
   }
 
-  async function onSuggestLayout() {
-    setLayoutError(null);
+  /** 点击「AI 智能排版」：先弹 Prompt 模板选择框（与 AI Studio 交互一致） */
+  function handleLayoutClick() {
     if (form.content.trim().length === 0) {
       setLayoutError("正文为空，无法排版");
       return;
     }
+    setLayoutError(null);
+    setLayoutPending(true);
+  }
+
+  /** 模板确认后执行排版 */
+  async function runLayout(promptId: string | null) {
     setLayoutLoading(true);
     try {
       const res = await fetch("/api/articles/suggest-layout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ content: form.content, title: form.title, style: layoutStyle }),
+        body: JSON.stringify({
+          content: form.content,
+          title: form.title,
+          style: layoutStyle,
+          ...(promptId ? { promptId } : {}),
+        }),
       });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
@@ -175,6 +215,13 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
     } finally {
       setLayoutLoading(false);
     }
+  }
+
+  function handleLayoutConfirm(promptId: string | null) {
+    // 记住本次选择（与 AI Studio 共享记忆，下次自动预选）
+    setLastPrompt("layout_suggest", promptId);
+    setLayoutPending(false);
+    void runLayout(promptId);
   }
 
   async function onSubmit() {
@@ -268,7 +315,7 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
                 variant="outline"
                 size="xs"
                 data-testid="ai-layout"
-                onClick={onSuggestLayout}
+                onClick={handleLayoutClick}
                 disabled={layoutLoading || mode !== "edit"}
               >
                 <Sparkles className="size-3.5" />
@@ -429,6 +476,19 @@ export function ArticleEditorPage({ articleId }: ArticleEditorPageProps) {
       </div>
 
       <CalloutPickerDialog open={pickerOpen} onOpenChange={setPickerOpen} onPick={appendCallout} />
+
+      {/* AI 智能排版：先选 Prompt 模板，再执行排版（与 AI Studio 交互一致） */}
+      <TemplatePickerDialog
+        open={layoutPending}
+        task="layout_suggest"
+        taskLabel={
+          taskRouteDefinitions.find((t) => t.value === "layout_suggest")?.label ?? "AI 智能排版"
+        }
+        templates={prompts}
+        remembered={lastLayoutPrompt}
+        onConfirm={handleLayoutConfirm}
+        onCancel={() => setLayoutPending(false)}
+      />
     </div>
   );
 }
