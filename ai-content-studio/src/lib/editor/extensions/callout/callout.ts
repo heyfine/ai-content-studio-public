@@ -54,6 +54,22 @@ export const Callout = Node.create({
         parseHTML: (el) => el.getAttribute("data-icon") ?? "",
         renderHTML: () => ({}),
       },
+      // 用户自定义颜色（空 = 走类型默认色）；只影响渲染，不参与类型判断
+      textColor: {
+        default: "",
+        parseHTML: (el) => el.getAttribute("data-text-color") ?? "",
+        renderHTML: () => ({}),
+      },
+      borderColor: {
+        default: "",
+        parseHTML: (el) => el.getAttribute("data-border-color") ?? "",
+        renderHTML: () => ({}),
+      },
+      fillColor: {
+        default: "",
+        parseHTML: (el) => el.getAttribute("data-fill-color") ?? "",
+        renderHTML: () => ({}),
+      },
     };
   },
 
@@ -69,12 +85,21 @@ export const Callout = Node.create({
     const type: CalloutType = isCalloutType(rawType) ? rawType : CALLOUT_FALLBACK_TYPE;
     const title = (node.attrs.title as string) ?? "";
     const icon = (node.attrs.icon as string) ?? "";
+    const textColor = (node.attrs.textColor as string) ?? "";
+    const borderColor = (node.attrs.borderColor as string) ?? "";
+    const fillColor = (node.attrs.fillColor as string) ?? "";
     const attrs: Record<string, string> = {
       class: `callout callout-${type}`,
       "data-callout": type,
     };
     if (title) attrs["data-title"] = title;
     if (icon) attrs["data-icon"] = icon;
+    // 颜色直接落 style，导出 HTML 时即带自定义色
+    const styleParts: string[] = [];
+    if (textColor) styleParts.push(`color:${textColor}`);
+    if (borderColor) styleParts.push(`border-color:${borderColor}`);
+    if (fillColor) styleParts.push(`background:${fillColor}`);
+    if (styleParts.length) attrs.style = styleParts.join(";");
     return [
       "aside",
       mergeAttributes(HTMLAttributes, attrs),
@@ -115,7 +140,16 @@ export const Callout = Node.create({
           const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
           const title = (node.attrs.title ?? "").trim() || config.label;
           const icon = (node.attrs.icon ?? "").trim() || config.icon;
-          state.write(`:::callout{type="${type}" title="${title}" icon="${icon}"}\n`);
+          const textColor = (node.attrs.textColor ?? "").trim();
+          const borderColor = (node.attrs.borderColor ?? "").trim();
+          const fillColor = (node.attrs.fillColor ?? "").trim();
+          state.write(
+            `:::callout{type="${type}" title="${title}" icon="${icon}"` +
+              (textColor ? ` textColor="${textColor}"` : "") +
+              (borderColor ? ` borderColor="${borderColor}"` : "") +
+              (fillColor ? ` fillColor="${fillColor}"` : "") +
+              `}\n`,
+          );
           state.renderContent(node);
           state.write("\n:::");
         },
@@ -133,10 +167,24 @@ export const Callout = Node.create({
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     callout: {
-      setCallout: (attrs?: { type?: CalloutType; title?: string; icon?: string }) => ReturnType;
+      setCallout: (attrs?: {
+        type?: CalloutType;
+        title?: string;
+        icon?: string;
+        textColor?: string;
+        borderColor?: string;
+        fillColor?: string;
+      }) => ReturnType;
       toggleCallout: () => ReturnType;
       updateCalloutAttrs: (
-        attrs: Partial<{ type: CalloutType; title: string; icon: string }>,
+        attrs: Partial<{
+          type: CalloutType;
+          title: string;
+          icon: string;
+          textColor: string;
+          borderColor: string;
+          fillColor: string;
+        }>,
       ) => ReturnType;
     };
   }

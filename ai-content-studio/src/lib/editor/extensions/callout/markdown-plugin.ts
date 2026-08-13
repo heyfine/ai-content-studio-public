@@ -23,15 +23,25 @@ function parseCalloutAttrs(raw: string): {
   type?: string;
   title?: string;
   icon?: string;
+  textColor?: string;
+  borderColor?: string;
+  fillColor?: string;
 } {
-  const out: { type?: string; title?: string; icon?: string } = {};
+  const out: { type?: string; title?: string; icon?: string; textColor?: string; borderColor?: string; fillColor?: string } = {};
   const inner = raw.replace(/^\{/, "").replace(/\}$/, "");
   const re = /(\w+)\s*=\s*"([^"]*)"|(\w+)\s*=\s*'([^']*)'/g;
   let m = re.exec(inner);
   while (m !== null) {
     const key = m[1] ?? m[3];
     const value = m[2] ?? m[4];
-    if (key === "type" || key === "title" || key === "icon") {
+    if (
+      key === "type" ||
+      key === "title" ||
+      key === "icon" ||
+      key === "textColor" ||
+      key === "borderColor" ||
+      key === "fillColor"
+    ) {
       out[key] = value;
     }
     m = re.exec(inner);
@@ -75,6 +85,9 @@ export function calloutBlockPlugin(md: MarkdownIt): void {
     const type = attrs.type && VALID_TYPES.has(attrs.type) ? attrs.type : FALLBACK;
     const title = attrs.title ?? "";
     const icon = attrs.icon ?? "";
+    const textColor = attrs.textColor ?? "";
+    const borderColor = attrs.borderColor ?? "";
+    const fillColor = attrs.fillColor ?? "";
 
     const bodyStartLine = startLine + 1;
     const bodyEndLine = endLine; // 不含闭合行
@@ -92,6 +105,12 @@ export function calloutBlockPlugin(md: MarkdownIt): void {
       title +
       '" data-icon="' +
       icon +
+      '" data-text-color="' +
+      textColor +
+      '" data-border-color="' +
+      borderColor +
+      '" data-fill-color="' +
+      fillColor +
       '"><div class="callout-title"></div><div class="callout-content">' +
       bodyHtml +
       "</div></aside>";

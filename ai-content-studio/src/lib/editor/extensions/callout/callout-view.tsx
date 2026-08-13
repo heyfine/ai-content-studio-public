@@ -8,6 +8,7 @@ import {
 } from "@tiptap/react";
 
 import { CALLOUT_TYPES, type CalloutType, isCalloutType } from "@/lib/content/callout-types";
+import { CalloutColorPicker } from "./callout-color-picker";
 
 /** 常用可换图标（Emoji/符号），点图标弹出选择 */
 const CALLOUT_EMOJIS = [
@@ -33,13 +34,29 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
   const cfg = CALLOUT_TYPES.find((c) => c.type === type) ?? CALLOUT_TYPES[0];
   const title = (node.attrs.title as string) ?? "";
   const icon = (node.attrs.icon as string) ?? "";
+  const textColor = (node.attrs.textColor as string) ?? "";
+  const borderColor = (node.attrs.borderColor as string) ?? "";
+  const fillColor = (node.attrs.fillColor as string) ?? "";
   const [iconOpen, setIconOpen] = useState(false);
+  const [colorPicker, setColorPicker] = useState<"text" | "border" | "fill" | null>(null);
+
+  const colorValue = (k: "text" | "border" | "fill") =>
+    k === "text" ? textColor : k === "border" ? borderColor : fillColor;
+  const colorAttr = (k: "text" | "border" | "fill") =>
+    k === "text" ? "textColor" : k === "border" ? "borderColor" : "fillColor";
+  const colorLabel = (k: "text" | "border" | "fill") =>
+    k === "text" ? "文字颜色" : k === "border" ? "边框颜色" : "填充颜色";
 
   return (
     <NodeViewWrapper
       as="aside"
       className={`callout callout-${cfg.type}`}
       data-selected={selected ? "true" : undefined}
+      style={{
+        color: textColor || undefined,
+        borderColor: borderColor || undefined,
+        background: fillColor || undefined,
+      }}
     >
       <span
         data-drag-handle
@@ -102,6 +119,50 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
             </>
           )}
         </div>
+
+        {/* 文字/边框/填充颜色 */}
+        {(["text", "border", "fill"] as const).map((k) => (
+          <div key={k} className="callout-color" style={{ position: "relative" }}>
+            <button
+              type="button"
+              className="callout-color-btn"
+              onClick={() => setColorPicker((v) => (v === k ? null : k))}
+              aria-label={colorLabel(k)}
+              title={colorLabel(k)}
+            >
+              {k === "text" ? (
+                <span className="callout-color-swatch-text" style={{ color: textColor || undefined }}>
+                  A
+                </span>
+              ) : (
+                <span
+                  className="callout-color-swatch"
+                  style={
+                    k === "border"
+                      ? { borderColor: borderColor || undefined }
+                      : { background: fillColor || undefined }
+                  }
+                />
+              )}
+            </button>
+            {colorPicker === k && (
+              <>
+                <div className="callout-color-backdrop" onClick={() => setColorPicker(null)} />
+                <CalloutColorPicker
+                  value={colorValue(k)}
+                  onPick={(c) => {
+                    updateAttributes({ [colorAttr(k)]: c } as never);
+                  }}
+                  onClear={() => {
+                    updateAttributes({ [colorAttr(k)]: "" } as never);
+                    setColorPicker(null);
+                  }}
+                />
+              </>
+            )}
+          </div>
+        ))}
+
         <input
           type="text"
           value={title}
