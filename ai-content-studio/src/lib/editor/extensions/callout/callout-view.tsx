@@ -55,7 +55,10 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
       style={{
         color: textColor || undefined,
         borderColor: borderColor || undefined,
-        background: fillColor || undefined,
+        // 填充色加透明度调浅，避免抢文字注意力（飞书式淡色填充）
+        background: fillColor
+          ? `color-mix(in oklab, ${fillColor} 12%, transparent)`
+          : undefined,
       }}
     >
       <span

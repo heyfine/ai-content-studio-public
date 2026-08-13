@@ -98,7 +98,8 @@ export const Callout = Node.create({
     const styleParts: string[] = [];
     if (textColor) styleParts.push(`color:${textColor}`);
     if (borderColor) styleParts.push(`border-color:${borderColor}`);
-    if (fillColor) styleParts.push(`background:${fillColor}`);
+    // 填充色加透明度调浅，与编辑器内保持一致（飞书式淡色填充）
+    if (fillColor) styleParts.push(`background:color-mix(in oklab, ${fillColor} 12%, transparent)`);
     if (styleParts.length) attrs.style = styleParts.join(";");
     return [
       "aside",
