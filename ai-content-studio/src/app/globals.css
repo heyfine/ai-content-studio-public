@@ -261,6 +261,81 @@
 }
 .ProseMirror .callout-icon { font-size: 1.125rem; }
 .ProseMirror .callout-handle { margin-left: auto; }
+
+/* 图标更换面板 */
+.ProseMirror .callout-icon-btn {
+  font-size: 1.125rem;
+  line-height: 1.2;
+  padding: 0.125rem 0.25rem;
+  border-radius: 0.375rem;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.ProseMirror .callout-icon-btn:hover { background: var(--accent); }
+.ProseMirror .callout-icon-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.ProseMirror .callout-icon-panel {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 50;
+  width: 248px;
+  margin-top: 0.25rem;
+  padding: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--popover);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.12);
+}
+.ProseMirror .callout-emoji-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.ProseMirror .callout-emoji-grid button {
+  font-size: 1.05rem;
+  line-height: 1.4;
+  padding: 0.125rem;
+  border-radius: 0.375rem;
+  background: transparent;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+.ProseMirror .callout-emoji-grid button:hover,
+.ProseMirror .callout-emoji-grid button.active { background: var(--accent); }
+.ProseMirror .callout-icon-custom {
+  display: flex;
+  gap: 0.375rem;
+  align-items: center;
+  border-top: 1px solid var(--border);
+  padding-top: 0.5rem;
+}
+.ProseMirror .callout-icon-custom input {
+  flex: 1;
+  min-width: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.375rem;
+  outline: none;
+}
+.ProseMirror .callout-icon-custom input:focus { border-color: var(--ring); }
+.ProseMirror .callout-icon-custom button {
+  flex-shrink: 0;
+  padding: 0.25rem 0.5rem;
+  font-size: 0.8125rem;
+  border-radius: 0.375rem;
+  background: var(--muted);
+  cursor: pointer;
+}
 .ProseMirror .callout-info {
   border-color: color-mix(in oklab, var(--callout-info) 55%, transparent);
   background: color-mix(in oklab, var(--callout-info) 10%, transparent);
