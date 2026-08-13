@@ -193,10 +193,9 @@ describe("EditorPanel 富文本模式", () => {
     render(<EditorPanel />);
     fireEvent.click(screen.getByLabelText("富文本编辑器"));
     fireEvent.click(screen.getByLabelText("应用到原文"));
-    expect(richEditorMock.commands.setContent).toHaveBeenCalledWith(
-      "新生成",
-      { emitUpdate: false },
-    );
+    expect(richEditorMock.commands.setContent).toHaveBeenCalledWith("新生成", {
+      emitUpdate: false,
+    });
     expect(useStudioStore.getState().content).toBe("新生成");
   });
 });

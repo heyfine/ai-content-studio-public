@@ -48,8 +48,7 @@ function filterItems(query: string): SlashItem[] {
   const q = query.trim().toLowerCase();
   if (!q) return menuItems;
   return menuItems.filter(
-    (i) =>
-      i.label.toLowerCase().includes(q) || i.description.toLowerCase().includes(q),
+    (i) => i.label.toLowerCase().includes(q) || i.description.toLowerCase().includes(q),
   );
 }
 
@@ -106,10 +105,7 @@ export const SlashCommand = Extension.create<SlashCommandOptions>({
               chain.insertTable({ rows: 3, cols: 3, withHeaderRow: true });
               break;
             case "image": {
-              const url = window.prompt(
-                this.options.imagePrompt,
-                "https://",
-              );
+              const url = window.prompt(this.options.imagePrompt, "https://");
               if (url) chain.setImage({ src: url });
               break;
             }

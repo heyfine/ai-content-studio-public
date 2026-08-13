@@ -184,7 +184,10 @@ export function ArticlesClient() {
                             <PencilIcon className="size-4" />
                           </Button>
                         </Link>
-                        <Link href={`/articles/tiptap/${r.id}/edit`} data-testid={`tiptap-edit-${r.id}`}>
+                        <Link
+                          href={`/articles/tiptap/${r.id}/edit`}
+                          data-testid={`tiptap-edit-${r.id}`}
+                        >
                           <Button variant="ghost" size="icon" aria-label="Tiptap 编辑">
                             <PenLineIcon className="size-4" />
                           </Button>

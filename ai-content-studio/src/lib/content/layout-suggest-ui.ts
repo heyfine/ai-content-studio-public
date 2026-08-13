@@ -7,11 +7,7 @@
  * - 应用是「结构变换」：callout 包裹、加粗、标题、引用、列表、拆分、
  *   移除高亮，均不增减或篡改原文文字（AI 不得编造 newText 内容）。
  */
-import {
-  CALLOUT_FALLBACK_TYPE,
-  CALLOUT_TYPES,
-  isCalloutType,
-} from "@/lib/content/callout-types";
+import { CALLOUT_FALLBACK_TYPE, CALLOUT_TYPES, isCalloutType } from "@/lib/content/callout-types";
 import { findCalloutRanges } from "@/lib/content/render";
 import { findOriginalTextRange } from "@/lib/content/callout-suggest-ui";
 import type { LayoutSuggestion } from "@/lib/content/layout-suggest-types";
@@ -73,9 +69,7 @@ export function buildLayoutReplacement(original: string, s: LayoutSuggestion): s
 export function applyLayoutSuggestion(content: string, suggestion: LayoutSuggestion): string {
   const located = locateAndBuild(content, suggestion);
   if (!located) return content;
-  return (
-    content.slice(0, located.start) + located.replacement + content.slice(located.end)
-  );
+  return content.slice(0, located.start) + located.replacement + content.slice(located.end);
 }
 
 /**
@@ -83,10 +77,7 @@ export function applyLayoutSuggestion(content: string, suggestion: LayoutSuggest
  * 先在原始正文上统一定位，再按区间结束位置逆序替换，避免前面替换影响后面的索引。
  * 定位失败的条目标安全跳过；重复建议（同区间）只保留一条，防止双重重叠替换。
  */
-export function applyLayoutSuggestions(
-  content: string,
-  suggestions: LayoutSuggestion[],
-): string {
+export function applyLayoutSuggestions(content: string, suggestions: LayoutSuggestion[]): string {
   interface Located {
     start: number;
     end: number;

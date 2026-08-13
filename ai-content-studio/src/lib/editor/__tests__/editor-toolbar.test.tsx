@@ -38,7 +38,7 @@ function makeChainMock() {
     isActive: vi.fn(() => false),
     commands: { setImage: vi.fn() },
   } as unknown as Parameters<typeof EditorToolbar>[0]["editor"];
-  return { editor, run, chain };
+  return { editor, run, chain, chainObj };
 }
 
 describe("EditorToolbar", () => {
@@ -63,14 +63,17 @@ describe("EditorToolbar", () => {
     render(<EditorToolbar editor={m.editor} />);
     fireEvent.click(screen.getByLabelText("加粗"));
     expect(m.chain).toHaveBeenCalled();
+    expect(m.chainObj.__toggleBold).toHaveBeenCalled();
+    expect(m.run).toHaveBeenCalled();
   });
 
   it("点击标题 1 触发 setHeading level 1", () => {
     const m = makeChainMock();
     render(<EditorToolbar editor={m.editor} />);
     fireEvent.click(screen.getByLabelText("标题 1"));
-    // chain() 被调用（内部 .focus().setHeading(...).run()）
     expect(m.chain).toHaveBeenCalled();
+    expect(m.chainObj.__setHeading).toHaveBeenCalledWith({ level: 1 });
+    expect(m.run).toHaveBeenCalled();
   });
 
   it("点击表格触发 insertTable", () => {
@@ -78,6 +81,12 @@ describe("EditorToolbar", () => {
     render(<EditorToolbar editor={m.editor} />);
     fireEvent.click(screen.getByLabelText("表格"));
     expect(m.chain).toHaveBeenCalled();
+    expect(m.chainObj.__insertTable).toHaveBeenCalledWith({
+      rows: 3,
+      cols: 3,
+      withHeaderRow: true,
+    });
+    expect(m.run).toHaveBeenCalled();
   });
 
   it("高亮块下拉 trigger 渲染", () => {

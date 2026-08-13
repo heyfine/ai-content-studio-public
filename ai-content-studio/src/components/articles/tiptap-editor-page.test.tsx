@@ -12,9 +12,7 @@ const editorMock = {
   getHTML: vi.fn(() => "<p>正文</p>"),
 };
 vi.mock("@tiptap/react", () => ({
-  EditorContent: ({ editor: _e }: { editor: unknown }) => (
-    <div data-testid="tiptap-editor-mount" />
-  ),
+  EditorContent: ({ editor: _e }: { editor: unknown }) => <div data-testid="tiptap-editor-mount" />,
   useEditor: () => editorMock,
 }));
 
@@ -129,8 +127,6 @@ describe("TiptapEditorPage", () => {
       }),
     });
     render(<TiptapEditorPage articleId="a1" />);
-    await waitFor(() =>
-      expect(screen.getByTestId("tiptap-editor-mount")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByTestId("tiptap-editor-mount")).toBeInTheDocument());
   });
 });

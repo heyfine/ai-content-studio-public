@@ -66,9 +66,7 @@ export const Callout = Node.create({
     // 自动 escape & 和 "，浏览器在 RCDATA attr value 段里不会把 < > 解析为元素，
     // 故这里塞 raw 字符串即可（手动 escape 会造成双重实体化，见 spec §4.4 注）。
     const rawType = (node.attrs.type as string) ?? CALLOUT_FALLBACK_TYPE;
-    const type: CalloutType = isCalloutType(rawType)
-      ? rawType
-      : CALLOUT_FALLBACK_TYPE;
+    const type: CalloutType = isCalloutType(rawType) ? rawType : CALLOUT_FALLBACK_TYPE;
     const title = (node.attrs.title as string) ?? "";
     const icon = (node.attrs.icon as string) ?? "";
     const attrs: Record<string, string> = {
@@ -114,13 +112,10 @@ export const Callout = Node.create({
           const type: CalloutType = isCalloutType(node.attrs.type)
             ? node.attrs.type
             : CALLOUT_FALLBACK_TYPE;
-          const config =
-            CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
+          const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
           const title = (node.attrs.title ?? "").trim() || config.label;
           const icon = (node.attrs.icon ?? "").trim() || config.icon;
-          state.write(
-            `:::callout{type="${type}" title="${title}" icon="${icon}"}\n`,
-          );
+          state.write(`:::callout{type="${type}" title="${title}" icon="${icon}"}\n`);
           state.renderContent(node);
           state.write("\n:::");
         },
@@ -138,9 +133,7 @@ export const Callout = Node.create({
 declare module "@tiptap/core" {
   interface Commands<ReturnType> {
     callout: {
-      setCallout: (
-        attrs?: { type?: CalloutType; title?: string; icon?: string },
-      ) => ReturnType;
+      setCallout: (attrs?: { type?: CalloutType; title?: string; icon?: string }) => ReturnType;
       toggleCallout: () => ReturnType;
       updateCalloutAttrs: (
         attrs: Partial<{ type: CalloutType; title: string; icon: string }>,

@@ -113,14 +113,11 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         contentHtml: html,
         contentMd: content,
       };
-      const res = await fetch(
-        isEdit ? `/api/articles/${initial.id}` : "/api/articles",
-        {
-          method: isEdit ? "PUT" : "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(body),
-        },
-      );
+      const res = await fetch(isEdit ? `/api/articles/${initial.id}` : "/api/articles", {
+        method: isEdit ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         setError(err.error ?? "操作失败");

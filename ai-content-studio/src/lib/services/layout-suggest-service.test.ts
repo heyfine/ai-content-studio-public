@@ -4,7 +4,13 @@ import { parseLayoutSuggestions } from "./layout-suggest-service";
 describe("parseLayoutSuggestions", () => {
   it("解析正常 JSON 数组（多种动作）", () => {
     const raw = JSON.stringify([
-      { action: "callout", originalText: "注意这段", type: "warning", title: "注意", reason: "有风险" },
+      {
+        action: "callout",
+        originalText: "注意这段",
+        type: "warning",
+        title: "注意",
+        reason: "有风险",
+      },
       { action: "bold", originalText: "核心观点", reason: "值得突出" },
       { action: "split", originalText: "长段落", newText: "第一段\n\n第二段", reason: "太长" },
     ]);
@@ -17,7 +23,8 @@ describe("parseLayoutSuggestions", () => {
   });
 
   it("解析 ```json 包裹的输出", () => {
-    const raw = '```json\n[{"action":"callout","originalText":"段落","type":"info","title":"信息","reason":"补充"}]\n```';
+    const raw =
+      '```json\n[{"action":"callout","originalText":"段落","type":"info","title":"信息","reason":"补充"}]\n```';
     const result = parseLayoutSuggestions(raw);
     expect(result).toHaveLength(1);
     expect(result[0].action).toBe("callout");

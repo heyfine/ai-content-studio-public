@@ -61,12 +61,9 @@ describe("Tiptap callout: Markdown 基础往返", () => {
 
 describe("Tiptap callout: :::callout 互转契约", () => {
   it("三属性序列化保序 type → title → icon", () => {
-    const md =
-      ':::callout{type="warning" title="注意" icon="⚠️"}\n内容\n:::';
+    const md = ':::callout{type="warning" title="注意" icon="⚠️"}\n内容\n:::';
     const out = roundtrip(md);
-    expect(out).toMatch(
-      /:::callout\{type="warning" title="注意" icon="⚠️"\}/,
-    );
+    expect(out).toMatch(/:::callout\{type="warning" title="注意" icon="⚠️"\}/);
   });
 
   it("7 种 type 全部往返（对齐 render.test.ts 7 类型）", () => {
@@ -92,8 +89,7 @@ describe("Tiptap callout: :::callout 互转契约", () => {
   });
 
   it("callout body 内 Markdown 仍渲染（契约 4）", () => {
-    const md =
-      ':::callout{type="info"}\n**加粗** 与 [链接](https://x.com)\n:::';
+    const md = ':::callout{type="info"}\n**加粗** 与 [链接](https://x.com)\n:::';
     const editor = makeEditor(md);
     const html = editor.getHTML();
     editor.destroy();

@@ -2,11 +2,7 @@
 
 import { NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 
-import {
-  CALLOUT_TYPES,
-  type CalloutType,
-  isCalloutType,
-} from "@/lib/content/callout-types";
+import { CALLOUT_TYPES, type CalloutType, isCalloutType } from "@/lib/content/callout-types";
 
 /**
  * Callout 块的 React NodeView —— 编辑器内就地渲染。
@@ -17,12 +13,7 @@ import {
  * - 正文由 NodeView 自动注入 contentEditable，不手写 <div contentEditable>
  * - 配色复用 CALLOUT_CSS（与 preview/WP 同 token）
  */
-export function CalloutView({
-  node,
-  updateAttributes,
-  selected,
-  deleteNode,
-}: NodeViewProps) {
+export function CalloutView({ node, updateAttributes, selected, deleteNode }: NodeViewProps) {
   const rawType = (node.attrs.type as string) ?? "";
   const type: CalloutType = isCalloutType(rawType) ? rawType : "neutral";
   const cfg = CALLOUT_TYPES.find((c) => c.type === type) ?? CALLOUT_TYPES[0];
@@ -66,9 +57,7 @@ export function CalloutView({
         />
         <select
           value={type}
-          onChange={(e) =>
-            updateAttributes({ type: e.target.value as CalloutType })
-          }
+          onChange={(e) => updateAttributes({ type: e.target.value as CalloutType })}
           aria-label="高亮块类型"
         >
           {CALLOUT_TYPES.map((c) => (

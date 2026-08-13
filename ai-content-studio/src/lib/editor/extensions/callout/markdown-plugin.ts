@@ -39,15 +39,7 @@ function parseCalloutAttrs(raw: string): {
   return out;
 }
 
-const VALID_TYPES = new Set([
-  "info",
-  "tip",
-  "warning",
-  "danger",
-  "note",
-  "insight",
-  "neutral",
-]);
+const VALID_TYPES = new Set(["info", "tip", "warning", "danger", "note", "insight", "neutral"]);
 const FALLBACK = "neutral";
 
 /**
@@ -80,8 +72,7 @@ export function calloutBlockPlugin(md: MarkdownIt): void {
 
     const attrsRaw = openMatch[1] ?? "{}";
     const attrs = parseCalloutAttrs(attrsRaw);
-    const type =
-      attrs.type && VALID_TYPES.has(attrs.type) ? attrs.type : FALLBACK;
+    const type = attrs.type && VALID_TYPES.has(attrs.type) ? attrs.type : FALLBACK;
     const title = attrs.title ?? "";
     const icon = attrs.icon ?? "";
 
@@ -93,10 +84,17 @@ export function calloutBlockPlugin(md: MarkdownIt): void {
 
     const token = state.push("html_block", "div", 0);
     token.content =
-      '<aside class="callout callout-' + type + '" data-callout="' + type +
-      '" data-title="' + title + '" data-icon="' + icon +
+      '<aside class="callout callout-' +
+      type +
+      '" data-callout="' +
+      type +
+      '" data-title="' +
+      title +
+      '" data-icon="' +
+      icon +
       '"><div class="callout-title"></div><div class="callout-content">' +
-      bodyHtml + '</div></aside>';
+      bodyHtml +
+      "</div></aside>";
     token.map = [startLine, endLine + 1];
     token.markup = ":::callout";
 

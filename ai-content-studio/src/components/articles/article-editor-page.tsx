@@ -19,7 +19,10 @@ import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-
 import type { LayoutSuggestion, LayoutStyle } from "@/lib/content/layout-suggest-types";
 import { LAYOUT_STYLE_LABELS, LAYOUT_STYLES } from "@/lib/content/layout-suggest-types";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
-import { TemplatePickerDialog, type PromptOption } from "@/components/studio/template-picker-dialog";
+import {
+  TemplatePickerDialog,
+  type PromptOption,
+} from "@/components/studio/template-picker-dialog";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { useStudioStore } from "@/stores/studio-store";
 import { CalloutPickerDialog, EditableContent } from "./editable-content";

@@ -79,10 +79,7 @@ export function parseLayoutSuggestions(
 
   const limits = LAYOUT_STYLE_LIMITS[style];
   const items = arr
-    .filter(
-      (item): item is Record<string, unknown> =>
-        typeof item === "object" && item !== null,
-    )
+    .filter((item): item is Record<string, unknown> => typeof item === "object" && item !== null)
     .map((item): LayoutSuggestion | null => {
       const action = String(item.action ?? "");
       if (!isLayoutActionType(action)) return null;
@@ -95,16 +92,12 @@ export function parseLayoutSuggestions(
           action === "callout" && isCalloutType(String(item.type))
             ? (String(item.type) as LayoutSuggestion["type"])
             : undefined,
-        title:
-          action === "callout"
-            ? String(item.title ?? "").slice(0, 20)
-            : undefined,
+        title: action === "callout" ? String(item.title ?? "").slice(0, 20) : undefined,
         newText:
           action === "split" || action === "list" || action === "bold"
             ? String(item.newText ?? "").slice(0, 2000)
             : undefined,
-        headingLevel:
-          action === "heading" ? clampHeadingLevel(item.headingLevel) : undefined,
+        headingLevel: action === "heading" ? clampHeadingLevel(item.headingLevel) : undefined,
         reason: String(item.reason ?? "").slice(0, 200),
       };
     })

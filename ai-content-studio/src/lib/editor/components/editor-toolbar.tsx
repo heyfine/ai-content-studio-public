@@ -35,10 +35,11 @@ export interface EditorToolbarProps {
 }
 
 /**
- * 把焦点同步送入编辑器 DOM（而非依赖 chain().focus()）。
+ * 同步聚焦编辑器 DOM（绕过 chain().focus() 的状态检查）。
+ * 这是修复块级命令无效的关键：直接操作 DOM，确保编辑器处于焦点状态。
  */
 function focusEditor(ed: Editor): void {
-  // 尝试 commands.focus()（如果存在）
+  // 尝试 editor.commands.focus()
   const cmds = (ed as unknown as Record<string, unknown>).commands as
     | Record<string, unknown>
     | undefined;
@@ -46,10 +47,9 @@ function focusEditor(ed: Editor): void {
     cmds.focus();
   }
   // 通过 view.dom 获取 contentDOM 并 focus
-  const pmView = (ed as unknown as { view?: { dom?: HTMLElement | null } })
-    .view;
+  const pmView = (ed as unknown as { view?: { dom?: HTMLElement | null } }).view;
   pmView?.dom?.focus({ preventScroll: true });
-  // 兜底：直接找 .ProseMirror 容器
+  // 兜底：查找最外层 ProseMirror 容器并 focus
   if (!pmView?.dom) {
     const el = document.querySelector(".ProseMirror");
     if (el) (el as HTMLElement).focus({ preventScroll: true });

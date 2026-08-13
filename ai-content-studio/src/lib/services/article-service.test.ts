@@ -123,17 +123,17 @@ describe("article-service", () => {
     const json = { type: "doc", content: [] };
     await createArticle({
       title: "Tiptap 文章",
-      content: ":::callout{type=\"info\"}\n内容\n:::",
+      content: ':::callout{type="info"}\n内容\n:::',
       contentJson: json,
       contentHtml: "<p>内容</p>",
-      contentMd: ":::callout{type=\"info\"}\n内容\n:::",
+      contentMd: ':::callout{type="info"}\n内容\n:::',
     });
     expect(create).toHaveBeenCalledWith({
       data: expect.objectContaining({
         title: "Tiptap 文章",
         contentJson: json,
         contentHtml: "<p>内容</p>",
-        contentMd: ":::callout{type=\"info\"}\n内容\n:::",
+        contentMd: ':::callout{type="info"}\n内容\n:::',
       }),
     });
   });

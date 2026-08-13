@@ -5,10 +5,7 @@ import { Check, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
 import { applyLayoutSuggestions } from "@/lib/content/layout-suggest-ui";
-import {
-  LAYOUT_ACTION_LABELS,
-  type LayoutSuggestion,
-} from "@/lib/content/layout-suggest-types";
+import { LAYOUT_ACTION_LABELS, type LayoutSuggestion } from "@/lib/content/layout-suggest-types";
 import { CALLOUT_TYPES } from "@/lib/content/callout-types";
 
 const ACTION_BADGE_STYLES: Record<string, string> = {
@@ -145,9 +142,7 @@ export function LayoutSuggestPanel({
                   {s.originalText.length > 60 ? "…" : ""}」
                 </p>
                 <SuggestionDetail s={s} />
-                {s.reason && (
-                  <p className="text-xs text-muted-foreground/80">{s.reason}</p>
-                )}
+                {s.reason && <p className="text-xs text-muted-foreground/80">{s.reason}</p>}
               </div>
             </li>
           ))}

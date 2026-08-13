@@ -1,8 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  applyLayoutSuggestion,
-  applyLayoutSuggestions,
-} from "./layout-suggest-ui";
+import { applyLayoutSuggestion, applyLayoutSuggestions } from "./layout-suggest-ui";
 import type { LayoutSuggestion } from "./layout-suggest-types";
 import { scanCalloutSegments } from "./render";
 
@@ -119,7 +116,8 @@ describe("buildLayoutReplacement / applyLayoutSuggestion", () => {
   });
 
   it("remove_callout：把高亮块拆回普通正文", () => {
-    const content = "前文\n:::callout{type=\"info\" title=\"信息\" icon=\"ℹ️\"}\n这里内容不够重要\n:::\n后文";
+    const content =
+      '前文\n:::callout{type="info" title="信息" icon="ℹ️"}\n这里内容不够重要\n:::\n后文';
     const s: LayoutSuggestion = {
       action: "remove_callout",
       originalText: "这里内容不够重要",
@@ -147,7 +145,7 @@ describe("buildLayoutReplacement / applyLayoutSuggestion", () => {
       originalText: "不存在",
       reason: "",
     };
-    const content = ":::callout{type=\"info\" title=\"信息\" icon=\"ℹ️\"}\n实际内容\n:::";
+    const content = ':::callout{type="info" title="信息" icon="ℹ️"}\n实际内容\n:::';
     expect(applyLayoutSuggestion(content, s)).toBe(content);
   });
 });

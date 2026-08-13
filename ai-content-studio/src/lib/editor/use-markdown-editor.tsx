@@ -81,8 +81,7 @@ export function useMarkdownEditor(options: {
     immediatelyRender: false,
     onUpdate({ editor }) {
       const storage = editor.storage as unknown as Record<string, unknown>;
-      const md =
-        (storage.markdown as { getMarkdown?: () => string } | undefined) ?? null;
+      const md = (storage.markdown as { getMarkdown?: () => string } | undefined) ?? null;
       options.onChange?.(md?.getMarkdown?.() ?? "");
     },
   });

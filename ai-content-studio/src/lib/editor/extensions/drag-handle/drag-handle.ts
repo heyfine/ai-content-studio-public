@@ -79,9 +79,11 @@ export const DragHandle = Extension.create<DragHandleOptions>({
               if (!node) return false;
               view.dispatch(
                 view.state.tr.setSelection(
-                  new (view.state.selection.constructor as {
-                    new (doc: unknown, pos: number): never;
-                  })(view.state.doc, pos.pos),
+                  new (
+                    view.state.selection.constructor as {
+                      new (doc: unknown, pos: number): never;
+                    }
+                  )(view.state.doc, pos.pos),
                 ),
               );
               return false;

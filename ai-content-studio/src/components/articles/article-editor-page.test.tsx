@@ -174,10 +174,7 @@ describe("ArticleEditorPage", () => {
     );
 
     // 此时尚未发起排版请求
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/articles/suggest-layout",
-      expect.anything(),
-    );
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/articles/suggest-layout", expect.anything());
 
     // 确认模板 → 请求带 promptId
     fireEvent.click(screen.getByText("confirm-p1"));
