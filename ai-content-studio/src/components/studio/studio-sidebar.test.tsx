@@ -81,7 +81,7 @@ describe("StudioSidebar", () => {
     render(<StudioSidebar />);
     await waitFor(() => expect(screen.getByText("AI 操作")).toBeInTheDocument());
     expect(screen.getByTestId("article-actions")).toBeInTheDocument();
-    expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(8);
+    expect(screen.getAllByRole("button").filter((b) => b.dataset.action).length).toBe(9);
     expect(screen.getByText("当前任务")).toBeInTheDocument();
     expect(screen.queryByLabelText("选择 Prompt")).not.toBeInTheDocument();
   });
