@@ -153,6 +153,7 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
                 <div className="callout-color-backdrop" onClick={() => setColorPicker(null)} />
                 <CalloutColorPicker
                   value={colorValue(k)}
+                  mode={k === "fill" ? "fill" : "solid"}
                   onPick={(c) => {
                     updateAttributes({ [colorAttr(k)]: c } as never);
                   }}

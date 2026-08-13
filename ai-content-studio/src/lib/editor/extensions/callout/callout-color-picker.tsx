@@ -14,10 +14,20 @@ export interface CalloutColorPickerProps {
   value: string;
   onPick: (color: string) => void;
   onClear: () => void;
+  /**
+   * 色块预览模式：fill 时按实际渲染效果（12% 透明度浅色 + 同色细边）显示，
+   * 让调色板所见即所得；默认纯色（文字/边框用）。
+   */
+  mode?: "solid" | "fill";
 }
 
 /** 预设色板 + 自定义取色器 + 恢复默认 */
-export function CalloutColorPicker({ value, onPick, onClear }: CalloutColorPickerProps) {
+export function CalloutColorPicker({
+  value,
+  onPick,
+  onClear,
+  mode = "solid",
+}: CalloutColorPickerProps) {
   const normalized = value.toLowerCase();
   return (
     <div className="callout-color-panel" role="dialog" aria-label="选择颜色">
@@ -27,7 +37,14 @@ export function CalloutColorPicker({ value, onPick, onClear }: CalloutColorPicke
             key={c}
             type="button"
             className={normalized === c.toLowerCase() ? "active" : ""}
-            style={{ background: c }}
+            style={
+              mode === "fill"
+                ? {
+                    background: `color-mix(in oklab, ${c} 12%, transparent)`,
+                    borderColor: c,
+                  }
+                : { background: c }
+            }
             onClick={() => onPick(c)}
             aria-label={`颜色 ${c}`}
           />
