@@ -85,22 +85,46 @@ function GenerationCard({ g }: { g: GenerationItem }) {
   );
 }
 
-export function EditorPanel() {
-  const { title, content, setTitle, setContent, generations, clearGenerations } = useStudioStore();
-  const [mode, setMode] = useState<"classic" | "rich">("classic");
-
-  const richEditor = useMarkdownEditor({
-    initialContent: content,
+/**
+ * 富文本编辑器宿主：仅在 mode === "rich" 时挂载，保证 useMarkdownEditor 的
+ * initialContent 在创建瞬间即为最新 store 内容（Tiptap useEditor 不响应
+ * content 后续变化——若顶层常驻创建，经典模式输入的内容切富文本后会丢失）。
+ */
+function RichEditorHost({
+  initial,
+  onChange,
+}: {
+  initial: string;
+  onChange: (md: string) => void;
+}) {
+  const editor = useMarkdownEditor({
+    initialContent: initial,
     editable: true,
-    onChange: (md) => setContent(md),
+    onChange,
   });
 
   // 富文本编辑器实例桥接：挂载注册 / 卸载注销（供应用到原文与流式直刷）
   useEffect(() => {
-    if (mode !== "rich") return;
-    registerEditor(richEditor);
+    registerEditor(editor);
     return () => unregisterEditor();
-  }, [mode, richEditor]);
+  }, [editor]);
+
+  return (
+    <div
+      className="flex min-h-[120px] flex-1 flex-col gap-2"
+      data-testid="rich-editor-host"
+    >
+      <EditorToolbar editor={editor} />
+      <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-input px-3 py-2 text-sm [&_.ProseMirror]:min-h-[80px] [&_.ProseMirror]:outline-none">
+        <EditorContent editor={editor} className="rich-editor" />
+      </div>
+    </div>
+  );
+}
+
+export function EditorPanel() {
+  const { title, content, setTitle, setContent, generations, clearGenerations } = useStudioStore();
+  const [mode, setMode] = useState<"classic" | "rich">("classic");
 
   return (
     <div className="flex h-full flex-col" data-testid="editor-panel">
@@ -150,15 +174,7 @@ export function EditorPanel() {
               onChange={(e) => setContent(e.target.value)}
             />
           ) : (
-            <div
-              className="flex min-h-[120px] flex-1 flex-col gap-2"
-              data-testid="rich-editor-host"
-            >
-              <EditorToolbar editor={richEditor} />
-              <div className="min-h-0 flex-1 overflow-y-auto rounded-md border border-input px-3 py-2 text-sm [&_.ProseMirror]:min-h-[80px] [&_.ProseMirror]:outline-none">
-                <EditorContent editor={richEditor} className="rich-editor" />
-              </div>
-            </div>
+            <RichEditorHost initial={content} onChange={setContent} />
           )}
         </section>
         <section className="flex min-h-0 flex-1 flex-col">
