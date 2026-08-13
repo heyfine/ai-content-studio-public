@@ -21,6 +21,10 @@ vi.mock("@tiptap/react", () => ({
 // useMarkdownEditor 内部依赖这些扩展，mock 掉避免真实初始化
 vi.mock("@/lib/editor/extensions/callout/callout", () => ({ Callout: {} }));
 vi.mock("@/lib/editor/extensions/markdown", () => ({ Markdown: {} }));
+// 工具栏行为由 editor-toolbar.test.tsx 独立覆盖；页面测试聚焦数据流
+vi.mock("@/lib/editor/components/editor-toolbar", () => ({
+  EditorToolbar: () => <div data-testid="editor-toolbar-mount" />,
+}));
 
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;

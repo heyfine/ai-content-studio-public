@@ -13,6 +13,7 @@ import {
 } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
+import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 
 export interface TiptapEditorPageProps {
   articleId: string | null;
@@ -191,11 +192,11 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         </div>
         <div className="space-y-2">
           <Label htmlFor="article-content">正文</Label>
-          <div
-            className="min-h-[45vh] w-full rounded-md border p-3 [&_.ProseMirror]:min-h-[40vh] [&_.ProseMirror]:outline-none"
-            data-testid="tiptap-editor-host"
-          >
-            <EditorContent editor={editor} className="tiptap-editor" />
+          <div className="flex flex-col gap-2" data-testid="tiptap-editor-host">
+            <EditorToolbar editor={editor} />
+            <div className="min-h-[45vh] w-full rounded-md border p-3 [&_.ProseMirror]:min-h-[40vh] [&_.ProseMirror]:outline-none">
+              <EditorContent editor={editor} className="tiptap-editor" />
+            </div>
           </div>
           <p className="text-xs text-muted-foreground">
             支持 Markdown 语法 + 高亮块 · 保存后经典编辑器同样可读
