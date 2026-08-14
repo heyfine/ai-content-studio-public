@@ -1,12 +1,18 @@
 "use client";
 
-/** 高亮块文字/边框/填充颜色调色板 */
+/** WPS 风格调色板：当前色预览 + 标准色网格（10 色系 × 6 深浅）+ 自定义 */
 
-export const CALLCOLOR_PALETTE = [
-  "#1f2937", "#374151", "#6b7280", "#9ca3af", "#e5e7eb", "#ffffff",
-  "#ef4444", "#f97316", "#f59e0b", "#eab308", "#84cc16", "#22c55e",
-  "#10b981", "#14b8a6", "#06b6d4", "#0ea5e9", "#3b82f6", "#6366f1",
-  "#8b5cf6", "#a855f7", "#d946ef", "#ec4899", "#f43f5e", "#78716c",
+const STANDARD_COLORS: string[][] = [
+  ["#FFFFFF", "#F5F5F5", "#D9D9D9", "#BFBFBF", "#808080", "#000000"],
+  ["#FFF1F0", "#FFCCC7", "#FFA39E", "#FF4D4F", "#CF1322", "#820014"],
+  ["#FFF7E6", "#FFE7BA", "#FFD591", "#FFA940", "#D46B08", "#873800"],
+  ["#FEFFE6", "#FFFFB8", "#FFFB8F", "#FADB14", "#D4B106", "#614700"],
+  ["#F6FFED", "#D9F7BE", "#B7EB8F", "#73D13D", "#389E0D", "#135200"],
+  ["#E6FFFB", "#B5F5EC", "#87E8DE", "#36CFC9", "#08979C", "#00474F"],
+  ["#E6F4FF", "#BAE0FF", "#91CAFF", "#40A9FF", "#096DD9", "#003A8C"],
+  ["#F9F0FF", "#EFDBFF", "#D3ADF7", "#9254DE", "#531DAB", "#22075E"],
+  ["#FFF0F6", "#FFD6E7", "#FFADD2", "#EB2F96", "#C41D7F", "#780650"],
+  ["#FBF5F0", "#EFE3DA", "#D9BFA9", "#8C6D46", "#614C34", "#3E2E20"],
 ];
 
 export interface CalloutColorPickerProps {
@@ -21,7 +27,7 @@ export interface CalloutColorPickerProps {
   mode?: "solid" | "fill";
 }
 
-/** 预设色板 + 自定义取色器 + 恢复默认 */
+/** WPS 风格调色板：当前色预览 + 标准色 + 自定义 */
 export function CalloutColorPicker({
   value,
   onPick,
@@ -29,39 +35,69 @@ export function CalloutColorPicker({
   mode = "solid",
 }: CalloutColorPickerProps) {
   const normalized = value.toLowerCase();
+  const current = /^#[0-9a-fA-F]{6}$/.test(value) ? value : "";
+
   return (
-    <div className="callout-color-panel" role="dialog" aria-label="选择颜色">
-      <div className="callout-color-grid">
-        {CALLCOLOR_PALETTE.map((c) => (
-          <button
-            key={c}
-            type="button"
-            className={normalized === c.toLowerCase() ? "active" : ""}
-            style={
-              mode === "fill"
-                ? {
-                    background: `color-mix(in oklab, ${c} 12%, transparent)`,
-                    borderColor: c,
-                  }
-                : { background: c }
-            }
-            onClick={() => onPick(c)}
-            aria-label={`颜色 ${c}`}
-          />
+    <div className="callout-color-panel wps-palette" role="dialog" aria-label="选择颜色">
+      {/* 当前颜色预览（点击清除） */}
+      <div className="wps-palette-current">
+        <button
+          type="button"
+          className={`wps-palette-swatch${current ? "" : " empty"}`}
+          style={
+            current
+              ? {
+                  background:
+                    mode === "fill"
+                      ? `color-mix(in oklab, ${current} 12%, transparent)`
+                      : current,
+                  borderColor: mode === "fill" ? current : undefined,
+                }
+              : undefined
+          }
+          onClick={onClear}
+          aria-label="清除颜色"
+          title="点击清除颜色"
+        />
+        <span className="wps-palette-hex">{current ? current.toUpperCase() : "无填充"}</span>
+      </div>
+
+      {/* 标准色网格 */}
+      <div className="wps-palette-grid">
+        {STANDARD_COLORS.map((row, ri) => (
+          <div key={ri} className="wps-palette-row">
+            {row.map((c) => (
+              <button
+                key={c}
+                type="button"
+                className={normalized === c.toLowerCase() ? "active" : ""}
+                style={
+                  mode === "fill"
+                    ? {
+                        background: `color-mix(in oklab, ${c} 12%, transparent)`,
+                        borderColor: c,
+                      }
+                    : { background: c }
+                }
+                onClick={() => onPick(c)}
+                aria-label={`颜色 ${c}`}
+              />
+            ))}
+          </div>
         ))}
       </div>
-      <div className="callout-color-custom">
+
+      {/* 自定义颜色 */}
+      <div className="wps-palette-custom">
         <input
           type="color"
-          value={/^#[0-9a-fA-F]{6}$/.test(value) ? value : "#3b82f6"}
+          value={current || "#3b82f6"}
           onChange={(e) => onPick(e.target.value)}
           aria-label="自定义颜色"
         />
-        <span className="callout-color-hex">
-          {value && /^#[0-9a-fA-F]{6}$/.test(value) ? value.toUpperCase() : "自定义…"}
-        </span>
+        <span className="wps-palette-custom-label">自定义</span>
         <button type="button" onClick={onClear}>
-          默认
+          清除
         </button>
       </div>
     </div>
