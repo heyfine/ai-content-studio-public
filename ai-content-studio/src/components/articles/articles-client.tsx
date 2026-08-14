@@ -3,15 +3,14 @@
 import {
   Archive as ArchiveIcon,
   Download as DownloadIcon,
-  Pencil as PencilIcon,
   Plus as PlusIcon,
-  RefreshCw as RefreshIcon,
+  Search as SearchIcon,
   Server as ServerIcon,
-  Trash2 as Trash2Icon,
 } from "lucide-react";
 import Link from "next/link";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import {
   Select,
   SelectContent,
@@ -19,23 +18,29 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { isStaleArticle } from "@/lib/article-staleness";
+import { ARTICLE_STATUS_LIST, ARTICLE_STATUS_LABELS } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
-import { ArticleStatusBadge } from "./article-status-badge";
+import { ArticlesTable } from "./articles-table";
+import type { RefreshOutcome } from "./articles-table";
 
-interface RefreshOutcome {
-  articleId: string;
-  oldSeoScore: number | null;
-  newSeoScore: number;
-  delta: number;
+interface WordpressConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
 }
 
-function scoreCell(score: number | null): React.ReactNode {
-  if (score === null) return <span className="text-muted-foreground">—</span>;
-  const cls =
-    score >= 80 ? "text-emerald-600" : score >= 60 ? "text-amber-600" : "text-destructive";
-  return <span className={cls}>{score}</span>;
-}
+type SyncFilter = "ALL" | "SYNCED" | "CONFLICT" | "FAILED" | "NONE";
+
+const SYNC_FILTER_LABELS: Record<SyncFilter, string> = {
+  ALL: "全部",
+  SYNCED: "已同步",
+  CONFLICT: "冲突",
+  FAILED: "失败",
+  NONE: "未同步",
+};
+
+/** 本地文章选项值（无 siteConfigId） */
+const LOCAL_OPTION = "__local__";
 
 export function ArticlesClient() {
   const [rows, setRows] = useState<ArticleRow[]>([]);
@@ -43,9 +48,10 @@ export function ArticlesClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
-  const [wordpressConfigs, setWordpressConfigs] = useState<
-    { id: string; name: string; enabled: boolean }[]
-  >([]);
+  const [wordpressConfigs, setWordpressConfigs] = useState<WordpressConfig[]>([]);
+  // 文章归属筛选（多选：博客站点 + 本地文章），只用于过滤文章列表
+  const [selectedSites, setSelectedSites] = useState<string[]>([]);
+  // 从博客同步的站点（单选，保留原下拉）
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
   const [syncResult, setSyncResult] = useState<{
@@ -53,6 +59,10 @@ export function ArticlesClient() {
     conflicts: number;
     errors: number;
   } | null>(null);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState<string>("ALL");
+  const [syncFilter, setSyncFilter] = useState<SyncFilter>("ALL");
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -78,15 +88,26 @@ export function ArticlesClient() {
       try {
         const res = await fetch("/api/wordpress/configs");
         if (res.ok) {
-          const configs = await res.json();
-          setWordpressConfigs(configs);
+          setWordpressConfigs(await res.json());
         }
       } catch (e) {
         console.error("加载 WordPress 站点失败:", e);
       }
     };
-    loadConfigs();
+    void loadConfigs();
   }, []);
+
+  const configMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of wordpressConfigs) map[c.id] = c.name;
+    return map;
+  }, [wordpressConfigs]);
+
+  function toggleSite(option: string) {
+    setSelectedSites((prev) =>
+      prev.includes(option) ? prev.filter((s) => s !== option) : [...prev, option],
+    );
+  }
 
   async function onDelete(id: string) {
     if (!confirm("确认将文章移入回收站？")) return;
@@ -141,18 +162,15 @@ export function ArticlesClient() {
       setError("请先选择博客站点");
       return;
     }
-
     setSyncing(true);
     setSyncResult(null);
     setError(null);
-
     try {
       const res = await fetch("/api/wordpress/sync", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ configId: selectedConfigId }),
       });
-
       const data = (await res.json().catch(() => ({}))) as {
         success?: boolean;
         synced?: number;
@@ -160,15 +178,12 @@ export function ArticlesClient() {
         errors?: number;
         error?: string;
       };
-
       if (!res.ok) throw new Error(data?.error ?? "同步失败");
-
       setSyncResult({
         synced: data.synced ?? 0,
         conflicts: data.conflicts ?? 0,
         errors: data.errors ?? 0,
       });
-
       void refresh();
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -177,53 +192,126 @@ export function ArticlesClient() {
     }
   }
 
+  // 站点过滤：没选中任何站点 → 全部；选中 __local__ → 本地；选中具体站点 → 只显示这些站点
+  const siteFiltered = useMemo(() => {
+    if (selectedSites.length === 0) return rows;
+    const localSelected = selectedSites.includes(LOCAL_OPTION);
+    const configSelected = selectedSites.filter((s) => s !== LOCAL_OPTION);
+    return rows.filter((r) => {
+      if (r.siteConfigId && configSelected.includes(r.siteConfigId)) return true;
+      if (!r.siteConfigId && localSelected) return true;
+      return false;
+    });
+  }, [rows, selectedSites]);
+
+  const filteredRows = useMemo(() => {
+    let list = siteFiltered;
+    if (statusFilter !== "ALL") {
+      list = list.filter((r) => r.status === statusFilter);
+    }
+    if (syncFilter !== "ALL") {
+      list = list.filter((r) => {
+        if (syncFilter === "NONE") return !r.syncStatus;
+        return r.syncStatus === syncFilter;
+      });
+    }
+    const q = searchQuery.trim().toLowerCase();
+    if (q) list = list.filter((r) => r.title.toLowerCase().includes(q));
+    return [...list].sort((a, b) => {
+      const at = new Date(a.updatedAt ?? 0).getTime();
+      const bt = new Date(b.updatedAt ?? 0).getTime();
+      return sortOrder === "desc" ? bt - at : at - bt;
+    });
+  }, [siteFiltered, statusFilter, syncFilter, searchQuery, sortOrder]);
+
   if (loading) return <p className="text-sm text-muted-foreground">加载中…</p>;
-  if (error)
-    return (
-      <div className="space-y-2">
-        <p role="alert" className="text-destructive">
-          {error}
-        </p>
-        <Button variant="outline" size="sm" onClick={() => void refresh()}>
-          重试
-        </Button>
-      </div>
-    );
 
   return (
     <div className="space-y-4" data-testid="articles-client">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">文章管理</h2>
         <div className="flex items-center gap-3">
+          {/* 文章归属筛选：博客站点 + 本地文章（多选，过滤列表） */}
           {wordpressConfigs.length > 0 && (
-            <div className="flex items-center gap-2">
-              <Select
-                value={selectedConfigId}
-                onValueChange={(value) => setSelectedConfigId(value || "")}
-              >
-                <SelectTrigger className="w-[200px]">
-                  <ServerIcon className="size-4 mr-2" />
-                  <SelectValue placeholder="选择博客站点" />
-                </SelectTrigger>
-                <SelectContent>
-                  {wordpressConfigs.map((config) => (
-                    <SelectItem key={config.id} value={config.id}>
-                      {config.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-              <Button
-                size="sm"
-                onClick={onSyncFromBlog}
-                disabled={!selectedConfigId || syncing}
-                data-testid="sync-from-blog"
-              >
-                <DownloadIcon className="size-4 mr-1" />
-                {syncing ? "同步中…" : "从博客同步"}
-              </Button>
-            </div>
+            <Select
+              value={selectedSites.length ? selectedSites[0] : ""}
+              onValueChange={(value) => {
+                if (value && !selectedSites.includes(value)) {
+                  setSelectedSites([...selectedSites, value]);
+                }
+              }}
+            >
+              <SelectTrigger className="w-[200px]" aria-label="文章归属">
+                <ServerIcon className="size-4 mr-2" />
+                <SelectValue
+                  placeholder={
+                    selectedSites.length > 0
+                      ? `已选 ${selectedSites.length} 项`
+                      : "文章归属"
+                  }
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {wordpressConfigs.map((config) => (
+                  <div
+                    key={config.id}
+                    role="option"
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
+                    onClick={() => toggleSite(config.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedSites.includes(config.id)}
+                      readOnly
+                      className="size-4"
+                    />
+                    <span>{config.name}</span>
+                  </div>
+                ))}
+                <div
+                  role="option"
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
+                  onClick={() => toggleSite(LOCAL_OPTION)}
+                >
+                  <input
+                    type="checkbox"
+                    checked={selectedSites.includes(LOCAL_OPTION)}
+                    readOnly
+                    className="size-4"
+                  />
+                  <span>本地文章</span>
+                </div>
+              </SelectContent>
+            </Select>
           )}
+          {/* 从博客同步：保留原站点下拉（单选）+ 同步按钮 */}
+          {wordpressConfigs.length > 0 && (
+            <Select
+              value={selectedConfigId}
+              onValueChange={(value) => setSelectedConfigId(value || "")}
+            >
+              <SelectTrigger className="w-[180px]" aria-label="选择博客站点">
+                <ServerIcon className="size-4 mr-2" />
+                <SelectValue placeholder="选择博客站点" />
+              </SelectTrigger>
+              <SelectContent>
+                {wordpressConfigs.map((config) => (
+                  <SelectItem key={config.id} value={config.id}>
+                    {config.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          )}
+          <Button
+            size="sm"
+            onClick={onSyncFromBlog}
+            disabled={!selectedConfigId || syncing}
+            data-testid="sync-from-blog"
+          >
+            <DownloadIcon className="size-4 mr-1" />
+            {syncing ? "同步中…" : "从博客同步"}
+          </Button>
           <Link href="/articles/trash" data-testid="trash-link">
             <Button variant="outline" size="sm">
               <ArchiveIcon className="size-4" /> 回收站
@@ -235,6 +323,54 @@ export function ArticlesClient() {
             </Button>
           </Link>
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-3">
+        {/* 搜索 */}
+        <div className="relative">
+          <SearchIcon className="size-4 absolute left-2.5 top-2.5 text-muted-foreground" />
+          <Input
+            className="w-[220px] pl-8"
+            placeholder="搜索文章…"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            data-testid="search-input"
+          />
+        </div>
+        {/* 状态筛选 */}
+        <Select
+          value={statusFilter}
+          onValueChange={(v) => setStatusFilter(v ?? "ALL")}
+        >
+          <SelectTrigger className="w-[140px]" aria-label="状态筛选">
+            <SelectValue placeholder="状态筛选" />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="ALL">全部状态</SelectItem>
+            {ARTICLE_STATUS_LIST.map((s) => (
+              <SelectItem key={s} value={s}>
+                {ARTICLE_STATUS_LABELS[s]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {/* 同步标记筛选 */}
+        <Select
+          value={syncFilter}
+          onValueChange={(v) => setSyncFilter(v as SyncFilter)}
+        >
+          <SelectTrigger className="w-[140px]" aria-label="同步标记">
+            <SelectValue placeholder="同步标记" />
+          </SelectTrigger>
+          <SelectContent>
+            {(Object.keys(SYNC_FILTER_LABELS) as SyncFilter[]).map((k) => (
+              <SelectItem key={k} value={k}>
+                {SYNC_FILTER_LABELS[k]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <p className="text-sm text-muted-foreground">共 {filteredRows.length} 篇</p>
       </div>
 
       {syncResult && (
@@ -258,116 +394,26 @@ export function ArticlesClient() {
           {refreshOutcome.delta > 0 && <span className="ml-1">（+{refreshOutcome.delta}）</span>}
         </p>
       )}
-      {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">暂无文章，点击右上角新建。</p>
+
+      {error && (
+        <p role="alert" className="text-sm text-destructive">
+          {error}
+        </p>
+      )}
+
+      {filteredRows.length === 0 ? (
+        <p className="text-sm text-muted-foreground">暂无文章。</p>
       ) : (
-        <div className="rounded-md border">
-          <table className="w-full text-sm">
-            <thead className="border-b bg-muted/30 text-left">
-              <tr>
-                <th className="px-4 py-2 font-medium">标题</th>
-                <th className="px-4 py-2 font-medium">状态</th>
-                <th className="px-4 py-2 font-medium">SEO</th>
-                <th className="px-4 py-2 font-medium">同步</th>
-                <th className="px-4 py-2 font-medium">标记</th>
-                <th className="px-4 py-2 font-medium">更新时间</th>
-                <th className="w-36 px-4 py-2 font-medium text-right">操作</th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const stale = isStaleArticle({
-                  updatedAt: r.updatedAt ?? new Date(0),
-                  seoScore: r.seoScore,
-                });
-
-                // 同步状态标签
-                let syncBadge: React.ReactNode = null;
-                if (r.syncStatus === "CONFLICT") {
-                  syncBadge = (
-                    <span
-                      className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                      title="检测到冲突，请手动解决"
-                    >
-                      冲突
-                    </span>
-                  );
-                } else if (r.syncStatus === "SYNCED") {
-                  syncBadge = (
-                    <span
-                      className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
-                      title={`最后同步: ${r.lastSyncedAt?.slice(0, 16).replace("T", " ")}`}
-                    >
-                      已同步
-                    </span>
-                  );
-                } else if (r.syncStatus === "FAILED") {
-                  syncBadge = (
-                    <span
-                      className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-0.5 text-xs text-destructive"
-                      title="同步失败"
-                    >
-                      失败
-                    </span>
-                  );
-                }
-
-                return (
-                  <tr key={r.id} className="border-b last:border-0">
-                    <td className="px-4 py-2 font-medium">{r.title}</td>
-                    <td className="px-4 py-2">
-                      <ArticleStatusBadge status={r.status} />
-                    </td>
-                    <td className="px-4 py-2">{scoreCell(r.seoScore)}</td>
-                    <td className="px-4 py-2">{syncBadge}</td>
-                    <td className="px-4 py-2">
-                      {stale && (
-                        <span
-                          className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-                          data-testid={`stale-mark-${r.id}`}
-                        >
-                          待刷新
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {r.updatedAt?.slice(0, 16).replace("T", " ")}
-                    </td>
-                    <td className="px-4 py-2">
-                      <div className="flex items-center justify-end gap-1">
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="AI 刷新"
-                          onClick={() => void onRefresh(r.id)}
-                          disabled={refreshingId === r.id}
-                          data-testid={`refresh-${r.id}`}
-                        >
-                          <RefreshIcon
-                            className={refreshingId === r.id ? "size-4 animate-spin" : "size-4"}
-                          />
-                        </Button>
-                        <Link href={`/articles/${r.id}/edit`} data-testid={`edit-${r.id}`}>
-                          <Button variant="ghost" size="icon" aria-label="编辑">
-                            <PencilIcon className="size-4" />
-                          </Button>
-                        </Link>
-                        <Button
-                          variant="ghost"
-                          size="icon"
-                          aria-label="移入回收站"
-                          onClick={() => onDelete(r.id)}
-                        >
-                          <Trash2Icon className="size-4" />
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+        <ArticlesTable
+          rows={filteredRows}
+          configMap={configMap}
+          refreshingId={refreshingId}
+          disabledIds={new Set()}
+          onRefresh={onRefresh}
+          onDelete={onDelete}
+          sortOrder={sortOrder}
+          onToggleSort={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
+        />
       )}
     </div>
   );
