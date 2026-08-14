@@ -32,7 +32,7 @@ interface WordpressConfig {
 type SyncFilter = "ALL" | "SYNCED" | "CONFLICT" | "FAILED" | "NONE";
 
 const SYNC_FILTER_LABELS: Record<SyncFilter, string> = {
-  ALL: "全部",
+  ALL: "同步状态",
   SYNCED: "已同步",
   CONFLICT: "冲突",
   FAILED: "失败",
@@ -366,10 +366,10 @@ export function ArticlesClient() {
           onValueChange={(v) => setSyncFilter(v as SyncFilter)}
         >
           <SelectTrigger className="w-[140px]" aria-label="同步标记">
-            <SelectValue placeholder="同步标记">
+            <SelectValue placeholder="同步状态">
               {(value: string | null) =>
                 !value || value === "ALL"
-                  ? "全部"
+                  ? "同步状态"
                   : SYNC_FILTER_LABELS[value as SyncFilter] ?? value
               }
             </SelectValue>
