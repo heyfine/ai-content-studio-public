@@ -263,9 +263,15 @@ export async function fetchBlogPosts(configId: string, options: Partial<SyncBlog
   } else {
     params.set("status", "publish,draft");
   }
-  params.set("_embed", "wp:featuredmedia"); // 嵌入特色图片
 
   const url = `${config.siteUrl}/wp-json/wp/v2/posts?${params.toString()}`;
+  console.log("========== WordPress 同步调试 ==========");
+  console.log("站点 URL:", config.siteUrl);
+  console.log("用户名:", config.username);
+  console.log("请求 URL:", url);
+  console.log("认证前缀:", basic.substring(0, 20) + "...");
+  console.log();
+
   const res = await fetch(url, {
     headers: {
       Authorization: `Basic ${basic}`,
@@ -273,16 +279,28 @@ export async function fetchBlogPosts(configId: string, options: Partial<SyncBlog
     },
   });
 
+  console.log("WordPress 响应状态:", res.status, res.statusText);
+  console.log("响应头:", Object.fromEntries(res.headers.entries()));
+
   if (!res.ok) {
-    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    const text = await res.text();
+    console.error("WordPress API 错误响应:", text);
+    const data = text ? (JSON.parse(text) as { message?: string }) : {};
     throw new Error(`获取博客文章失败（${res.status}）：${data.message ?? res.statusText}`);
   }
 
-  return res.json() as Promise<WpPost[]>;
+  const posts = await res.json();
+  console.log("获取到博客文章数量:", posts.length);
+  if (posts.length > 0) {
+    console.log("第一篇文章 ID:", posts[0].id);
+    console.log("第一篇文章标题:", posts[0].title?.rendered);
+  }
+
+  return posts as Promise<WpPost[]>;
 }
 
 /**
- * 从 WordPress 站点拉取单个文章详细信息
+ * 从 WordPress 站点拉取单篇文章详情
  */
 export async function fetchSingleBlogPost(configId: string, wpPostId: number): Promise<WpPost> {
   const config = await getActiveConfig(configId);
