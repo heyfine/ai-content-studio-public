@@ -78,6 +78,30 @@ describe("LayoutSuggestPanel", () => {
     expect(onApply).toHaveBeenCalledTimes(1);
   });
 
+  it("建议列表更新后重置勾选为全选，按钮恢复可用", () => {
+    const { rerender } = render(
+      <LayoutSuggestPanel
+        content={content}
+        suggestions={[]}
+        onCancel={vi.fn()}
+        onApply={vi.fn()}
+      />,
+    );
+    // 空建议时应用按钮禁用
+    expect(screen.getByTestId("layout-apply")).toBeDisabled();
+    // 再次排版返回新建议：自动全选，按钮恢复可用
+    rerender(
+      <LayoutSuggestPanel
+        content={content}
+        suggestions={suggestions}
+        onCancel={vi.fn()}
+        onApply={vi.fn()}
+      />,
+    );
+    expect(screen.getByText(/已选 2 处/)).toBeInTheDocument();
+    expect(screen.getByTestId("layout-apply")).toBeEnabled();
+  });
+
   it("取消按钮触发 onCancel", () => {
     const { onCancel } = renderPanel();
     fireEvent.click(screen.getByTestId("layout-cancel"));

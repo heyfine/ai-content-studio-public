@@ -211,8 +211,10 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         return;
       }
       const data = (await res.json()) as { suggestions: LayoutSuggestion[] };
-      setLayoutSuggestions(data.suggestions ?? []);
-      if ((data.suggestions ?? []).length === 0) {
+      const next = data.suggestions ?? [];
+      // 空建议时不挂载 diff 面板（空数组也是 truthy，会带着空勾选状态挂载导致按钮禁用）
+      setLayoutSuggestions(next.length > 0 ? next : null);
+      if (next.length === 0) {
         setLayoutError("AI 认为当前排版已足够，无需调整");
       }
     } catch (e) {

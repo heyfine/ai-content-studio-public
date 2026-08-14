@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Check, Sparkles, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
@@ -69,6 +69,12 @@ export function LayoutSuggestPanel({
     }
     return out;
   }, [suggestions]);
+
+  // 建议列表变化（如再次排版返回新建议）时重置勾选为全选，
+  // 避免旧勾选状态与新的建议错位（否则会出现"已选 0 处"且按钮全部禁用）。
+  useEffect(() => {
+    setSelected(items.map(() => true));
+  }, [items]);
 
   const nextContent = useMemo(
     () =>
