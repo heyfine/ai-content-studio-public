@@ -6,6 +6,7 @@
  */
 import { generate } from "@/lib/ai/generate";
 import { buildLayoutSuggestPrompt } from "@/lib/ai/layout-suggest-prompt";
+import { getPrompt } from "./prompt-service";
 import { isCalloutType } from "@/lib/content/callout-types";
 import {
   isLayoutActionType,
@@ -19,8 +20,24 @@ export interface SuggestLayoutArgs {
   content: string;
   title?: string;
   style?: LayoutStyle;
-  /** 可选：用户选择的 Prompt 模板 id；未提供时使用内置排版 prompt */
+  /** 可选：用户选择的 Prompt 模板 id；未提供时仅使用内置排版 prompt */
   promptId?: string;
+}
+
+/**
+ * 组装排版 system prompt：无论是否选了模板，都保留内置格式与克制指令
+ * （否则模板内容可能不含"输出 JSON 建议数组"的要求，AI 输出无法解析）。
+ * 用户选择的模板作为「额外排版偏好」拼接其后。
+ */
+async function resolveLayoutPrompt(
+  style: LayoutStyle,
+  promptId?: string,
+): Promise<string> {
+  const base = buildLayoutSuggestPrompt(style);
+  if (!promptId) return base;
+  const prompt = await getPrompt(promptId);
+  if (!prompt) return base;
+  return `${base}\n\n## 额外排版偏好\n\n用户选择了一个排版偏好模板，请在满足上述格式与克制要求（输出 JSON 建议数组）的前提下，额外遵循以下偏好：\n${prompt.content}`;
 }
 
 export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
@@ -33,9 +50,7 @@ export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
   const gen = await generate({
     task: "layout_suggest",
     input,
-    // 用户显式选择了 Prompt 模板时尊重模板（generate 的 resolveSystemPrompt 中
-    // systemPrompt 优先级最高，因此只有未选模板时才注入内置排版 prompt，含克制规则）
-    systemPrompt: args.promptId ? undefined : buildLayoutSuggestPrompt(style),
+    systemPrompt: await resolveLayoutPrompt(style, args.promptId),
     ...(args.promptId ? { promptId: args.promptId } : {}),
     temperature: 0.3,
     maxTokens: 2500,

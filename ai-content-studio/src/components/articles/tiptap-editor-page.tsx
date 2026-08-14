@@ -215,7 +215,9 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
       // 空建议时不挂载 diff 面板（空数组也是 truthy，会带着空勾选状态挂载导致按钮禁用）
       setLayoutSuggestions(next.length > 0 ? next : null);
       if (next.length === 0) {
-        setLayoutError("AI 认为当前排版已足够，无需调整");
+        setLayoutError(
+          "AI 未给出排版建议，可能是原文已是较优排版或本轮生成结果为空。可尝试：切换排版强度为「强调」、更换 Prompt 模板，或粘贴更长的原文后重试。",
+        );
       }
     } catch (e) {
       setLayoutError(e instanceof Error ? e.message : String(e));

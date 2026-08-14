@@ -1,5 +1,63 @@
-import { describe, it, expect } from "vitest";
-import { parseLayoutSuggestions } from "./layout-suggest-service";
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { parseLayoutSuggestions, suggestLayout } from "./layout-suggest-service";
+import { buildLayoutSuggestPrompt } from "@/lib/ai/layout-suggest-prompt";
+
+const m = vi.hoisted(() => ({
+  aiGenerate: vi.fn(),
+  getPrompt: vi.fn(),
+}));
+
+vi.mock("@/lib/ai/generate", () => ({ generate: m.aiGenerate }));
+vi.mock("@/lib/services/prompt-service", () => ({ getPrompt: m.getPrompt }));
+
+describe("suggestLayout systemPrompt 组装", () => {
+  beforeEach(() => {
+    m.aiGenerate.mockReset();
+    m.getPrompt.mockReset();
+  });
+
+  it("未选模板时使用内置排版 prompt，不传 promptId", async () => {
+    m.aiGenerate.mockResolvedValue({ content: "[]", generationId: "g1", modelId: "m1" });
+    await suggestLayout({ content: "正文", style: "standard" });
+    expect(m.aiGenerate).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: buildLayoutSuggestPrompt("standard") }),
+    );
+    expect(m.aiGenerate.mock.calls[0][0].promptId).toBeUndefined();
+  });
+
+  it("选择模板时仍保留内置格式指令，模板内容作为额外偏好拼接", async () => {
+    m.getPrompt.mockResolvedValue({ id: "p1", content: "请让排版更活泼" });
+    m.aiGenerate.mockResolvedValue({ content: "[]", generationId: "g1", modelId: "m1" });
+    await suggestLayout({ content: "正文", style: "standard", promptId: "p1" });
+    const args = m.aiGenerate.mock.calls[0][0];
+    // 格式指令必须保留（否则 AI 不输出 JSON 建议，前端解析为空）
+    expect(args.systemPrompt).toContain("只输出 JSON 数组");
+    expect(args.systemPrompt).toContain("额外排版偏好");
+    expect(args.systemPrompt).toContain("请让排版更活泼");
+    expect(args.promptId).toBe("p1");
+  });
+
+  it("AI 返回合法 JSON 建议时解析成功", async () => {
+    m.aiGenerate.mockResolvedValue({
+      content: `[{"action":"callout","originalText":"数据安全","type":"warning","title":"注意","reason":"重要"}]`,
+      generationId: "g1",
+      modelId: "m1",
+    });
+    const r = await suggestLayout({ content: "数据安全很重要", style: "standard" });
+    expect(r.suggestions).toHaveLength(1);
+    expect(r.suggestions[0]).toMatchObject({ action: "callout", originalText: "数据安全" });
+  });
+
+  it("AI 返回非 JSON 文本时建议为空", async () => {
+    m.aiGenerate.mockResolvedValue({
+      content: "排版建议：把第二段加粗，第三段做成高亮块。",
+      generationId: "g1",
+      modelId: "m1",
+    });
+    const r = await suggestLayout({ content: "正文", style: "standard" });
+    expect(r.suggestions).toEqual([]);
+  });
+});
 
 describe("parseLayoutSuggestions", () => {
   it("解析正常 JSON 数组（多种动作）", () => {
