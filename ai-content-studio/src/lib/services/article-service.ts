@@ -27,6 +27,13 @@ export type UpdateArticleInput = {
   seoScore?: number | null;
   wpPostId?: string | null;
   promptId?: string | null;
+  siteConfigId?: string | null;
+  syncStatus?: string | null;
+  lastSyncedAt?: string | null;
+  wpModifiedAt?: string | null;
+  categories?: unknown | null;
+  tags?: unknown | null;
+  featuredImage?: string | null;
 };
 
 /** 从标题生成 slug：小写、非字母数字与中文替换为 -，去首尾 -；空则 untitled */

@@ -1,4 +1,5 @@
 import type { ArticleStatus } from "@/lib/article-status";
+import type { ArticleSyncStatus } from "@prisma/client";
 
 export interface ArticleRow {
   id: string;
@@ -11,6 +12,13 @@ export interface ArticleRow {
   status: ArticleStatus;
   seoScore: number | null;
   wpPostId: string | null;
+  siteConfigId: string | null;
+  syncStatus: ArticleSyncStatus | null;
+  lastSyncedAt: string | null;
+  wpModifiedAt: string | null;
+  categories?: unknown | null;
+  tags?: unknown | null;
+  featuredImage: string | null;
   promptId: string | null;
   updatedAt?: string;
 }

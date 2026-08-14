@@ -7,11 +7,21 @@ import {
   Plus as PlusIcon,
   RefreshCw as RefreshIcon,
   Trash2 as Trash2Icon,
+  Download as DownloadIcon,
+  Server as ServerIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { ArticleStatusBadge } from "./article-status-badge";
 import type { ArticleRow } from "@/lib/article-types";
 import { isStaleArticle } from "@/lib/article-staleness";
+import { listWordpressConfigs } from "@/lib/services/wordpress-service";
 
 interface RefreshOutcome {
   articleId: string;
@@ -33,6 +43,10 @@ export function ArticlesClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
+  const [wordpressConfigs, setWordpressConfigs] = useState<{ id: string; name: string; enabled: boolean }[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("");
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<{ synced: number; conflicts: number; errors: number } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -51,6 +65,22 @@ export function ArticlesClient() {
   useEffect(() => {
     void refresh();
   }, [refresh]);
+
+  // 加载 WordPress 站点配置
+  useEffect(() => {
+    const loadConfigs = async () => {
+      try {
+        const res = await fetch("/api/wordpress/configs");
+        if (res.ok) {
+          const configs = await res.json();
+          setWordpressConfigs(configs);
+        }
+      } catch (e) {
+        console.error("加载 WordPress 站点失败:", e);
+      }
+    };
+    loadConfigs();
+  }, []);
 
   async function onDelete(id: string) {
     if (!confirm("确认删除该文章？")) return;
@@ -86,6 +116,47 @@ export function ArticlesClient() {
     }
   }
 
+  async function onSyncFromBlog() {
+    if (!selectedConfigId) {
+      setError("请先选择博客站点");
+      return;
+    }
+
+    setSyncing(true);
+    setSyncResult(null);
+    setError(null);
+
+    try {
+      const res = await fetch("/api/wordpress/sync", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ configId: selectedConfigId }),
+      });
+
+      const data = (await res.json().catch(() => ({}))) as {
+        success?: boolean;
+        synced?: number;
+        conflicts?: number;
+        errors?: number;
+        error?: string;
+      };
+
+      if (!res.ok) throw new Error(data?.error ?? "同步失败");
+
+      setSyncResult({
+        synced: data.synced ?? 0,
+        conflicts: data.conflicts ?? 0,
+        errors: data.errors ?? 0,
+      });
+
+      void refresh();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   if (loading) return <p className="text-sm text-muted-foreground">加载中…</p>;
   if (error)
     return (
@@ -103,7 +174,33 @@ export function ArticlesClient() {
     <div className="space-y-4" data-testid="articles-client">
       <div className="flex items-center justify-between">
         <h2 className="text-lg font-semibold">文章管理</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-3">
+          {wordpressConfigs.length > 0 && (
+            <div className="flex items-center gap-2">
+              <Select value={selectedConfigId} onValueChange={(value) => setSelectedConfigId(value || "")}>
+                <SelectTrigger className="w-[200px]">
+                  <ServerIcon className="size-4 mr-2" />
+                  <SelectValue placeholder="选择博客站点" />
+                </SelectTrigger>
+                <SelectContent>
+                  {wordpressConfigs.map((config) => (
+                    <SelectItem key={config.id} value={config.id}>
+                      {config.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <Button
+                size="sm"
+                onClick={onSyncFromBlog}
+                disabled={!selectedConfigId || syncing}
+                data-testid="sync-from-blog"
+              >
+                <DownloadIcon className="size-4 mr-1" />
+                {syncing ? "同步中…" : "从博客同步"}
+              </Button>
+            </div>
+          )}
           <Link href="/articles/new" data-testid="new-article-link">
             <Button size="sm">
               <PlusIcon className="size-4" /> 新建文章
@@ -111,6 +208,23 @@ export function ArticlesClient() {
           </Link>
         </div>
       </div>
+
+      {syncResult && (
+        <p className="text-sm">
+          同步完成：成功 {syncResult.synced} 篇，
+          {syncResult.conflicts > 0 && (
+            <span className="ml-1 text-amber-600">
+              冲突 {syncResult.conflicts} 篇（点击文章查看详情）
+            </span>
+          )}
+          {syncResult.errors > 0 && (
+            <span className="ml-1 text-destructive">
+              失败 {syncResult.errors} 篇
+            </span>
+          )}
+        </p>
+      )}
+
       {refreshOutcome && (
         <p className="text-sm text-emerald-600" data-testid="refresh-outcome">
           AI 刷新完成：SEO 评分 {refreshOutcome.oldSeoScore ?? "—"} →{" "}
@@ -128,6 +242,7 @@ export function ArticlesClient() {
                 <th className="px-4 py-2 font-medium">标题</th>
                 <th className="px-4 py-2 font-medium">状态</th>
                 <th className="px-4 py-2 font-medium">SEO</th>
+                <th className="px-4 py-2 font-medium">同步</th>
                 <th className="px-4 py-2 font-medium">标记</th>
                 <th className="px-4 py-2 font-medium">更新时间</th>
                 <th className="w-36 px-4 py-2 font-medium text-right">操作</th>
@@ -139,6 +254,38 @@ export function ArticlesClient() {
                   updatedAt: r.updatedAt ?? new Date(0),
                   seoScore: r.seoScore,
                 });
+
+                // 同步状态标签
+                let syncBadge: React.ReactNode = null;
+                if (r.syncStatus === "CONFLICT") {
+                  syncBadge = (
+                    <span
+                      className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400"
+                      title="检测到冲突，请手动解决"
+                    >
+                      冲突
+                    </span>
+                  );
+                } else if (r.syncStatus === "SYNCED") {
+                  syncBadge = (
+                    <span
+                      className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400"
+                      title={`最后同步: ${r.lastSyncedAt?.slice(0, 16).replace("T", " ")}`}
+                    >
+                      已同步
+                    </span>
+                  );
+                } else if (r.syncStatus === "FAILED") {
+                  syncBadge = (
+                    <span
+                      className="inline-flex items-center rounded-md bg-destructive/10 px-2 py-0.5 text-xs text-destructive"
+                      title="同步失败"
+                    >
+                      失败
+                    </span>
+                  );
+                }
+
                 return (
                   <tr key={r.id} className="border-b last:border-0">
                     <td className="px-4 py-2 font-medium">{r.title}</td>
@@ -146,6 +293,7 @@ export function ArticlesClient() {
                       <ArticleStatusBadge status={r.status} />
                     </td>
                     <td className="px-4 py-2">{scoreCell(r.seoScore)}</td>
+                    <td className="px-4 py-2">{syncBadge}</td>
                     <td className="px-4 py-2">
                       {stale && (
                         <span

@@ -2,6 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { renderArticleContent } from "@/lib/content/render";
 import { assertTransition, type ArticleStatus } from "@/lib/article-status";
+import type { ArticleSyncStatus } from "@prisma/client";
 
 export interface WpConfigInput {
   name: string;
@@ -189,3 +190,397 @@ export async function unpublishArticle(articleId: string, configId?: string) {
 // 抑制未使用导入告警（保留以备未来状态联动）
 void assertTransition;
 void (null as unknown as ArticleStatus);
+
+// ========== 博客文章同步功能 ==========
+
+/** WordPress REST API 文章响应类型 */
+export interface WpPost {
+  id: number;
+  title: { rendered: string };
+  content: { rendered: string; raw?: string };
+  excerpt: { rendered: string };
+  status: "publish" | "draft" | "pending" | "private";
+  link: string;
+  date: string;
+  date_gmt: string;
+  modified: string;
+  modified_gmt: string;
+  categories: number[];
+  tags: number[];
+  featured_media: number;
+  _links?: {
+    "wp:featuredmedia"?: Array<{ href: string }>;
+  };
+}
+
+/** WordPress REST API 分类响应类型 */
+export interface WpCategory {
+  id: number;
+  name: string;
+  slug: string;
+}
+
+/** WordPress REST API 媒体响应类型 */
+export interface WpMedia {
+  id: number;
+  source_url: string;
+  alt_text?: string;
+}
+
+/** 博客文章同步参数 */
+export interface SyncBlogPostsOptions {
+  configId: string;
+  limit?: number;
+  offset?: number;
+  status?: "publish" | "draft" | "all";
+}
+
+/** 博客文章同步结果 */
+export interface SyncResult {
+  synced: number;
+  conflicts: number;
+  errors: number;
+  details: Array<{
+    wpPostId: number;
+    articleId?: string;
+    status: "synced" | "conflict" | "error";
+    message?: string;
+  }>;
+}
+
+/**
+ * 从 WordPress 站点拉取文章列表
+ */
+export async function fetchBlogPosts(configId: string, options: Partial<SyncBlogPostsOptions> = {}): Promise<WpPost[]> {
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+
+  const params = new URLSearchParams();
+  params.set("per_page", String(options.limit ?? 100));
+  if (options.offset) params.set("offset", String(options.offset));
+  if (options.status && options.status !== "all") {
+    params.set("status", options.status);
+  } else {
+    params.set("status", "publish,draft");
+  }
+  params.set("_embed", "wp:featuredmedia"); // 嵌入特色图片
+
+  const url = `${config.siteUrl}/wp-json/wp/v2/posts?${params.toString()}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(`获取博客文章失败（${res.status}）：${data.message ?? res.statusText}`);
+  }
+
+  return res.json() as Promise<WpPost[]>;
+}
+
+/**
+ * 从 WordPress 站点拉取单个文章详细信息
+ */
+export async function fetchSingleBlogPost(configId: string, wpPostId: number): Promise<WpPost> {
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+
+  const url = `${config.siteUrl}/wp-json/wp/v2/posts/${wpPostId}?_embed=wp:featuredmedia`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(`获取博客文章详情失败（${res.status}）：${data.message ?? res.statusText}`);
+  }
+
+  return res.json() as Promise<WpPost>;
+}
+
+/**
+ * 从 WordPress 站点拉取分类列表
+ */
+export async function fetchBlogCategories(configId: string): Promise<WpCategory[]> {
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+
+  const url = `${config.siteUrl}/wp-json/wp/v2/categories?per_page=100`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(`获取博客分类失败（${res.status}）：${data.message ?? res.statusText}`);
+  }
+
+  return res.json() as Promise<WpCategory[]>;
+}
+
+/**
+ * 从 WordPress 站点拉取特色图片信息
+ */
+export async function fetchBlogFeaturedMedia(configId: string, mediaId: number): Promise<WpMedia | null> {
+  if (!mediaId) return null;
+
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+
+  const url = `${config.siteUrl}/wp-json/wp/v2/media/${mediaId}`;
+  const res = await fetch(url, {
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+  });
+
+  if (!res.ok) return null;
+
+  return res.json() as Promise<WpMedia>;
+}
+
+/**
+ * 将 WordPress 文章转换为本地 Article 格式
+ */
+function wpPostToLocalArticle(wpPost: WpPost, configId: string) {
+  // 从 HTML 内容中提取纯文本（简化版本，实际可能需要更复杂的处理）
+  const plainContent = wpPost.content.raw || wpPost.content.rendered.replace(/<[^>]*>/g, "");
+
+  return {
+    title: wpPost.title.rendered,
+    content: plainContent,
+    contentHtml: wpPost.content.rendered,
+    wpPostId: String(wpPost.id),
+    siteConfigId: configId,
+    status: wpPost.status === "publish" ? "PUBLISHED" : "DRAFT" as ArticleStatus,
+    wpModifiedAt: new Date(wpPost.modified_gmt),
+    categories: wpPost.categories,
+    tags: wpPost.tags,
+    featuredImage: wpPost.featured_media ? String(wpPost.featured_media) : null,
+    syncStatus: "SYNCED" as ArticleSyncStatus,
+    lastSyncedAt: new Date(),
+    slug: `${wpPost.id}-${generateSlug(wpPost.title.rendered)}`,
+  };
+}
+
+/**
+ * 生成 URL 友好的 slug
+ */
+function generateSlug(text: string): string {
+  return text
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "")
+    .replace(/[\s_-]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .substring(0, 50);
+}
+
+/**
+ * 检测博客文章与本地文章的冲突
+ */
+async function detectArticleConflict(
+  wpPost: WpPost,
+  localArticle?: { id: string; updatedAt: Date; wpModifiedAt?: Date | null }
+): Promise<boolean> {
+  if (!localArticle) return false;
+
+  // 如果本地文章没有 WordPress 修改时间记录，则认为不冲突
+  if (!localArticle.wpModifiedAt) return false;
+
+  const wpModified = new Date(wpPost.modified_gmt);
+  const localModified = localArticle.updatedAt;
+  const wpModifiedRecord = localArticle.wpModifiedAt;
+
+  // 如果 WordPress 上的修改时间比记录的修改时间新，且本地也有修改，则存在冲突
+  return wpModified > wpModifiedRecord && localModified > wpModifiedRecord;
+}
+
+/**
+ * 同步博客文章到本地数据库
+ */
+export async function syncBlogPosts(options: SyncBlogPostsOptions): Promise<SyncResult> {
+  const { configId } = options;
+
+  // 获取 WordPress 文章列表
+  const wpPosts = await fetchBlogPosts(configId, options);
+
+  // 获取分类映射
+  const categories = await fetchBlogCategories(configId);
+  const categoryMap = new Map(categories.map((cat) => [cat.id, cat.name]));
+
+  const result: SyncResult = {
+    synced: 0,
+    conflicts: 0,
+    errors: 0,
+    details: [],
+  };
+
+  // 批量处理每篇文章
+  for (const wpPost of wpPosts) {
+    try {
+      // 查找是否已存在对应的本地文章
+      const existingArticle = await prisma.article.findFirst({
+        where: {
+          wpPostId: String(wpPost.id),
+          siteConfigId: configId,
+        },
+      });
+
+      // 检测冲突
+      const hasConflict = await detectArticleConflict(wpPost, existingArticle || undefined);
+
+      if (hasConflict) {
+        result.conflicts++;
+        result.details.push({
+          wpPostId: wpPost.id,
+          articleId: existingArticle?.id,
+          status: "conflict",
+          message: "本地和博客都有修改，需要手动解决冲突",
+        });
+
+        // 更新文章状态为冲突
+        if (existingArticle) {
+          await prisma.article.update({
+            where: { id: existingArticle.id },
+            data: {
+              syncStatus: "CONFLICT" as ArticleSyncStatus,
+            },
+          });
+        }
+        continue;
+      }
+
+      // 准备文章数据
+      const articleData = wpPostToLocalArticle(wpPost, configId);
+
+      if (existingArticle) {
+        // 更新现有文章
+        await prisma.article.update({
+          where: { id: existingArticle.id },
+          data: {
+            ...articleData,
+            syncStatus: "SYNCED" as ArticleSyncStatus,
+          },
+        });
+        result.details.push({
+          wpPostId: wpPost.id,
+          articleId: existingArticle.id,
+          status: "synced",
+        });
+      } else {
+        // 创建新文章
+        const newArticle = await prisma.article.create({
+          data: articleData,
+        });
+        result.details.push({
+          wpPostId: wpPost.id,
+          articleId: newArticle.id,
+          status: "synced",
+        });
+      }
+
+      result.synced++;
+    } catch (error) {
+      result.errors++;
+      result.details.push({
+        wpPostId: wpPost.id,
+        status: "error",
+        message: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  return result;
+}
+
+/**
+ * 检查单个文章的同步状态
+ */
+export async function checkArticleSyncStatus(articleId: string): Promise<{
+  hasConflict: boolean;
+  wpModified?: Date;
+  localModified: Date;
+}> {
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+  });
+
+  if (!article || !article.wpPostId || !article.siteConfigId) {
+    throw new Error("文章不是从博客同步的");
+  }
+
+  // 获取 WordPress 文章的最新修改时间
+  const wpPost = await fetchSingleBlogPost(article.siteConfigId, parseInt(article.wpPostId));
+  const wpModified = new Date(wpPost.modified_gmt);
+
+  return {
+    hasConflict: Boolean(article.wpModifiedAt && wpModified > article.wpModifiedAt && article.updatedAt > article.wpModifiedAt),
+    wpModified,
+    localModified: article.updatedAt,
+  };
+}
+
+/**
+ * 解决文章冲突（以本地为准或以博客为准）
+ */
+export async function resolveArticleConflict(
+  articleId: string,
+  strategy: "local" | "remote"
+): Promise<void> {
+  const article = await prisma.article.findUnique({
+    where: { id: articleId },
+  });
+
+  if (!article) throw new Error("文章不存在");
+  if (!article.wpPostId || !article.siteConfigId) {
+    throw new Error("文章不是从博客同步的");
+  }
+
+  if (strategy === "remote") {
+    // 以博客为准：重新拉取博客文章内容
+    const wpPost = await fetchSingleBlogPost(article.siteConfigId, parseInt(article.wpPostId));
+    const articleData = wpPostToLocalArticle(wpPost, article.siteConfigId);
+
+    await prisma.article.update({
+      where: { id: articleId },
+      data: {
+        ...articleData,
+        syncStatus: "SYNCED" as ArticleSyncStatus,
+      },
+    });
+  } else {
+    // 以本地为准：强制同步到博客
+    const config = await getActiveConfig(article.siteConfigId);
+    const status: "publish" | "draft" = article.status === "PUBLISHED" ? "publish" : "draft";
+
+    await publishPost(
+      config,
+      {
+        title: article.title,
+        content: renderArticleContent(article.content, { includeCalloutCss: true }),
+        status,
+      },
+      article.wpPostId,
+    );
+
+    // 更新同步状态
+    await prisma.article.update({
+      where: { id: articleId },
+      data: {
+        syncStatus: "SYNCED" as ArticleSyncStatus,
+        wpModifiedAt: new Date(),
+      },
+    });
+  }
+}

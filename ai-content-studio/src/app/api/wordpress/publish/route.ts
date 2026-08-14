@@ -5,6 +5,7 @@ import {
   publishRawContent,
   unpublishArticle,
 } from "@/lib/services/wordpress-service";
+import { updateArticle } from "@/lib/services/article-service";
 import { wordpressPublishSchema } from "@/lib/schemas/wordpress";
 
 export async function POST(request: Request) {
@@ -22,6 +23,15 @@ export async function POST(request: Request) {
     const result = articleId
       ? await publishArticle(articleId, configId, wpStatus)
       : await publishRawContent(title ?? "", content ?? "", configId, wpStatus);
+
+    // 如果是文章发布，更新同步状态
+    if (articleId) {
+      await updateArticle(articleId, {
+        syncStatus: "SYNCED",
+        lastSyncedAt: new Date().toISOString(),
+      });
+    }
+
     return NextResponse.json(result);
   } catch (e) {
     if (e instanceof Error && /文章不存在|WordPress 站点不可用|未配置/.test(e.message)) {

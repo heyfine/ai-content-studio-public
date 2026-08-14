@@ -108,26 +108,42 @@ model AIGeneration {
 
 /// 文章：Phase 3 内容生产核心表，状态机 draft→review→published→archived
 model Article {
-  id        String        @id @default(uuid())
-  title     String
-  slug      String        @unique
-  content   String        @default("")
+  id            String          @id @default(uuid())
+  title         String
+  slug          String          @unique
+  content       String          @default("")
   /// Tiptap 块编辑器主存：ProseMirror doc JSON（Phase 13 引入，子任务 2）
-  contentJson Json?
+  contentJson   Json?
   /// Tiptap 派生字段：编辑后即时同步的 HTML（发布/SEO 直接用）
-  contentHtml String?
+  contentHtml   String?
   /// Tiptap 派生字段：编辑后即时同步的 Markdown（AI 提示词 / 导出用）
-  contentMd   String?
-  status    ArticleStatus @default(DRAFT)
+  contentMd     String?
+  status        ArticleStatus   @default(DRAFT)
   /// SEO 评分（SEO 模块 Phase 4 写入）
-  seoScore  Int?
+  seoScore      Int?
   /// WordPress 文章 ID（发布模块 Phase 4 写入）
-  wpPostId  String?
+  wpPostId      String?
+  /// WordPress 站点配置 ID（博客同步功能）
+  siteConfigId  String?
+  /// 同步状态（博客同步功能）
+  syncStatus    ArticleSyncStatus?
+  /// 最后同步时间（博客同步功能）
+  lastSyncedAt  DateTime?
+  /// WordPress 文章最后修改时间（博客同步功能，冲突检测用）
+  wpModifiedAt  DateTime?
+  /// 文章分类（JSON 字符串数组，博客同步功能）
+  categories    Json?
+  /// 文章标签（JSON 字符串数组，博客同步功能）
+  tags          Json?
+  /// 特色图片 URL（博客同步功能）
+  featuredImage String?
   /// 可选，关联生成所用的 Prompt 模板
-  promptId  String?
-  createdAt DateTime      @default(now())
-  updatedAt DateTime      @updatedAt
-  seoReports SeoReport[]
+  promptId      String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  seoReports    SeoReport[]
+  /// 关联的 WordPress 站点配置
+  siteConfig    WordPressConfig? @relation(fields: [siteConfigId], references: [id], onDelete: SetNull)
 }
 
 enum ArticleStatus {
@@ -135,6 +151,18 @@ enum ArticleStatus {
   REVIEW
   PUBLISHED
   ARCHIVED
+}
+
+/// 文章同步状态（博客同步功能）
+enum ArticleSyncStatus {
+  /// 已同步
+  SYNCED
+  /// 同步冲突
+  CONFLICT
+  /// 待同步
+  PENDING
+  /// 同步失败
+  FAILED
 }
 
 /// SEO 分析报告：每次 /api/seo/analyze 写入，关联 Article
@@ -162,8 +190,10 @@ model WordPressConfig {
   /// AES-256-GCM 加密后的应用密码（base64）
   appPassword String
   enabled     Boolean  @default(true)
-  createdAt    DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+  /// 关联的文章
+  articles    Article[]
 }
 
 /// API 中转密钥：对外暴露 OpenAI 兼容接口的调用凭证（单 Key 调全部已启用供应商模型）

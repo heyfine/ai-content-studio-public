@@ -98,7 +98,15 @@ export function TiptapEditorPage({ articleId }: TiptapEditorPageProps) {
         status: "DRAFT",
         seoScore: null,
         wpPostId: null,
+        siteConfigId: null,
+        syncStatus: null,
+        lastSyncedAt: null,
+        wpModifiedAt: null,
+        categories: null,
+        tags: null,
+        featuredImage: null,
         promptId: null,
+        updatedAt: "",
       });
       setLoading(false);
       return;

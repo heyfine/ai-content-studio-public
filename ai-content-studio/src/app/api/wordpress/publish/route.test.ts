@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { authMock, publishArticleMock, publishRawContentMock, unpublishArticleMock } = vi.hoisted(
+const { authMock, publishArticleMock, publishRawContentMock, unpublishArticleMock, updateArticleMock } = vi.hoisted(
   () => ({
     authMock: vi.fn(),
     publishArticleMock: vi.fn(),
     publishRawContentMock: vi.fn(),
     unpublishArticleMock: vi.fn(),
+    updateArticleMock: vi.fn(),
   }),
 );
 
@@ -14,6 +15,9 @@ vi.mock("@/lib/services/wordpress-service", () => ({
   publishArticle: publishArticleMock,
   publishRawContent: publishRawContentMock,
   unpublishArticle: unpublishArticleMock,
+}));
+vi.mock("@/lib/services/article-service", () => ({
+  updateArticle: updateArticleMock,
 }));
 
 import { POST } from "./route";
@@ -65,6 +69,7 @@ describe("POST /api/wordpress/publish", () => {
 
   it("成功发布返回 wpPostId 与 link", async () => {
     authMock.mockResolvedValue({ user: { email: "a@b.com" } });
+    updateArticleMock.mockResolvedValue(undefined);
     publishArticleMock.mockResolvedValue({
       wpPostId: "99",
       link: "https://blog.example.com/?p=99",
@@ -74,6 +79,10 @@ describe("POST /api/wordpress/publish", () => {
     const res = await POST(makeRequest({ articleId: "a1", configId: "c1", wpStatus: "publish" }));
     expect(res.status).toBe(200);
     expect(publishArticleMock).toHaveBeenCalledWith("a1", "c1", "publish");
+    expect(updateArticleMock).toHaveBeenCalledWith("a1", {
+      syncStatus: "SYNCED",
+      lastSyncedAt: expect.any(String),
+    });
     const data = await res.json();
     expect(data.wpPostId).toBe("99");
     expect(data.link).toContain("p=99");
