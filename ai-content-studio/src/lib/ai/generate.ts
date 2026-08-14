@@ -26,15 +26,19 @@ export interface AIGenerateResult {
 }
 
 /**
- * 解析 systemPrompt：显式传入 > promptId 对应模板 > 任务类型下 active 模板。
+ * 解析 systemPrompt：promptId 模板 + 显式 systemPrompt 拼接（模板在前，格式要求在后）；
+ * 无 promptId 时显式 systemPrompt 覆盖 active 模板。
  * 打通「Prompt 模板 → AI 调用」链路。
  */
 async function resolveSystemPrompt(args: AIGenerateArgs): Promise<string | undefined> {
-  if (args.systemPrompt) return args.systemPrompt;
   if (args.promptId) {
-    const prompt = await getPrompt(args.promptId);
-    if (prompt) return prompt.content;
+    const template = await getPrompt(args.promptId);
+    if (args.systemPrompt) {
+      return [template?.content, args.systemPrompt].filter(Boolean).join("\n\n");
+    }
+    return template?.content;
   }
+  if (args.systemPrompt) return args.systemPrompt;
   const active = await getActivePromptByType(args.task);
   return active?.content;
 }

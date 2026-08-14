@@ -125,8 +125,14 @@ export function segmentsToMarkdown(segments: Segment[]): string {
 }
 
 function renderCallout(seg: Extract<Segment, { kind: "callout" }>): string {
+  // 未指定 type 时给 info（蓝色）而非 neutral（灰白），避免 AI 生成的
+  // 高亮块全是白色底；只有 type 是非法字符串时才降级 neutral。
   const rawType = seg.attrs.type ?? "";
-  const type: CalloutType = isCalloutType(rawType) ? rawType : CALLOUT_FALLBACK_TYPE;
+  const type: CalloutType = rawType
+    ? isCalloutType(rawType)
+      ? rawType
+      : CALLOUT_FALLBACK_TYPE
+    : "info";
   const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
   const title = escapeAttr(seg.attrs.title?.trim() || config.label);
   const icon = escapeAttr(seg.attrs.icon?.trim() || config.icon);

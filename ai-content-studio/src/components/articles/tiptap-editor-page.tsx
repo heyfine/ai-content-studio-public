@@ -46,6 +46,27 @@ interface WpOption {
 }
 
 /**
+ * 流式排版的附加 system prompt：教 AI 使用系统识别的高亮块语法。
+ * 若不指明，AI 会用 ">" 引用语法生成高亮，渲染出来是灰白引用块、无彩色。
+ */
+const LAYOUT_CALLOUT_GUIDE = `【高亮块语法要求】
+文中需要强调的要点、注意、提醒、重要内容、总结等，必须使用以下高亮块语法，禁止用 ">" 引用语法代替：
+:::callout{type="类型" title="标题" icon="图标"}
+高亮块内容...
+:::
+
+type 只能取以下值（对应不同底色）：
+- info：蓝色，用于客观信息、背景资料、来源说明
+- tip：绿色，用于推荐、技巧、使用建议
+- warning：橙色，用于注意事项、限制条件
+- danger：红色，用于风险、严重警告
+- note：黄色，用于重点提醒、补充提示
+- insight：紫色，用于深度观点、分析洞察
+- neutral：灰色，用于普通补充说明
+
+高亮块标题保持简洁（如「核心要点」「注意事项」「总结」），正文为一段完整句子。`;
+
+/**
  * Tiptap 富文本块编辑器（文章主编辑器，替代经典编辑器）。
  *
  * 数据模型：content 保留 Markdown（兼容旧数据/AI/WP/SEO 链路），并同步写入
@@ -196,6 +217,8 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         task: "layout_suggest",
         input,
         promptId: promptId ?? undefined,
+        // 高亮块语法规范（模板内容由后端 resolveSystemPrompt 拼接在其后/前）
+        systemPrompt: LAYOUT_CALLOUT_GUIDE,
       })) {
         if (ev.type === "delta") {
           setLayoutResult((prev) => prev + ev.content);

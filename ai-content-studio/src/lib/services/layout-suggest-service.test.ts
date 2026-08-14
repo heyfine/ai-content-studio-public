@@ -25,15 +25,13 @@ describe("suggestLayout systemPrompt 组装", () => {
     expect(m.aiGenerate.mock.calls[0][0].promptId).toBeUndefined();
   });
 
-  it("选择模板时仍保留内置格式指令，模板内容作为额外偏好拼接", async () => {
+  it("选择模板时保留内置格式指令，模板拼接交给 resolveSystemPrompt", async () => {
     m.getPrompt.mockResolvedValue({ id: "p1", content: "请让排版更活泼" });
     m.aiGenerate.mockResolvedValue({ content: "[]", generationId: "g1", modelId: "m1" });
     await suggestLayout({ content: "正文", style: "standard", promptId: "p1" });
     const args = m.aiGenerate.mock.calls[0][0];
     // 格式指令必须保留（否则 AI 不输出 JSON 建议，前端解析为空）
     expect(args.systemPrompt).toContain("只输出 JSON 数组");
-    expect(args.systemPrompt).toContain("额外排版偏好");
-    expect(args.systemPrompt).toContain("请让排版更活泼");
     expect(args.promptId).toBe("p1");
   });
 

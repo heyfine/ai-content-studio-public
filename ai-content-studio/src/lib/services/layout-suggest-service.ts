@@ -6,7 +6,6 @@
  */
 import { generate } from "@/lib/ai/generate";
 import { buildLayoutSuggestPrompt } from "@/lib/ai/layout-suggest-prompt";
-import { getPrompt } from "./prompt-service";
 import { isCalloutType } from "@/lib/content/callout-types";
 import {
   isLayoutActionType,
@@ -24,22 +23,6 @@ export interface SuggestLayoutArgs {
   promptId?: string;
 }
 
-/**
- * 组装排版 system prompt：无论是否选了模板，都保留内置格式与克制指令
- * （否则模板内容可能不含"输出 JSON 建议数组"的要求，AI 输出无法解析）。
- * 用户选择的模板作为「额外排版偏好」拼接其后。
- */
-async function resolveLayoutPrompt(
-  style: LayoutStyle,
-  promptId?: string,
-): Promise<string> {
-  const base = buildLayoutSuggestPrompt(style);
-  if (!promptId) return base;
-  const prompt = await getPrompt(promptId);
-  if (!prompt) return base;
-  return `${base}\n\n## 额外排版偏好\n\n用户选择了一个排版偏好模板，请在满足上述格式与克制要求（输出 JSON 建议数组）的前提下，额外遵循以下偏好：\n${prompt.content}`;
-}
-
 export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
   suggestions: LayoutSuggestion[];
   raw: string;
@@ -50,11 +33,10 @@ export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
   const gen = await generate({
     task: "layout_suggest",
     input,
-    systemPrompt: await resolveLayoutPrompt(style, args.promptId),
+    // 内置格式与克制指令始终保留（模板内容由 resolveSystemPrompt 拼接在前）
+    systemPrompt: buildLayoutSuggestPrompt(style),
     ...(args.promptId ? { promptId: args.promptId } : {}),
     temperature: 0.3,
-    // 模型为推理模型（deepseek-v4-flash），output token 会先消耗在推理上；
-    // 2500 会被推理吃满导致 JSON 建议被截断，需给足内容输出空间
     maxTokens: 8000,
   });
 

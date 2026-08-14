@@ -73,13 +73,33 @@ describe("generate", () => {
     expect(createGen).not.toHaveBeenCalled();
   });
 
-  it("resolveSystemPrompt 优先显式 systemPrompt", async () => {
+  it("resolveSystemPrompt：显式 systemPrompt 与 promptId 模板拼接", async () => {
     getPrompt.mockResolvedValue({ content: "模板" });
     generateByTask.mockResolvedValue({ content: "c", context: ctx });
     createGen.mockResolvedValue({ id: "g" });
     await generate({ task: "t", input: "y", systemPrompt: "显式", promptId: "p" });
-    expect(generateByTask).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "显式" }));
-    expect(getPrompt).not.toHaveBeenCalled();
+    expect(generateByTask).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: "模板\n\n显式" }),
+    );
+    expect(getPrompt).toHaveBeenCalledWith("p");
+  });
+
+  it("resolveSystemPrompt：有 promptId 无显式时用模板", async () => {
+    getPrompt.mockResolvedValue({ content: "模板" });
+    generateByTask.mockResolvedValue({ content: "c", context: ctx });
+    createGen.mockResolvedValue({ id: "g" });
+    await generate({ task: "t", input: "y", promptId: "p" });
+    expect(generateByTask).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "模板" }));
+  });
+
+  it("resolveSystemPrompt：有显式无 promptId 时优先显式", async () => {
+    generateByTask.mockResolvedValue({ content: "c", context: ctx });
+    createGen.mockResolvedValue({ id: "g" });
+    await generate({ task: "t", input: "y", systemPrompt: "显式" });
+    expect(generateByTask).toHaveBeenCalledWith(
+      expect.objectContaining({ systemPrompt: "显式" }),
+    );
+    expect(getActivePromptByType).not.toHaveBeenCalled();
   });
 
   it("resolveSystemPrompt 回退 active by type", async () => {
