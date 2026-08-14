@@ -53,7 +53,9 @@ export async function suggestLayout(args: SuggestLayoutArgs): Promise<{
     systemPrompt: await resolveLayoutPrompt(style, args.promptId),
     ...(args.promptId ? { promptId: args.promptId } : {}),
     temperature: 0.3,
-    maxTokens: 2500,
+    // 模型为推理模型（deepseek-v4-flash），output token 会先消耗在推理上；
+    // 2500 会被推理吃满导致 JSON 建议被截断，需给足内容输出空间
+    maxTokens: 8000,
   });
 
   const suggestions = parseLayoutSuggestions(gen.content, style);

@@ -30,14 +30,8 @@ import {
 } from "@/components/studio/template-picker-dialog";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { useStudioStore } from "@/stores/studio-store";
-import { LayoutSuggestPanel } from "./layout-suggest-panel";
+import { streamGenerateRequest } from "@/lib/ai/stream-client";
 import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-suggest-ui";
-import {
-  LAYOUT_STYLE_LABELS,
-  LAYOUT_STYLES,
-  type LayoutStyle,
-  type LayoutSuggestion,
-} from "@/lib/content/layout-suggest-types";
 import { CALLOUT_TYPES } from "@/lib/content/callout-types";
 
 export interface TiptapEditorPageProps {
@@ -124,11 +118,10 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [error, setError] = useState<string | null>(null);
   const [mode, setMode] = useState<"edit" | "preview">("edit");
 
-  // AI 智能排版
-  const [layoutStyle, setLayoutStyle] = useState<LayoutStyle>("standard");
-  const [layoutLoading, setLayoutLoading] = useState(false);
+  // AI 智能排版（流式生成排版结果，与 AI Studio 一致）
+  const [layoutGenerating, setLayoutGenerating] = useState(false);
+  const [layoutResult, setLayoutResult] = useState("");
   const [layoutError, setLayoutError] = useState<string | null>(null);
-  const [layoutSuggestions, setLayoutSuggestions] = useState<LayoutSuggestion[] | null>(null);
   const [layoutPending, setLayoutPending] = useState(false);
   const [prompts, setPrompts] = useState<PromptOption[]>([]);
   const lastLayoutPrompt = useStudioStore((s) => s.lastPromptByTask.layout_suggest ?? null);
@@ -191,45 +184,42 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
     setLayoutPending(true);
   }
 
-  /** 模板确认后执行排版 */
-  async function runLayout(promptId: string | null) {
-    setLayoutLoading(true);
+  /** 流式生成排版结果：复用 /api/ai/stream（layout_suggest 任务 + 所选模板），逐段拼到面板 */
+  async function runLayoutStream(promptId: string | null) {
+    setLayoutGenerating(true);
+    setLayoutResult("");
+    setLayoutError(null);
+    const input =
+      [title && `标题：${title}`, content].filter(Boolean).join("\n\n") || "请生成一篇文章";
     try {
-      const res = await fetch("/api/articles/suggest-layout", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          content,
-          title,
-          style: layoutStyle,
-          ...(promptId ? { promptId } : {}),
-        }),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        setLayoutError(err.error ?? "AI 排版失败");
-        return;
-      }
-      const data = (await res.json()) as { suggestions: LayoutSuggestion[] };
-      const next = data.suggestions ?? [];
-      // 空建议时不挂载 diff 面板（空数组也是 truthy，会带着空勾选状态挂载导致按钮禁用）
-      setLayoutSuggestions(next.length > 0 ? next : null);
-      if (next.length === 0) {
-        setLayoutError(
-          "AI 未给出排版建议，可能是原文已是较优排版或本轮生成结果为空。可尝试：切换排版强度为「强调」、更换 Prompt 模板，或粘贴更长的原文后重试。",
-        );
+      for await (const ev of streamGenerateRequest({
+        task: "layout_suggest",
+        input,
+        promptId: promptId ?? undefined,
+      })) {
+        if (ev.type === "delta") {
+          setLayoutResult((prev) => prev + ev.content);
+        } else if (ev.type === "error") {
+          throw new Error(ev.message);
+        }
       }
     } catch (e) {
       setLayoutError(e instanceof Error ? e.message : String(e));
     } finally {
-      setLayoutLoading(false);
+      setLayoutGenerating(false);
     }
   }
 
   function handleLayoutConfirm(promptId: string | null) {
     setLastPrompt("layout_suggest", promptId);
     setLayoutPending(false);
-    void runLayout(promptId);
+    void runLayoutStream(promptId);
+  }
+
+  /** 把排版结果应用到正文（替换整个编辑器内容） */
+  function applyLayoutResult() {
+    applyContent(layoutResult);
+    setLayoutResult("");
   }
 
   async function onSuggestCallouts() {
@@ -474,30 +464,16 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           <div className="flex items-center justify-between">
             <Label htmlFor="article-content">正文</Label>
             <div className="flex items-center gap-1">
-              <select
-                aria-label="排版强度"
-                className="rounded-md border border-input bg-transparent px-2 py-1.5 text-xs"
-                value={layoutStyle}
-                onChange={(e) => setLayoutStyle(e.target.value as LayoutStyle)}
-                disabled={layoutLoading || mode !== "edit"}
-                data-testid="layout-style-select"
-              >
-                {LAYOUT_STYLES.map((s) => (
-                  <option key={s} value={s}>
-                    {LAYOUT_STYLE_LABELS[s]}
-                  </option>
-                ))}
-              </select>
               <Button
                 type="button"
                 variant="outline"
                 size="xs"
                 data-testid="ai-layout"
                 onClick={handleLayoutClick}
-                disabled={layoutLoading || mode !== "edit"}
+                disabled={layoutGenerating || mode !== "edit"}
               >
                 <Sparkles className="size-3.5" />
-                {layoutLoading ? "排版中…" : "AI 智能排版"}
+                {layoutGenerating ? "排版中…" : "AI 智能排版"}
               </Button>
               <Button
                 type="button"
@@ -602,21 +578,53 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
               {suggestError}
             </p>
           )}
-          {mode === "edit" && layoutError && !layoutLoading && (
+          {mode === "edit" && layoutError && !layoutGenerating && (
             <p className="text-sm text-muted-foreground" data-testid="layout-error">
               {layoutError}
             </p>
           )}
-          {mode === "edit" && layoutSuggestions && (
-            <LayoutSuggestPanel
-              content={content}
-              suggestions={layoutSuggestions}
-              onCancel={() => setLayoutSuggestions(null)}
-              onApply={(next) => {
-                applyContent(next);
-                setLayoutSuggestions(null);
-              }}
-            />
+          {mode === "edit" && (layoutGenerating || layoutResult) && (
+            <div
+              className="space-y-2 rounded-md border border-primary/30 p-3"
+              data-testid="layout-generate-panel"
+            >
+              <div className="flex items-center justify-between">
+                <p className="flex items-center gap-1.5 text-sm font-medium">
+                  <Sparkles className="size-4 text-purple-600" />
+                  AI 智能排版
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {layoutGenerating ? "排版中…" : "排版完成"}
+                  </span>
+                </p>
+                <div className="flex items-center gap-1">
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    onClick={() => setLayoutResult("")}
+                    disabled={layoutGenerating}
+                  >
+                    取消
+                  </Button>
+                  <Button
+                    type="button"
+                    size="xs"
+                    onClick={applyLayoutResult}
+                    disabled={layoutGenerating || !layoutResult}
+                    data-testid="layout-apply-result"
+                  >
+                    <Check className="size-3.5" /> 应用到正文
+                  </Button>
+                </div>
+              </div>
+              <div className="max-h-[50vh] overflow-y-auto rounded-md border p-3">
+                {layoutResult ? (
+                  <MarkdownPreview content={layoutResult} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">正在生成排版结果…</p>
+                )}
+              </div>
+            </div>
           )}
 
           {mode === "edit" ? (

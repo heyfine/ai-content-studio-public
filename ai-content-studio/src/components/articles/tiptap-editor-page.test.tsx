@@ -27,6 +27,12 @@ vi.mock("@/lib/editor/components/editor-toolbar", () => ({
   EditorToolbar: () => <div data-testid="editor-toolbar-mount" />,
 }));
 
+// AI 智能排版走流式 SSE；mock 掉避免真实网络
+const streamMock = vi.hoisted(() => vi.fn());
+vi.mock("@/lib/ai/stream-client", () => ({
+  streamGenerateRequest: (...args: unknown[]) => streamMock(...args),
+}));
+
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
@@ -41,6 +47,7 @@ describe("TiptapEditorPage", () => {
     editorMock.getJSON.mockClear();
     editorMock.getHTML.mockClear();
     editorMock.commands.setContent.mockClear();
+    streamMock.mockReset();
   });
 
   it("新建模式：标题为空时提交按钮禁用", () => {
@@ -149,6 +156,42 @@ describe("TiptapEditorPage", () => {
     render(<TiptapEditorPage articleId={null} />);
     fireEvent.click(screen.getByTestId("ai-layout"));
     expect(screen.getByTestId("layout-error")).toHaveTextContent("正文为空");
+  });
+
+  it("AI 智能排版：流式生成排版结果并应用到正文", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: "a1",
+        title: "旧标题",
+        slug: "x",
+        content: "重要内容",
+        status: "DRAFT",
+        seoScore: null,
+        wpPostId: null,
+        promptId: null,
+      }),
+    });
+    // 内层挂载时 prompts 请求
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    streamMock.mockImplementation(async function* () {
+      yield { type: "delta", content: "## 排好的标题\n\n排好版的内容。" };
+      yield { type: "done" };
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("ai-layout"));
+    fireEvent.click(screen.getByRole("button", { name: "开始生成" }));
+    await waitFor(() => expect(streamMock).toHaveBeenCalled());
+    const args = streamMock.mock.calls[0][0];
+    expect(args.task).toBe("layout_suggest");
+    expect(args.input).toContain("标题：旧标题");
+    expect(args.input).toContain("重要内容");
+    await waitFor(() => expect(screen.getByTestId("layout-generate-panel")).toBeInTheDocument());
+    await waitFor(() => expect(screen.getByText("排好版的内容。")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("layout-apply-result"));
+    await waitFor(() => expect(editorMock.commands.setContent).toHaveBeenCalled());
+    expect(screen.queryByTestId("layout-generate-panel")).not.toBeInTheDocument();
   });
 
   it("AI 建议：正文为空时给出提示", () => {
