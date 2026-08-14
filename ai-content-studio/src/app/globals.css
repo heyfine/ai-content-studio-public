@@ -298,17 +298,18 @@
   font-weight: 700;
   line-height: 1;
 }
-.ProseMirror .callout-color-backdrop {
+.ProseMirror .callout-color-backdrop,
+.callout-color-backdrop {
   position: fixed;
   inset: 0;
   z-index: 40;
 }
-.ProseMirror .callout-color-panel {
+.callout-color-panel {
   position: absolute;
   top: 100%;
   left: 0;
   z-index: 50;
-  width: 240px;
+  width: 268px;
   margin-top: 0.25rem;
   padding: 0.5rem;
   display: flex;
@@ -363,11 +364,11 @@
 }
 .wps-palette-row {
   display: grid;
-  grid-template-columns: repeat(6, 1fr);
+  grid-template-columns: repeat(10, 1fr);
   gap: 3px;
 }
 .wps-palette-row button {
-  height: 1.375rem;
+  height: 1.25rem;
   border-radius: 0.25rem;
   border: 1px solid var(--border);
   cursor: pointer;

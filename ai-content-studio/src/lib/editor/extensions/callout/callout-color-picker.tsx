@@ -1,8 +1,9 @@
 "use client";
 
-/** WPS 风格调色板：当前色预览 + 标准色网格（10 色系 × 6 深浅）+ 自定义 */
+/** WPS 风格调色板：当前色预览 + 标准色网格（10 色系 × 6 深浅，每行 10 色）+ 自定义 */
 
-const STANDARD_COLORS: string[][] = [
+/** 10 个色系，每系 6 个色阶（浅 → 深） */
+const COLOR_SHADES: string[][] = [
   ["#FFFFFF", "#F5F5F5", "#D9D9D9", "#BFBFBF", "#808080", "#000000"],
   ["#FFF1F0", "#FFCCC7", "#FFA39E", "#FF4D4F", "#CF1322", "#820014"],
   ["#FFF7E6", "#FFE7BA", "#FFD591", "#FFA940", "#D46B08", "#873800"],
@@ -14,6 +15,11 @@ const STANDARD_COLORS: string[][] = [
   ["#FFF0F6", "#FFD6E7", "#FFADD2", "#EB2F96", "#C41D7F", "#780650"],
   ["#FBF5F0", "#EFE3DA", "#D9BFA9", "#8C6D46", "#614C34", "#3E2E20"],
 ];
+
+/** 转置为 6 行 × 10 列（每行是同深浅档位下各色系） */
+const STANDARD_ROWS: string[][] = COLOR_SHADES[0].map((_, shade) =>
+  COLOR_SHADES.map((row) => row[shade]),
+);
 
 export interface CalloutColorPickerProps {
   /** 当前值（空串表示未自定义，走类型默认色） */
@@ -64,7 +70,7 @@ export function CalloutColorPicker({
 
       {/* 标准色网格 */}
       <div className="wps-palette-grid">
-        {STANDARD_COLORS.map((row, ri) => (
+        {STANDARD_ROWS.map((row, ri) => (
           <div key={ri} className="wps-palette-row">
             {row.map((c) => (
               <button
