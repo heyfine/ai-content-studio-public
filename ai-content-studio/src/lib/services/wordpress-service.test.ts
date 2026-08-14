@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
@@ -41,14 +41,16 @@ function mockFetch(response: unknown, ok = true, status = 200) {
 }
 
 import {
-  getActiveConfig,
   createWordpressConfig,
-  updateWordpressConfig,
   deleteWordpressConfig,
-  publishPost,
+  getActiveConfig,
   publishArticle,
+  publishPost,
   publishRawContent,
+  trashWordPressPost,
   unpublishArticle,
+  untrashWordPressPost,
+  updateWordpressConfig,
 } from "./wordpress-service";
 
 const config = {
@@ -355,6 +357,87 @@ describe("wordpress-service", () => {
           }),
       ) as unknown as typeof fetch;
       await expect(unpublishArticle("a1")).rejects.toThrow(/403.*forbidden/);
+    });
+  });
+
+  describe("trashWordPressPost", () => {
+    beforeEach(() => {
+      mocks.findFirst.mockReset();
+      mocks.articleFindUnique.mockReset();
+      globalThis.fetch = originalFetch;
+    });
+    it("PUT /posts/:id 且 body.status=trash，返回 trashed=true", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
+      mockFetch({ id: 9, status: "trash" });
+      const r = await trashWordPressPost("a1", "c1");
+      expect(r).toEqual({ trashed: true, trashStatus: "trash" });
+      const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(called[0]).toContain("/posts/9");
+      expect(called[1].method).toBe("PUT");
+      expect(JSON.parse(called[1].body).status).toBe("trash");
+    });
+    it("无 wpPostId 抛错", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({ id: "a1", wpPostId: null });
+      await expect(trashWordPressPost("a1", "c1")).rejects.toThrow(/尚未同步/);
+    });
+    it("WP 非 2xx 抛错", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({ id: "a1", wpPostId: "9" });
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ message: "no permission" }), {
+            status: 403,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ) as unknown as typeof fetch;
+      await expect(trashWordPressPost("a1", "c1")).rejects.toThrow(/403.*no permission/);
+    });
+  });
+
+  describe("untrashWordPressPost", () => {
+    beforeEach(() => {
+      mocks.findFirst.mockReset();
+      mocks.articleFindUnique.mockReset();
+      globalThis.fetch = originalFetch;
+    });
+    it("PUT /posts/:id 恢复 status=publish（默认）", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
+      mockFetch({ id: 9, status: "publish" });
+      const r = await untrashWordPressPost("a1", "c1");
+      expect(r).toEqual({ trashed: false, trashStatus: "publish" });
+      const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(JSON.parse(called[1].body).status).toBe("publish");
+    });
+    it("指定 draft 时恢复为 draft", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
+      mockFetch({ id: 9, status: "draft" });
+      await untrashWordPressPost("a1", "c1", "draft");
+      const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
+      expect(JSON.parse(called[1].body).status).toBe("draft");
+    });
+    it("无 wpPostId 抛错", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({ id: "a1", wpPostId: null });
+      await expect(untrashWordPressPost("a1", "c1")).rejects.toThrow(/尚未同步/);
     });
   });
 });

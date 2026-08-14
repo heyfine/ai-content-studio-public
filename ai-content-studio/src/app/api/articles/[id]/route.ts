@@ -1,8 +1,17 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { getArticle, updateArticle, deleteArticle } from "@/lib/services/article-service";
+import {
+  getArticle,
+  updateArticle,
+  trashArticle,
+  purgeArticle,
+} from "@/lib/services/article-service";
 import { updateArticleSchema } from "@/lib/schemas/article";
-import { publishArticle } from "@/lib/services/wordpress-service";
+import {
+  publishArticle,
+  trashWordPressPost,
+  unpublishArticle,
+} from "@/lib/services/wordpress-service";
 import { decrypt } from "@/lib/crypto";
 import { renderArticleContent } from "@/lib/content/render";
 
@@ -97,7 +106,7 @@ export async function PUT(request: Request, ctx: { params: Promise<{ id: string 
   }
 }
 
-export async function DELETE(_request: Request, ctx: { params: Promise<{ id: string }> }) {
+export async function DELETE(request: Request, ctx: { params: Promise<{ id: string }> }) {
   try {
     const session = await auth();
     if (!session?.user) {
@@ -111,11 +120,37 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ id: str
       return NextResponse.json({ error: "文章不存在" }, { status: 404 });
     }
 
-    // 如果是从博客同步的文章，同步删除到 WordPress
-    await syncToWordPress(id, article);
+    const permanent = new URL(request.url).searchParams.get("permanent") === "true";
 
-    // 执行删除
-    return NextResponse.json(await deleteArticle(id));
+    if (permanent) {
+      // 永久删除：先从博客侧彻底删除，再删本地
+      let wpDeleted = false;
+      let wpError: string | undefined;
+      if (article.siteConfigId && article.wpPostId) {
+        try {
+          await unpublishArticle(id, article.siteConfigId);
+          wpDeleted = true;
+        } catch (e) {
+          wpError = e instanceof Error ? e.message : String(e);
+        }
+      }
+      await purgeArticle(id);
+      return NextResponse.json({ ...article, deleted: true, permanent: true, wpDeleted, wpError });
+    }
+
+    // 移入回收站：本地先软删（确保操作即时生效），再同步博客到回收站
+    const trashed = await trashArticle(id);
+    let wpSynced = false;
+    let wpError: string | undefined;
+    if (article.siteConfigId && article.wpPostId) {
+      try {
+        await trashWordPressPost(id, article.siteConfigId);
+        wpSynced = true;
+      } catch (e) {
+        wpError = e instanceof Error ? e.message : String(e);
+      }
+    }
+    return NextResponse.json({ ...trashed, trashed: true, permanent: false, wpSynced, wpError });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/记录不存在|P2025/.test(msg)) {

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, listMock, createMock, schemaParse } = vi.hoisted(() => ({
+const { authMock, listMock, listTrashMock, createMock, schemaParse } = vi.hoisted(() => ({
   authMock: vi.fn(),
   listMock: vi.fn(),
+  listTrashMock: vi.fn(),
   createMock: vi.fn(),
   schemaParse: vi.fn(),
 }));
@@ -10,6 +11,7 @@ const { authMock, listMock, createMock, schemaParse } = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/services/article-service", () => ({
   listArticles: listMock,
+  listTrashedArticles: listTrashMock,
   createArticle: createMock,
 }));
 vi.mock("@/lib/schemas/article", () => ({
@@ -36,6 +38,7 @@ describe("GET /api/articles", () => {
   beforeEach(() => {
     authMock.mockReset();
     listMock.mockReset();
+    listTrashMock.mockReset();
   });
 
   it("未登录返回 401", async () => {
@@ -48,6 +51,7 @@ describe("GET /api/articles", () => {
     listMock.mockResolvedValue([]);
     await GET(makeGetRequest());
     expect(listMock).toHaveBeenCalledWith(undefined);
+    expect(listTrashMock).not.toHaveBeenCalled();
   });
 
   it("带 status 透传", async () => {
@@ -55,6 +59,15 @@ describe("GET /api/articles", () => {
     listMock.mockResolvedValue([]);
     await GET(makeGetRequest("PUBLISHED"));
     expect(listMock).toHaveBeenCalledWith("PUBLISHED");
+  });
+
+  it("trashed=true 返回回收站列表", async () => {
+    authMock.mockResolvedValue({ user: { email: "a@b.com" } });
+    listTrashMock.mockResolvedValue([{ id: "a1" }]);
+    const res = await GET(new Request("https://localhost/api/articles?trashed=true"));
+    expect(listTrashMock).toHaveBeenCalled();
+    expect(listMock).not.toHaveBeenCalled();
+    expect(res.status).toBe(200);
   });
 
   it("service 异常返回 500", async () => {
