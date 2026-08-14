@@ -20,20 +20,25 @@ import {
 
 marked.setOptions({ gfm: true, breaks: true });
 
-/** 高亮块统一样式（预览与发布共用同一 token）。 */
+/**
+ * 高亮块统一样式（预览与发布共用同一 token）。
+ * 颜色值与 src/app/globals.css 的 --callout-* 完全一致（oklch + 相同渲染公式），
+ * 保证「编辑器里看到的颜色 = 预览里的颜色」。
+ */
 export const CALLOUT_CSS = `
 .callout{margin:12px 0;padding:12px 16px;border-radius:8px;border-left:4px solid var(--callout-border,#cbd5e1);background:var(--callout-bg,#f8fafc);color:var(--callout-text,#475569);}
 .callout-title{display:flex;align-items:center;gap:6px;font-weight:600;margin-bottom:6px;}
 .callout-icon{line-height:1;}
 .callout-content>*:first-child{margin-top:0;}
 .callout-content>*:last-child{margin-bottom:0;}
-.callout-info{--callout-bg:#eff6ff;--callout-border:#60a5fa;--callout-text:#1e40af;}
-.callout-tip{--callout-bg:#f0fdf4;--callout-border:#4ade80;--callout-text:#166534;}
-.callout-warning{--callout-bg:#fff7ed;--callout-border:#fb923c;--callout-text:#9a3412;}
-.callout-danger{--callout-bg:#fef2f2;--callout-border:#f87171;--callout-text:#991b1b;}
-.callout-note{--callout-bg:#fefce8;--callout-border:#facc15;--callout-text:#854d0e;}
-.callout-insight{--callout-bg:#faf5ff;--callout-border:#c084fc;--callout-text:#6b21a8;}
-.callout-neutral{--callout-bg:#f8fafc;--callout-border:#cbd5e1;--callout-text:#475569;}
+.callout{color:var(--c);border-color:color-mix(in oklab,var(--c) 55%,transparent);background:color-mix(in oklab,var(--c) 10%,transparent);}
+.callout-info{--callout-bg:color-mix(in oklab,oklch(0.623 0.214 259.815) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.623 0.214 259.815) 55%,transparent);--callout-text:oklch(0.623 0.214 259.815);--c:oklch(0.623 0.214 259.815);}
+.callout-tip{--callout-bg:color-mix(in oklab,oklch(0.627 0.194 149.214) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.627 0.194 149.214) 55%,transparent);--callout-text:oklch(0.627 0.194 149.214);--c:oklch(0.627 0.194 149.214);}
+.callout-warning{--callout-bg:color-mix(in oklab,oklch(0.666 0.179 58.318) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.666 0.179 58.318) 55%,transparent);--callout-text:oklch(0.666 0.179 58.318);--c:oklch(0.666 0.179 58.318);}
+.callout-danger{--callout-bg:color-mix(in oklab,oklch(0.704 0.191 22.216) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.704 0.191 22.216) 55%,transparent);--callout-text:oklch(0.704 0.191 22.216);--c:oklch(0.704 0.191 22.216);}
+.callout-note{--callout-bg:color-mix(in oklab,oklch(0.606 0.25 292.717) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.606 0.25 292.717) 55%,transparent);--callout-text:oklch(0.606 0.25 292.717);--c:oklch(0.606 0.25 292.717);}
+.callout-insight{--callout-bg:color-mix(in oklab,oklch(0.695 0.17 162.48) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.695 0.17 162.48) 55%,transparent);--callout-text:oklch(0.695 0.17 162.48);--c:oklch(0.695 0.17 162.48);}
+.callout-neutral{--callout-bg:color-mix(in oklab,oklch(0.552 0.016 285.938) 10%,transparent);--callout-border:color-mix(in oklab,oklch(0.552 0.016 285.938) 55%,transparent);--callout-text:oklch(0.552 0.016 285.938);--c:oklch(0.552 0.016 285.938);}
 `;
 
 interface CalloutAttrs {
