@@ -343,7 +343,13 @@ export function ArticlesClient() {
           onValueChange={(v) => setStatusFilter(v ?? "ALL")}
         >
           <SelectTrigger className="w-[140px]" aria-label="状态筛选">
-            <SelectValue placeholder="状态筛选" />
+            <SelectValue placeholder="状态筛选">
+              {(value: string | null) =>
+                !value || value === "ALL"
+                  ? "全部状态"
+                  : (ARTICLE_STATUS_LABELS[value] ?? value)
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="ALL">全部状态</SelectItem>
@@ -360,7 +366,13 @@ export function ArticlesClient() {
           onValueChange={(v) => setSyncFilter(v as SyncFilter)}
         >
           <SelectTrigger className="w-[140px]" aria-label="同步标记">
-            <SelectValue placeholder="同步标记" />
+            <SelectValue placeholder="同步标记">
+              {(value: string | null) =>
+                !value || value === "ALL"
+                  ? "全部"
+                  : SYNC_FILTER_LABELS[value as SyncFilter] ?? value
+              }
+            </SelectValue>
           </SelectTrigger>
           <SelectContent>
             {(Object.keys(SYNC_FILTER_LABELS) as SyncFilter[]).map((k) => (
