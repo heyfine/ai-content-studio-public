@@ -1,12 +1,20 @@
 "use client";
 
-import { Check, Sparkles, X } from "lucide-react";
+import { Check, Send as SendIcon, Sparkles, X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { EditorContent, type Editor } from "@tiptap/react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ARTICLE_STATUS_LABELS,
   ARTICLE_STATUS_LIST,
@@ -34,6 +42,13 @@ import { CALLOUT_TYPES } from "@/lib/content/callout-types";
 
 export interface TiptapEditorPageProps {
   articleId: string | null;
+}
+
+interface WpOption {
+  id: string;
+  name: string;
+  siteUrl: string;
+  enabled: boolean;
 }
 
 /**
@@ -123,6 +138,18 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [suggesting, setSuggesting] = useState(false);
   const [suggestions, setSuggestions] = useState<CalloutSuggestion[]>([]);
   const [suggestError, setSuggestError] = useState<string | null>(null);
+
+  // 发送到 WordPress
+  const [publishing, setPublishing] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishResult, setPublishResult] = useState<{
+    link: string;
+    wpPostId: string;
+    status: string;
+  } | null>(null);
+  const [publishPickerOpen, setPublishPickerOpen] = useState(false);
+  const [wpConfigs, setWpConfigs] = useState<WpOption[]>([]);
+  const [wpConfigId, setWpConfigId] = useState("");
 
   const editor: Editor | null = useMarkdownEditor({
     initialContent: initial.content ?? "",
@@ -251,12 +278,18 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
     setSuggestions([]);
   }
 
-  async function onSubmit() {
-    if (!title.trim()) return;
+  /**
+   * 保存文章到后端（不跳转），成功返回 true。
+   * Markdown 事实源（content）+ 三个派生字段（json/html/md）一并提交。
+   */
+  async function saveArticle(): Promise<boolean> {
+    if (!title.trim()) {
+      setError("标题不能为空");
+      return false;
+    }
     setError(null);
     setSaving(true);
     try {
-      // Markdown 事实源（content）+ 三个派生字段（json/html/md）
       const json = editor?.getJSON() ?? null;
       const html = editor?.getHTML() ?? null;
       const body = {
@@ -275,13 +308,79 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         setError(err.error ?? "操作失败");
-        return;
+        return false;
       }
-      router.push("/articles");
+      return true;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
+      return false;
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function onSubmit() {
+    if (await saveArticle()) router.push("/articles");
+  }
+
+  async function doPublish(configId: string) {
+    setPublishing(true);
+    setPublishError(null);
+    try {
+      const res = await fetch("/api/wordpress/publish", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId: initial.id, configId }),
+      });
+      const data = (await res.json()) as {
+        link?: string;
+        wpPostId?: string;
+        status?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data.error ?? "发送失败");
+      setPublishResult({
+        link: data.link ?? "",
+        wpPostId: String(data.wpPostId ?? ""),
+        status: data.status ?? "",
+      });
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPublishing(false);
+    }
+  }
+
+  /**
+   * 点击「发送到 WordPress」：先保存最新内容，再拉站点列表。
+   * 0 个站点提示未配置；1 个站点直接发送；多个站点弹下拉选择。
+   */
+  async function handlePublishClick() {
+    if (!isEdit) return;
+    setPublishError(null);
+    setPublishResult(null);
+    const saved = await saveArticle();
+    if (!saved) return;
+    try {
+      const res = await fetch("/api/wordpress/configs");
+      if (!res.ok) throw new Error("加载 WordPress 站点失败");
+      const all = (await res.json()) as WpOption[];
+      const enabled = all.filter((c) => c.enabled);
+      if (enabled.length === 0) {
+        setPublishError("未配置启用中的 WordPress 站点，请先到「发布」板块配置站点");
+        return;
+      }
+      if (enabled.length === 1) {
+        await doPublish(enabled[0].id);
+      } else {
+        setWpConfigs(enabled);
+        setWpConfigId((prev) =>
+          enabled.some((c) => c.id === prev) ? prev : enabled[0].id,
+        );
+        setPublishPickerOpen(true);
+      }
+    } catch (e) {
+      setPublishError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -292,6 +391,18 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           {isEdit ? "编辑文章" : "新建文章"}
         </h1>
         <div className="flex items-center gap-2">
+          {isEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => void handlePublishClick()}
+              disabled={publishing || saving}
+              data-testid="publish-to-wordpress"
+            >
+              <SendIcon className="size-4" />
+              {publishing ? "发送中…" : "发送到 WordPress"}
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => router.push("/articles")}>
             取消
           </Button>
@@ -308,6 +419,25 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
+        </p>
+      )}
+
+      {publishError && (
+        <p role="alert" className="text-sm text-destructive" data-testid="publish-error">
+          {publishError}
+        </p>
+      )}
+      {publishResult && (
+        <p className="text-sm text-emerald-600" data-testid="publish-result">
+          已发送到 WordPress（#{publishResult.wpPostId}，{publishResult.status}）
+          <a
+            href={publishResult.link}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="ml-2 text-primary underline-offset-4 hover:underline"
+          >
+            查看博客文章
+          </a>
         </p>
       )}
 
@@ -512,6 +642,54 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         onConfirm={handleLayoutConfirm}
         onCancel={() => setLayoutPending(false)}
       />
+
+      {/* 发送到 WordPress：多站点时选择目标站点 */}
+      <Dialog
+        open={publishPickerOpen}
+        onOpenChange={(o) => (o ? undefined : setPublishPickerOpen(false))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>发送到 WordPress</DialogTitle>
+            <DialogDescription>选择要发送到的博客站点。</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="article-publish-config">发送到哪个站点</Label>
+            <select
+              id="article-publish-config"
+              aria-label="发送到哪个站点"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              value={wpConfigId}
+              onChange={(e) => setWpConfigId(e.target.value)}
+            >
+              {wpConfigs.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}（{c.siteUrl}）
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setPublishPickerOpen(false)}
+              disabled={publishing}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                setPublishPickerOpen(false);
+                void doPublish(wpConfigId);
+              }}
+              disabled={!wpConfigId || publishing}
+              data-testid="publish-confirm"
+            >
+              <SendIcon className="size-4" /> {publishing ? "发送中…" : "发送"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

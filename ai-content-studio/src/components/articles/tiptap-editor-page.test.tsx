@@ -186,4 +186,114 @@ describe("TiptapEditorPage", () => {
     fireEvent.click(screen.getByTestId("accept-suggestion-0"));
     await waitFor(() => expect(editorMock.commands.setContent).toHaveBeenCalled());
   });
+
+  it("新建模式：无「发送到 WordPress」按钮", () => {
+    render(<TiptapEditorPage articleId={null} />);
+    expect(screen.queryByTestId("publish-to-wordpress")).not.toBeInTheDocument();
+  });
+
+  it("编辑模式：单站点点击后直接发送", async () => {
+    const articleRow = {
+      id: "a1",
+      title: "旧标题",
+      slug: "x",
+      content: "旧正文",
+      status: "DRAFT",
+      seoScore: null,
+      wpPostId: null,
+      promptId: null,
+    };
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => articleRow });
+    // 内层挂载时 prompts 请求
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    // 发布流程：先保存 PUT，再拉站点，再发布
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: "w1", name: "博客A", siteUrl: "https://a.example", enabled: true }],
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ link: "https://a.example/?p=1", wpPostId: "1", status: "publish" }),
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("publish-to-wordpress"));
+    await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
+    expect(screen.queryByTestId("publish-confirm")).not.toBeInTheDocument();
+    const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
+    expect(pubCall).toBeDefined();
+    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+      articleId: "a1",
+      configId: "w1",
+    });
+  });
+
+  it("编辑模式：多个站点弹下拉选择后发送", async () => {
+    const articleRow = {
+      id: "a1",
+      title: "旧标题",
+      slug: "x",
+      content: "旧正文",
+      status: "DRAFT",
+      seoScore: null,
+      wpPostId: null,
+      promptId: null,
+    };
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => articleRow });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [
+        { id: "w1", name: "博客A", siteUrl: "https://a.example", enabled: true },
+        { id: "w2", name: "博客B", siteUrl: "https://b.example", enabled: true },
+      ],
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ link: "https://b.example/?p=2", wpPostId: "2", status: "publish" }),
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("publish-to-wordpress"));
+    const select = await screen.findByLabelText("发送到哪个站点");
+    expect(select).toBeInTheDocument();
+    fireEvent.change(select, { target: { value: "w2" } });
+    fireEvent.click(screen.getByTestId("publish-confirm"));
+    await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
+    const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
+    expect(pubCall).toBeDefined();
+    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+      articleId: "a1",
+      configId: "w2",
+    });
+  });
+
+  it("编辑模式：无启用站点时提示未配置", async () => {
+    const articleRow = {
+      id: "a1",
+      title: "旧标题",
+      slug: "x",
+      content: "旧正文",
+      status: "DRAFT",
+      seoScore: null,
+      wpPostId: null,
+      promptId: null,
+    };
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => articleRow });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("publish-to-wordpress"));
+    await waitFor(() =>
+      expect(screen.getByTestId("publish-error")).toHaveTextContent("未配置启用中的 WordPress"),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith(
+      "/api/wordpress/publish",
+      expect.anything(),
+    );
+  });
 });
