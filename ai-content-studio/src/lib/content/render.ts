@@ -40,6 +40,10 @@ interface CalloutAttrs {
   type?: string;
   title?: string;
   icon?: string;
+  /** 自定义颜色（编辑器内可调，预览需保持一致） */
+  textColor?: string;
+  borderColor?: string;
+  fillColor?: string;
 }
 
 export type Segment =
@@ -65,7 +69,14 @@ function parseCalloutAttrs(raw: string): CalloutAttrs {
   for (let m = re.exec(inner); m !== null; m = re.exec(inner)) {
     const key = m[1] ?? m[3];
     const value = m[2] ?? m[4];
-    if (key === "type" || key === "title" || key === "icon") {
+    if (
+      key === "type" ||
+      key === "title" ||
+      key === "icon" ||
+      key === "textColor" ||
+      key === "borderColor" ||
+      key === "fillColor"
+    ) {
       out[key] = value;
     }
   }
@@ -119,7 +130,14 @@ export function segmentsToMarkdown(segments: Segment[]): string {
       const config = CALLOUT_TYPES.find((t) => t.type === type) ?? CALLOUT_TYPES[0];
       const title = seg.attrs.title?.trim() || config.label;
       const icon = seg.attrs.icon?.trim() || config.icon;
-      return `:::callout{type="${type}" title="${title}" icon="${icon}"}\n${seg.body}\n:::`;
+      const textColor = (seg.attrs.textColor ?? "").trim();
+      const borderColor = (seg.attrs.borderColor ?? "").trim();
+      const fillColor = (seg.attrs.fillColor ?? "").trim();
+      const extra =
+        (textColor ? ` textColor="${textColor}"` : "") +
+        (borderColor ? ` borderColor="${borderColor}"` : "") +
+        (fillColor ? ` fillColor="${fillColor}"` : "");
+      return `:::callout{type="${type}" title="${title}" icon="${icon}"${extra}}\n${seg.body}\n:::`;
     })
     .join("\n");
 }
@@ -137,8 +155,17 @@ function renderCallout(seg: Extract<Segment, { kind: "callout" }>): string {
   const title = escapeAttr(seg.attrs.title?.trim() || config.label);
   const icon = escapeAttr(seg.attrs.icon?.trim() || config.icon);
   const innerHtml = marked.parse(seg.body, { async: false }) as string;
+  // 自定义颜色：与编辑器内 callout 渲染保持一致（fill 用 12% 透明混合）
+  const textColor = (seg.attrs.textColor ?? "").trim();
+  const borderColor = (seg.attrs.borderColor ?? "").trim();
+  const fillColor = (seg.attrs.fillColor ?? "").trim();
+  const styleParts: string[] = [];
+  if (textColor) styleParts.push(`color:${textColor}`);
+  if (borderColor) styleParts.push(`border-color:${borderColor}`);
+  if (fillColor) styleParts.push(`background:color-mix(in oklab, ${fillColor} 12%, transparent)`);
+  const style = styleParts.length ? ` style="${styleParts.join(";")}"` : "";
   return [
-    `<aside class="callout callout-${type}" data-callout="${type}">`,
+    `<aside class="callout callout-${type}" data-callout="${type}"${style}>`,
     `<div class="callout-title"><span class="callout-icon" aria-hidden="true">${icon}</span><span class="callout-label">${title}</span></div>`,
     `<div class="callout-content">${innerHtml}</div>`,
     `</aside>`,

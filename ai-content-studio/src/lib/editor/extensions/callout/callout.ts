@@ -152,7 +152,11 @@ export const Callout = Node.create({
               `}\n`,
           );
           state.renderContent(node);
-          state.write("\n:::");
+          state.ensureNewLine();
+          state.write(":::");
+          // 关键：closeBlock 让下一个节点的 write() 先补上闭合块的结束换行，
+          // 否则正文会紧跟 ":::" 粘连成 ":::正文"，导致预览端认为 callout 未闭合而排版全乱。
+          state.closeBlock(node);
         },
         parse: {
           // 给 markdown-it 注入自定义 block rule，识别 :::callout{...} ... :::
