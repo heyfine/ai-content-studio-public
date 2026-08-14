@@ -1,6 +1,10 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { listArticles, createArticle } from "@/lib/services/article-service";
+import {
+  listArticles,
+  listTrashedArticles,
+  createArticle,
+} from "@/lib/services/article-service";
 import { createArticleSchema } from "@/lib/schemas/article";
 
 export async function GET(request: Request) {
@@ -11,6 +15,10 @@ export async function GET(request: Request) {
     }
     const { searchParams } = new URL(request.url);
     const status = searchParams.get("status") ?? undefined;
+    const trashed = searchParams.get("trashed") === "true";
+    if (trashed) {
+      return NextResponse.json(await listTrashedArticles());
+    }
     return NextResponse.json(await listArticles(status as Parameters<typeof listArticles>[0]));
   } catch (e) {
     return NextResponse.json({ cause: String(e), error: "获取文章失败" }, { status: 500 });

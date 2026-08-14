@@ -137,6 +137,8 @@ model Article {
   tags          Json?
   /// 特色图片 URL（博客同步功能）
   featuredImage String?
+  /// 软删除标记（回收站功能）：非空=已移入回收站
+  deletedAt     DateTime?
   /// 可选，关联生成所用的 Prompt 模板
   promptId      String?
   createdAt     DateTime        @default(now())

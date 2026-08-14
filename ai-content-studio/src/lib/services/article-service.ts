@@ -47,15 +47,45 @@ export function slugify(title: string): string {
   );
 }
 
-export async function listArticles(status?: ArticleStatus) {
-  if (status) {
-    return prisma.article.findMany({ where: { status }, orderBy: { updatedAt: "desc" } });
-  }
-  return prisma.article.findMany({ orderBy: { updatedAt: "desc" } });
+export async function listArticles(status?: ArticleStatus, includeTrashed = false) {
+  const where: Prisma.ArticleWhereInput = includeTrashed
+    ? {}
+    : { deletedAt: null };
+  if (status) where.status = status;
+  return prisma.article.findMany({ where, orderBy: { updatedAt: "desc" } });
+}
+
+/** 列出回收站中的文章（deletedAt 非空） */
+export async function listTrashedArticles() {
+  return prisma.article.findMany({
+    where: { deletedAt: { not: null } },
+    orderBy: { updatedAt: "desc" },
+  });
 }
 
 export async function getArticle(id: string) {
   return prisma.article.findUnique({ where: { id } });
+}
+
+/** 软删除：移入回收站（设置 deletedAt） */
+export async function trashArticle(id: string) {
+  return prisma.article.update({
+    where: { id },
+    data: { deletedAt: new Date() },
+  });
+}
+
+/** 从回收站恢复 */
+export async function restoreArticle(id: string) {
+  return prisma.article.update({
+    where: { id },
+    data: { deletedAt: null },
+  });
+}
+
+/** 永久删除（从回收站彻底清除） */
+export async function purgeArticle(id: string) {
+  return prisma.article.delete({ where: { id } });
 }
 
 export async function createArticle(input: CreateArticleInput) {

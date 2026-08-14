@@ -14,10 +14,14 @@ vi.mock("@/lib/prisma", () => ({
 
 import {
   listArticles,
+  listTrashedArticles,
   getArticle,
   createArticle,
   updateArticle,
   deleteArticle,
+  trashArticle,
+  restoreArticle,
+  purgeArticle,
   slugify,
 } from "./article-service";
 
@@ -45,19 +49,64 @@ describe("article-service", () => {
     del.mockReset();
   });
 
-  it("listArticles 无 status 不带 where", async () => {
+  it("listArticles 无 status 默认排除已删除（deletedAt: null）", async () => {
     findMany.mockResolvedValue([]);
     await listArticles();
-    expect(findMany).toHaveBeenCalledWith({ orderBy: { updatedAt: "desc" } });
+    expect(findMany).toHaveBeenCalledWith({
+      where: { deletedAt: null },
+      orderBy: { updatedAt: "desc" },
+    });
   });
 
-  it("listArticles 带 status 过滤", async () => {
+  it("listArticles 带 status 过滤且排除已删除", async () => {
     findMany.mockResolvedValue([]);
     await listArticles("PUBLISHED");
     expect(findMany).toHaveBeenCalledWith({
-      where: { status: "PUBLISHED" },
+      where: { deletedAt: null, status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
     });
+  });
+
+  it("listArticles includeTrashed=true 不过滤 deletedAt", async () => {
+    findMany.mockResolvedValue([]);
+    await listArticles(undefined, true);
+    expect(findMany).toHaveBeenCalledWith({
+      where: {},
+      orderBy: { updatedAt: "desc" },
+    });
+  });
+
+  it("listTrashedArticles 只查 deletedAt 非空", async () => {
+    findMany.mockResolvedValue([]);
+    await listTrashedArticles();
+    expect(findMany).toHaveBeenCalledWith({
+      where: { deletedAt: { not: null } },
+      orderBy: { updatedAt: "desc" },
+    });
+  });
+
+  it("trashArticle 写入 deletedAt", async () => {
+    update.mockResolvedValue({ id: "a1", deletedAt: new Date() });
+    await trashArticle("a1");
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "a1" },
+      data: { deletedAt: expect.any(Date) },
+    });
+  });
+
+  it("restoreArticle 清空 deletedAt", async () => {
+    update.mockResolvedValue({ id: "a1", deletedAt: null });
+    await restoreArticle("a1");
+    expect(update).toHaveBeenCalledWith({
+      where: { id: "a1" },
+      data: { deletedAt: null },
+    });
+  });
+
+  it("purgeArticle 永久删除透传 id", async () => {
+    del.mockResolvedValue({ id: "a1" });
+    await purgeArticle("a1");
+    expect(del).toHaveBeenCalledWith({ where: { id: "a1" } });
   });
 
   it("createArticle 自动生成 slug 且默认 DRAFT", async () => {

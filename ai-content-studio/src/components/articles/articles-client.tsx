@@ -9,6 +9,7 @@ import {
   Trash2 as Trash2Icon,
   Download as DownloadIcon,
   Server as ServerIcon,
+  Archive as ArchiveIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
@@ -83,9 +84,23 @@ export function ArticlesClient() {
   }, []);
 
   async function onDelete(id: string) {
-    if (!confirm("确认删除该文章？")) return;
-    await fetch(`/api/articles/${id}`, { method: "DELETE" });
-    void refresh();
+    if (!confirm("确认将文章移入回收站？")) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
+      const data = (await res.json().catch(() => ({}))) as {
+        error?: string;
+        wpSynced?: boolean;
+        wpError?: string;
+      };
+      if (!res.ok) throw new Error(data?.error ?? "移入回收站失败");
+      await refresh();
+      if (data.wpSynced === false) {
+        setError(`已移入本地回收站，但博客同步失败：${data.wpError ?? "未知错误"}`);
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    }
   }
 
   async function onRefresh(id: string) {
@@ -201,6 +216,11 @@ export function ArticlesClient() {
               </Button>
             </div>
           )}
+          <Link href="/articles/trash" data-testid="trash-link">
+            <Button variant="outline" size="sm">
+              <ArchiveIcon className="size-4" /> 回收站
+            </Button>
+          </Link>
           <Link href="/articles/new" data-testid="new-article-link">
             <Button size="sm">
               <PlusIcon className="size-4" /> 新建文章

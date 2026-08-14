@@ -21,4 +21,5 @@ export interface ArticleRow {
   featuredImage: string | null;
   promptId: string | null;
   updatedAt?: string;
+  deletedAt?: string | null;
 }

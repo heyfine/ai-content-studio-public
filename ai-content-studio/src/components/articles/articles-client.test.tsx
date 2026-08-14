@@ -158,7 +158,7 @@ describe("ArticlesClient", () => {
     fetchMock.mockClear();
     fireEvent.click(screen.getAllByLabelText("删除")[0]);
     await waitFor(() => {
-      expect(confirmSpy).toHaveBeenCalled();
+      expect(confirmSpy).toHaveBeenCalledWith("确认将文章移入回收站？");
       expect(fetchMock).toHaveBeenCalledWith("/api/articles/a1", {
         method: "DELETE",
       });
@@ -175,6 +175,57 @@ describe("ArticlesClient", () => {
     fireEvent.click(screen.getAllByLabelText("删除")[0]);
     expect(confirmSpy).toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
+    confirmSpy.mockRestore();
+  });
+
+  it("DELETE 响应非 ok 显示错误提示", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => sampleRows };
+      if (u === "/api/articles/a1" && method === "DELETE")
+        return {
+          ok: false,
+          status: 500,
+          json: async () => ({ error: "移入回收站失败" }),
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("移入回收站失败"),
+    );
+    confirmSpy.mockRestore();
+  });
+
+  it("本地移入回收站成功但博客同步失败时显示提示", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => sampleRows };
+      if (u === "/api/articles/a1" && method === "DELETE")
+        return {
+          ok: true,
+          json: async () => ({
+            trashed: true,
+            wpSynced: false,
+            wpError: "WordPress 移入回收站失败（500）",
+          }),
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("博客同步失败：WordPress 移入回收站失败（500）"),
+    );
     confirmSpy.mockRestore();
   });
 

@@ -187,6 +187,62 @@ export async function unpublishArticle(articleId: string, configId?: string) {
   return { articleId, deleted: true };
 }
 
+/**
+ * 将 WordPress 文章移入回收站（调 WP REST：status=trash）。
+ * 返回 { trashed, trashStatus }，trashStatus 记录 WP 端回收站状态。
+ */
+export async function trashWordPressPost(
+  articleId: string,
+  configId?: string,
+): Promise<{ trashed: boolean; trashStatus: string }> {
+  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  if (!article) throw new Error("文章不存在");
+  if (!article.wpPostId) throw new Error("文章尚未同步到 WordPress");
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+  const res = await fetch(`${config.siteUrl}/wp-json/wp/v2/posts/${article.wpPostId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status: "trash" }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(`WordPress 移入回收站失败（${res.status}）：${data.message ?? res.statusText}`);
+  }
+  return { trashed: true, trashStatus: "trash" };
+}
+
+/**
+ * 将 WordPress 文章移出回收站（调 WP REST：恢复原状态 publish/draft）。
+ */
+export async function untrashWordPressPost(
+  articleId: string,
+  configId?: string,
+  status: "publish" | "draft" = "publish",
+): Promise<{ trashed: boolean; trashStatus: string }> {
+  const article = await prisma.article.findUnique({ where: { id: articleId } });
+  if (!article) throw new Error("文章不存在");
+  if (!article.wpPostId) throw new Error("文章尚未同步到 WordPress");
+  const config = await getActiveConfig(configId);
+  const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
+  const res = await fetch(`${config.siteUrl}/wp-json/wp/v2/posts/${article.wpPostId}`, {
+    method: "PUT",
+    headers: {
+      Authorization: `Basic ${basic}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ status }),
+  });
+  if (!res.ok) {
+    const data = (await res.json().catch(() => ({}))) as { message?: string };
+    throw new Error(`WordPress 恢复失败（${res.status}）：${data.message ?? res.statusText}`);
+  }
+  return { trashed: false, trashStatus: status };
+}
+
 // 抑制未使用导入告警（保留以备未来状态联动）
 void assertTransition;
 void (null as unknown as ArticleStatus);
