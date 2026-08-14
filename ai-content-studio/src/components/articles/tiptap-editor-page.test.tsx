@@ -10,6 +10,9 @@ vi.mock("next/navigation", () => ({
 const editorMock = {
   getJSON: vi.fn(() => ({ type: "doc", content: [] })),
   getHTML: vi.fn(() => "<p>正文</p>"),
+  commands: {
+    setContent: vi.fn(() => ({ done: true })),
+  },
 };
 vi.mock("@tiptap/react", () => ({
   EditorContent: ({ editor: _e }: { editor: unknown }) => <div data-testid="tiptap-editor-mount" />,
@@ -32,9 +35,12 @@ import { TiptapEditorPage } from "./tiptap-editor-page";
 describe("TiptapEditorPage", () => {
   beforeEach(() => {
     fetchMock.mockReset();
+    // 默认响应：prompts 空列表 + 后续任意请求 ok
+    fetchMock.mockResolvedValue({ ok: true, json: async () => [] });
     pushMock.mockReset();
     editorMock.getJSON.mockClear();
     editorMock.getHTML.mockClear();
+    editorMock.commands.setContent.mockClear();
   });
 
   it("新建模式：标题为空时提交按钮禁用", () => {
@@ -128,5 +134,56 @@ describe("TiptapEditorPage", () => {
     });
     render(<TiptapEditorPage articleId="a1" />);
     await waitFor(() => expect(screen.getByTestId("tiptap-editor-mount")).toBeInTheDocument());
+  });
+
+  it("预览：切换后渲染 MarkdownPreview，再切回编辑器", () => {
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.click(screen.getByTestId("toggle-preview"));
+    expect(screen.queryByTestId("tiptap-editor-host")).not.toBeInTheDocument();
+    expect(document.querySelector(".callout-preview")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("toggle-preview"));
+    expect(screen.getByTestId("tiptap-editor-host")).toBeInTheDocument();
+  });
+
+  it("AI 智能排版：正文为空时给出提示", () => {
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.click(screen.getByTestId("ai-layout"));
+    expect(screen.getByTestId("layout-error")).toHaveTextContent("正文为空");
+  });
+
+  it("AI 建议：正文为空时给出提示", () => {
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.click(screen.getByTestId("ai-suggest-callouts"));
+    expect(screen.getByTestId("suggest-error")).toHaveTextContent("正文为空");
+  });
+
+  it("编辑模式：AI 建议接受后应用到编辑器", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: "a1",
+        title: "旧标题",
+        slug: "x",
+        content: "重要内容",
+        status: "DRAFT",
+        seoScore: null,
+        wpPostId: null,
+        promptId: null,
+      }),
+    });
+    // 内层挂载时 prompts 请求
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        suggestions: [{ type: "tip", title: "提示", originalText: "重要内容", reason: "值得高亮" }],
+      }),
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("ai-suggest-callouts"));
+    await waitFor(() => expect(screen.getByTestId("suggestion-0")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("accept-suggestion-0"));
+    await waitFor(() => expect(editorMock.commands.setContent).toHaveBeenCalled());
   });
 });

@@ -1,6 +1,6 @@
-import { ArticleEditorPage } from "@/components/articles/article-editor-page";
+import { TiptapEditorPage } from "@/components/articles/tiptap-editor-page";
 
 export default async function EditArticlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  return <ArticleEditorPage articleId={id} />;
+  return <TiptapEditorPage articleId={id} />;
 }
