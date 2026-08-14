@@ -366,7 +366,7 @@ describe("wordpress-service", () => {
       mocks.articleFindUnique.mockReset();
       globalThis.fetch = originalFetch;
     });
-    it("PUT /posts/:id 且 body.status=trash，返回 trashed=true", async () => {
+    it("DELETE /posts/:id（不带 force）进入回收站，返回 trashed=true", async () => {
       mocks.findFirst.mockResolvedValue(config);
       mocks.articleFindUnique.mockResolvedValue({
         id: "a1",
@@ -379,8 +379,9 @@ describe("wordpress-service", () => {
       expect(r).toEqual({ trashed: true, trashStatus: "trash" });
       const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];
       expect(called[0]).toContain("/posts/9");
-      expect(called[1].method).toBe("PUT");
-      expect(JSON.parse(called[1].body).status).toBe("trash");
+      expect(called[1].method).toBe("DELETE");
+      // 不带 force=true → WP 软删除进回收站
+      expect(called[0]).not.toContain("force=true");
     });
     it("无 wpPostId 抛错", async () => {
       mocks.findFirst.mockResolvedValue(config);

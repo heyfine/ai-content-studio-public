@@ -188,8 +188,9 @@ export async function unpublishArticle(articleId: string, configId?: string) {
 }
 
 /**
- * 将 WordPress 文章移入回收站（调 WP REST：status=trash）。
- * 返回 { trashed, trashStatus }，trashStatus 记录 WP 端回收站状态。
+ * 将 WordPress 文章移入回收站（调 WP REST DELETE，不带 force=true）。
+ * WordPress 对 POST 的 DELETE 请求默认做软删除（进入 trash），
+ * ?force=true 才会永久删除。返回 { trashed, trashStatus }。
  */
 export async function trashWordPressPost(
   articleId: string,
@@ -201,12 +202,11 @@ export async function trashWordPressPost(
   const config = await getActiveConfig(configId);
   const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
   const res = await fetch(`${config.siteUrl}/wp-json/wp/v2/posts/${article.wpPostId}`, {
-    method: "PUT",
+    method: "DELETE",
     headers: {
       Authorization: `Basic ${basic}`,
       "Content-Type": "application/json",
     },
-    body: JSON.stringify({ status: "trash" }),
   });
   if (!res.ok) {
     const data = (await res.json().catch(() => ({}))) as { message?: string };
