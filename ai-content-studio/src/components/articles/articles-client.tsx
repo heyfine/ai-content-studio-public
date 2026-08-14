@@ -1,16 +1,16 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
+  Archive as ArchiveIcon,
+  Download as DownloadIcon,
   Pencil as PencilIcon,
   Plus as PlusIcon,
   RefreshCw as RefreshIcon,
-  Trash2 as Trash2Icon,
-  Download as DownloadIcon,
   Server as ServerIcon,
-  Archive as ArchiveIcon,
+  Trash2 as Trash2Icon,
 } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Select,
@@ -19,10 +19,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ArticleStatusBadge } from "./article-status-badge";
-import type { ArticleRow } from "@/lib/article-types";
 import { isStaleArticle } from "@/lib/article-staleness";
-import { listWordpressConfigs } from "@/lib/services/wordpress-service";
+import type { ArticleRow } from "@/lib/article-types";
+import { ArticleStatusBadge } from "./article-status-badge";
 
 interface RefreshOutcome {
   articleId: string;
@@ -44,10 +43,16 @@ export function ArticlesClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
-  const [wordpressConfigs, setWordpressConfigs] = useState<{ id: string; name: string; enabled: boolean }[]>([]);
+  const [wordpressConfigs, setWordpressConfigs] = useState<
+    { id: string; name: string; enabled: boolean }[]
+  >([]);
   const [selectedConfigId, setSelectedConfigId] = useState<string>("");
   const [syncing, setSyncing] = useState(false);
-  const [syncResult, setSyncResult] = useState<{ synced: number; conflicts: number; errors: number } | null>(null);
+  const [syncResult, setSyncResult] = useState<{
+    synced: number;
+    conflicts: number;
+    errors: number;
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -192,7 +197,10 @@ export function ArticlesClient() {
         <div className="flex items-center gap-3">
           {wordpressConfigs.length > 0 && (
             <div className="flex items-center gap-2">
-              <Select value={selectedConfigId} onValueChange={(value) => setSelectedConfigId(value || "")}>
+              <Select
+                value={selectedConfigId}
+                onValueChange={(value) => setSelectedConfigId(value || "")}
+              >
                 <SelectTrigger className="w-[200px]">
                   <ServerIcon className="size-4 mr-2" />
                   <SelectValue placeholder="选择博客站点" />
@@ -238,9 +246,7 @@ export function ArticlesClient() {
             </span>
           )}
           {syncResult.errors > 0 && (
-            <span className="ml-1 text-destructive">
-              失败 {syncResult.errors} 篇
-            </span>
+            <span className="ml-1 text-destructive">失败 {syncResult.errors} 篇</span>
           )}
         </p>
       )}

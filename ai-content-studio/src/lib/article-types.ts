@@ -1,5 +1,5 @@
-import type { ArticleStatus } from "@/lib/article-status";
 import type { ArticleSyncStatus } from "@prisma/client";
+import type { ArticleStatus } from "@/lib/article-status";
 
 export interface ArticleRow {
   id: string;

@@ -1,8 +1,8 @@
-import { prisma } from "@/lib/prisma";
-import { decrypt, encrypt } from "@/lib/crypto";
-import { renderArticleContent } from "@/lib/content/render";
-import { assertTransition, type ArticleStatus } from "@/lib/article-status";
 import type { ArticleSyncStatus } from "@prisma/client";
+import { type ArticleStatus, assertTransition } from "@/lib/article-status";
+import { renderArticleContent } from "@/lib/content/render";
+import { decrypt, encrypt } from "@/lib/crypto";
+import { prisma } from "@/lib/prisma";
 
 export interface WpConfigInput {
   name: string;
@@ -307,7 +307,10 @@ export interface SyncResult {
 /**
  * 从 WordPress 站点拉取文章列表
  */
-export async function fetchBlogPosts(configId: string, options: Partial<SyncBlogPostsOptions> = {}): Promise<WpPost[]> {
+export async function fetchBlogPosts(
+  configId: string,
+  options: Partial<SyncBlogPostsOptions> = {},
+): Promise<WpPost[]> {
   const config = await getActiveConfig(configId);
   const basic = Buffer.from(`${config.username}:${decrypt(config.appPassword)}`).toString("base64");
 
@@ -404,7 +407,10 @@ export async function fetchBlogCategories(configId: string): Promise<WpCategory[
 /**
  * 从 WordPress 站点拉取特色图片信息
  */
-export async function fetchBlogFeaturedMedia(configId: string, mediaId: number): Promise<WpMedia | null> {
+export async function fetchBlogFeaturedMedia(
+  configId: string,
+  mediaId: number,
+): Promise<WpMedia | null> {
   if (!mediaId) return null;
 
   const config = await getActiveConfig(configId);
@@ -436,7 +442,7 @@ function wpPostToLocalArticle(wpPost: WpPost, configId: string) {
     contentHtml: wpPost.content.rendered,
     wpPostId: String(wpPost.id),
     siteConfigId: configId,
-    status: wpPost.status === "publish" ? "PUBLISHED" : "DRAFT" as ArticleStatus,
+    status: wpPost.status === "publish" ? "PUBLISHED" : ("DRAFT" as ArticleStatus),
     wpModifiedAt: new Date(wpPost.modified_gmt),
     categories: wpPost.categories,
     tags: wpPost.tags,
@@ -465,7 +471,7 @@ function generateSlug(text: string): string {
  */
 async function detectArticleConflict(
   wpPost: WpPost,
-  localArticle?: { id: string; updatedAt: Date; wpModifiedAt?: Date | null }
+  localArticle?: { id: string; updatedAt: Date; wpModifiedAt?: Date | null },
 ): Promise<boolean> {
   if (!localArticle) return false;
 
@@ -599,7 +605,11 @@ export async function checkArticleSyncStatus(articleId: string): Promise<{
   const wpModified = new Date(wpPost.modified_gmt);
 
   return {
-    hasConflict: Boolean(article.wpModifiedAt && wpModified > article.wpModifiedAt && article.updatedAt > article.wpModifiedAt),
+    hasConflict: Boolean(
+      article.wpModifiedAt &&
+        wpModified > article.wpModifiedAt &&
+        article.updatedAt > article.wpModifiedAt,
+    ),
     wpModified,
     localModified: article.updatedAt,
   };
@@ -610,7 +620,7 @@ export async function checkArticleSyncStatus(articleId: string): Promise<{
  */
 export async function resolveArticleConflict(
   articleId: string,
-  strategy: "local" | "remote"
+  strategy: "local" | "remote",
 ): Promise<void> {
   const article = await prisma.article.findUnique({
     where: { id: articleId },

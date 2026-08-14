@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   findFirst: vi.fn(),
@@ -41,16 +41,16 @@ function mockFetch(response: unknown, ok = true, status = 200) {
 }
 
 import {
-  getActiveConfig,
   createWordpressConfig,
-  updateWordpressConfig,
   deleteWordpressConfig,
-  publishPost,
+  getActiveConfig,
   publishArticle,
+  publishPost,
   publishRawContent,
-  unpublishArticle,
   trashWordPressPost,
+  unpublishArticle,
   untrashWordPressPost,
+  updateWordpressConfig,
 } from "./wordpress-service";
 
 const config = {
@@ -368,7 +368,12 @@ describe("wordpress-service", () => {
     });
     it("PUT /posts/:id 且 body.status=trash，返回 trashed=true", async () => {
       mocks.findFirst.mockResolvedValue(config);
-      mocks.articleFindUnique.mockResolvedValue({ id: "a1", title: "t", content: "c", wpPostId: "9" });
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
       mockFetch({ id: 9, status: "trash" });
       const r = await trashWordPressPost("a1", "c1");
       expect(r).toEqual({ trashed: true, trashStatus: "trash" });
@@ -404,7 +409,12 @@ describe("wordpress-service", () => {
     });
     it("PUT /posts/:id 恢复 status=publish（默认）", async () => {
       mocks.findFirst.mockResolvedValue(config);
-      mocks.articleFindUnique.mockResolvedValue({ id: "a1", title: "t", content: "c", wpPostId: "9" });
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
       mockFetch({ id: 9, status: "publish" });
       const r = await untrashWordPressPost("a1", "c1");
       expect(r).toEqual({ trashed: false, trashStatus: "publish" });
@@ -413,7 +423,12 @@ describe("wordpress-service", () => {
     });
     it("指定 draft 时恢复为 draft", async () => {
       mocks.findFirst.mockResolvedValue(config);
-      mocks.articleFindUnique.mockResolvedValue({ id: "a1", title: "t", content: "c", wpPostId: "9" });
+      mocks.articleFindUnique.mockResolvedValue({
+        id: "a1",
+        title: "t",
+        content: "c",
+        wpPostId: "9",
+      });
       mockFetch({ id: 9, status: "draft" });
       await untrashWordPressPost("a1", "c1", "draft");
       const called = (globalThis.fetch as unknown as ReturnType<typeof vi.fn>).mock.calls[0];

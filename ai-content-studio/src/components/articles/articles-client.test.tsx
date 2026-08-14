@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type React from "react";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
@@ -16,8 +16,8 @@ vi.mock("@/components/ui/dialog", () => ({
   DialogClose: ({ render }: { render: React.ReactNode }) => <>{render}</>,
 }));
 
-import { ArticlesClient } from "./articles-client";
 import type { ArticleRow } from "@/lib/article-types";
+import { ArticlesClient } from "./articles-client";
 
 const sampleRows: ArticleRow[] = [
   {
@@ -196,9 +196,7 @@ describe("ArticlesClient", () => {
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
     fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
-    await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("移入回收站失败"),
-    );
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("移入回收站失败"));
     confirmSpy.mockRestore();
   });
 
@@ -224,7 +222,9 @@ describe("ArticlesClient", () => {
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
     fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent("博客同步失败：WordPress 移入回收站失败（500）"),
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "博客同步失败：WordPress 移入回收站失败（500）",
+      ),
     );
     confirmSpy.mockRestore();
   });

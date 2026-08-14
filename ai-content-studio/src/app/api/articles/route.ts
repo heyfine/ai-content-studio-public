@@ -1,11 +1,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import {
-  listArticles,
-  listTrashedArticles,
-  createArticle,
-} from "@/lib/services/article-service";
 import { createArticleSchema } from "@/lib/schemas/article";
+import { createArticle, listArticles, listTrashedArticles } from "@/lib/services/article-service";
 
 export async function GET(request: Request) {
   try {

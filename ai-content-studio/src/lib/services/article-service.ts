@@ -1,6 +1,6 @@
-import { Prisma } from "@prisma/client";
+import type { Prisma } from "@prisma/client";
+import { type ArticleStatus, assertTransition } from "@/lib/article-status";
 import { prisma } from "@/lib/prisma";
-import { assertTransition, type ArticleStatus } from "@/lib/article-status";
 
 export interface CreateArticleInput {
   title: string;
@@ -48,9 +48,7 @@ export function slugify(title: string): string {
 }
 
 export async function listArticles(status?: ArticleStatus, includeTrashed = false) {
-  const where: Prisma.ArticleWhereInput = includeTrashed
-    ? {}
-    : { deletedAt: null };
+  const where: Prisma.ArticleWhereInput = includeTrashed ? {} : { deletedAt: null };
   if (status) where.status = status;
   return prisma.article.findMany({ where, orderBy: { updatedAt: "desc" } });
 }

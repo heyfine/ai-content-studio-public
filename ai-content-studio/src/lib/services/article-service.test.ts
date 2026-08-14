@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const { findMany, findUnique, create, update, del } = vi.hoisted(() => ({
   findMany: vi.fn(),
@@ -13,16 +13,15 @@ vi.mock("@/lib/prisma", () => ({
 }));
 
 import {
+  createArticle,
+  deleteArticle,
   listArticles,
   listTrashedArticles,
-  getArticle,
-  createArticle,
-  updateArticle,
-  deleteArticle,
-  trashArticle,
-  restoreArticle,
   purgeArticle,
+  restoreArticle,
   slugify,
+  trashArticle,
+  updateArticle,
 } from "./article-service";
 
 describe("slugify", () => {

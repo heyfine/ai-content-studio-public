@@ -1,15 +1,15 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
-import Link from "next/link";
 import {
-  RotateCcw as RestoreIcon,
-  X as DeleteForeverIcon,
   ArrowLeft as BackIcon,
+  X as DeleteForeverIcon,
+  RotateCcw as RestoreIcon,
 } from "lucide-react";
+import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { ArticleStatusBadge } from "./article-status-badge";
 import type { ArticleRow } from "@/lib/article-types";
+import { ArticleStatusBadge } from "./article-status-badge";
 
 export function ArticlesTrashClient() {
   const [rows, setRows] = useState<ArticleRow[]>([]);
