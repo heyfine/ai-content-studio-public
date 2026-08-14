@@ -5,7 +5,6 @@ import Link from "next/link";
 import {
   RotateCcw as RestoreIcon,
   X as DeleteForeverIcon,
-  Pencil as PencilIcon,
   ArrowLeft as BackIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -133,11 +132,6 @@ export function ArticlesTrashClient() {
                   </td>
                   <td className="px-4 py-2">
                     <div className="flex items-center justify-end gap-1">
-                      <Link href={`/articles/${r.id}/edit`} data-testid={`edit-${r.id}`}>
-                        <Button variant="ghost" size="icon" aria-label="编辑">
-                          <PencilIcon className="size-4" />
-                        </Button>
-                      </Link>
                       <Button
                         variant="ghost"
                         size="icon"

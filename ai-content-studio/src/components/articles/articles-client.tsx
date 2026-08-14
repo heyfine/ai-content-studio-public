@@ -349,7 +349,7 @@ export function ArticlesClient() {
                         <Button
                           variant="ghost"
                           size="icon"
-                          aria-label="删除"
+                          aria-label="移入回收站"
                           onClick={() => onDelete(r.id)}
                         >
                           <Trash2Icon className="size-4" />

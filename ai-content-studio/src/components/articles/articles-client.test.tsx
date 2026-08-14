@@ -156,7 +156,7 @@ describe("ArticlesClient", () => {
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
     fetchMock.mockClear();
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     await waitFor(() => {
       expect(confirmSpy).toHaveBeenCalledWith("确认将文章移入回收站？");
       expect(fetchMock).toHaveBeenCalledWith("/api/articles/a1", {
@@ -172,7 +172,7 @@ describe("ArticlesClient", () => {
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
     fetchMock.mockClear();
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     expect(confirmSpy).toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
     confirmSpy.mockRestore();
@@ -195,7 +195,7 @@ describe("ArticlesClient", () => {
     });
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("移入回收站失败"),
     );
@@ -222,7 +222,7 @@ describe("ArticlesClient", () => {
     });
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
-    fireEvent.click(screen.getAllByLabelText("删除")[0]);
+    fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent("博客同步失败：WordPress 移入回收站失败（500）"),
     );
