@@ -243,13 +243,16 @@ export function ArticlesClient() {
             >
               <SelectTrigger className="w-[200px]" aria-label="文章归属">
                 <ServerIcon className="size-4 mr-2" />
-                <SelectValue
-                  placeholder={
-                    selectedSites.length > 0
-                      ? `已选 ${selectedSites.length} 项`
-                      : "文章归属"
-                  }
-                />
+                <SelectValue placeholder="文章归属">
+                  {(value: string | null) => {
+                    if (selectedSites.length > 1) {
+                      return `已选 ${selectedSites.length} 项`;
+                    }
+                    if (!value) return "文章归属";
+                    if (value === LOCAL_OPTION) return "本地文章";
+                    return configMap[value] ?? value;
+                  }}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {wordpressConfigs.map((config) => (
@@ -292,7 +295,11 @@ export function ArticlesClient() {
             >
               <SelectTrigger className="w-[180px]" aria-label="选择博客站点">
                 <ServerIcon className="size-4 mr-2" />
-                <SelectValue placeholder="选择博客站点" />
+                <SelectValue placeholder="选择博客站点">
+                  {(value: string | null) =>
+                    value ? (configMap[value] ?? value) : "选择博客站点"
+                  }
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {wordpressConfigs.map((config) => (
