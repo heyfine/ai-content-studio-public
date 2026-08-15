@@ -146,8 +146,27 @@ model Article {
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
   seoReports    SeoReport[]
+  publishes     ArticlePublish[]
   /// 关联的 WordPress 站点配置
   siteConfig    WordPressConfig? @relation(fields: [siteConfigId], references: [id], onDelete: SetNull)
+}
+
+/// 文章发布记录：一篇文章可发布到多个 WordPress 站点（同一站点覆盖更新）
+model ArticlePublish {
+  id        String   @id @default(uuid())
+  articleId String
+  article   Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  configId  String
+  config    WordPressConfig @relation(fields: [configId], references: [id], onDelete: Cascade)
+  /// WordPress 文章 ID
+  wpPostId  String
+  /// WordPress 文章永久链接
+  wpUrl     String?
+  /// 最近发布时间
+  publishedAt DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@unique([articleId, configId])
 }
 
 enum ArticleStatus {
@@ -198,6 +217,8 @@ model WordPressConfig {
   updatedAt   DateTime @default(now())
   /// 关联的文章
   articles    Article[]
+  /// 文章发布记录（文章 → 该站点的发布历史）
+  publishes   ArticlePublish[]
 }
 
 /// API 中转密钥：对外暴露 OpenAI 兼容接口的调用凭证（单 Key 调全部已启用供应商模型）

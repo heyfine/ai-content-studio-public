@@ -160,6 +160,21 @@ export async function publishArticle(
     data: { wpPostId: String(post.id), wpUrl: post.link ?? null },
   });
 
+  // 记录发布历史：同一站点覆盖更新，不同站点各保留一条
+  await prisma.articlePublish.upsert({
+    where: { articleId_configId: { articleId, configId: config.id } },
+    create: {
+      articleId,
+      configId: config.id,
+      wpPostId: String(post.id),
+      wpUrl: post.link ?? null,
+    },
+    update: {
+      wpPostId: String(post.id),
+      wpUrl: post.link ?? null,
+    },
+  });
+
   return {
     wpPostId: String(post.id),
     link: post.link,
@@ -554,6 +569,20 @@ export async function syncBlogPosts(options: SyncBlogPostsOptions): Promise<Sync
             syncStatus: "SYNCED" as ArticleSyncStatus,
           },
         });
+        // 同步即视为发布到该博客，记录发布历史
+        await prisma.articlePublish.upsert({
+          where: { articleId_configId: { articleId: existingArticle.id, configId } },
+          create: {
+            articleId: existingArticle.id,
+            configId,
+            wpPostId: String(wpPost.id),
+            wpUrl: wpPost.link,
+          },
+          update: {
+            wpPostId: String(wpPost.id),
+            wpUrl: wpPost.link,
+          },
+        });
         result.details.push({
           wpPostId: wpPost.id,
           articleId: existingArticle.id,
@@ -563,6 +592,15 @@ export async function syncBlogPosts(options: SyncBlogPostsOptions): Promise<Sync
         // 创建新文章
         const newArticle = await prisma.article.create({
           data: articleData,
+        });
+        // 同步创建即记录发布历史
+        await prisma.articlePublish.create({
+          data: {
+            articleId: newArticle.id,
+            configId,
+            wpPostId: String(wpPost.id),
+            wpUrl: wpPost.link,
+          },
         });
         result.details.push({
           wpPostId: wpPost.id,
