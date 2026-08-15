@@ -50,7 +50,11 @@ export function slugify(title: string): string {
 export async function listArticles(status?: ArticleStatus, includeTrashed = false) {
   const where: Prisma.ArticleWhereInput = includeTrashed ? {} : { deletedAt: null };
   if (status) where.status = status;
-  return prisma.article.findMany({ where, orderBy: { updatedAt: "desc" } });
+  return prisma.article.findMany({
+    where,
+    orderBy: { updatedAt: "desc" },
+    include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
+  });
 }
 
 /** 列出回收站中的文章（deletedAt 非空） */
@@ -58,6 +62,7 @@ export async function listTrashedArticles() {
   return prisma.article.findMany({
     where: { deletedAt: { not: null } },
     orderBy: { updatedAt: "desc" },
+    include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
   });
 }
 

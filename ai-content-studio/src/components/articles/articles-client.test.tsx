@@ -510,4 +510,45 @@ describe("ArticlesClient", () => {
     await waitFor(() => expect(screen.getByTestId("publish-selected")).not.toBeDisabled());
     expect(screen.getByTestId("publish-selected")).toHaveTextContent("发送到 WordPress（2）");
   });
+
+  it("「已发到」列显示文章发布过的所有博客名", async () => {
+    const multiPublishRow: ArticleRow = {
+      ...sampleRows[1],
+      publishes: [
+        { configId: "wp1", wpUrl: "https://blog.example.com/a/", wpPostId: "12" },
+        { configId: "wp2", wpUrl: "https://blog2.example.com/a/", wpPostId: "34" },
+      ],
+    };
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0], multiPublishRow] };
+      if (u === "/api/wordpress/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [
+            { id: "wp1", name: "博客A", siteUrl: "https://blog.example.com", enabled: true },
+            { id: "wp2", name: "博客B", siteUrl: "https://blog2.example.com", enabled: true },
+          ],
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("SEO 指南")).toBeInTheDocument());
+    // 已发到列显示两个博客名链接
+    const targetLinks = screen.getAllByTestId(/^publish-target-a2/);
+    expect(targetLinks).toHaveLength(2);
+    const linkTexts = targetLinks.map((l) => l.textContent);
+    expect(linkTexts.some((t) => t?.includes("博客A"))).toBeTruthy();
+    expect(linkTexts.some((t) => t?.includes("博客B"))).toBeTruthy();
+    // 链接指向各自博客文章
+    const links = screen.getAllByRole("link");
+    expect(
+      links.some((a) => a.getAttribute("href") === "https://blog.example.com/a/"),
+    ).toBeTruthy();
+    expect(
+      links.some((a) => a.getAttribute("href") === "https://blog2.example.com/a/"),
+    ).toBeTruthy();
+  });
 });

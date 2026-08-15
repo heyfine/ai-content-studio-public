@@ -54,6 +54,7 @@ describe("article-service", () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { deletedAt: null },
       orderBy: { updatedAt: "desc" },
+      include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
     });
   });
 
@@ -63,6 +64,7 @@ describe("article-service", () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { deletedAt: null, status: "PUBLISHED" },
       orderBy: { updatedAt: "desc" },
+      include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
     });
   });
 
@@ -72,6 +74,7 @@ describe("article-service", () => {
     expect(findMany).toHaveBeenCalledWith({
       where: {},
       orderBy: { updatedAt: "desc" },
+      include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
     });
   });
 
@@ -81,6 +84,7 @@ describe("article-service", () => {
     expect(findMany).toHaveBeenCalledWith({
       where: { deletedAt: { not: null } },
       orderBy: { updatedAt: "desc" },
+      include: { publishes: { select: { configId: true, wpUrl: true, wpPostId: true } } },
     });
   });
 

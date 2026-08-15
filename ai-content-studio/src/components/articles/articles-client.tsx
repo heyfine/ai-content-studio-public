@@ -20,7 +20,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ARTICLE_STATUS_LABELS, ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
+import {
+  ARTICLE_STATUS_LABELS,
+  ARTICLE_STATUS_LIST,
+  type ArticleStatus,
+} from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
 import type { RefreshOutcome } from "./articles-table";
 import { ArticlesTable } from "./articles-table";

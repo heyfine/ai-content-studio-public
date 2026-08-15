@@ -21,6 +21,8 @@ export interface ArticleRow {
   tags?: unknown | null;
   featuredImage: string | null;
   promptId: string | null;
+  /** 发布记录（一篇文章可发到多个博客站点） */
+  publishes?: Array<{ configId: string; wpUrl: string | null; wpPostId: string }>;
   updatedAt?: string;
   deletedAt?: string | null;
 }

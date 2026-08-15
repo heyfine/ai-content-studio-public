@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   articleFindUnique: vi.fn(),
   articleUpdate: vi.fn(),
+  articlePublishUpsert: vi.fn(),
+  articlePublishCreate: vi.fn(),
   encrypt: vi.fn((s: string) => "encrypted:" + s),
   decrypt: vi.fn((s: string) => "decrypted:" + s),
 }));
@@ -24,6 +26,10 @@ vi.mock("@/lib/prisma", () => ({
     article: {
       findUnique: mocks.articleFindUnique,
       update: mocks.articleUpdate,
+    },
+    articlePublish: {
+      upsert: mocks.articlePublishUpsert,
+      create: mocks.articlePublishCreate,
     },
   },
 }));

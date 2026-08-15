@@ -128,6 +128,7 @@ function ArticleTableRow({
   r,
   siteName,
   siteHref,
+  publishTargets,
   selected,
   refreshing,
   refreshDisabled,
@@ -139,6 +140,7 @@ function ArticleTableRow({
   r: ArticleRow;
   siteName: string | null;
   siteHref: string | null;
+  publishTargets: Array<{ name: string; href: string | null }>;
   selected: boolean;
   refreshing: boolean;
   refreshDisabled: boolean;
@@ -168,6 +170,36 @@ function ArticleTableRow({
       <td className="px-4 py-2 text-base font-medium">{r.title}</td>
       <td className="px-4 py-2">
         <ArticleOriginBadge siteName={siteName} isLocal={isLocal} href={siteHref} />
+      </td>
+      <td className="px-4 py-2">
+        {publishTargets.length === 0 ? (
+          <span className="text-muted-foreground">—</span>
+        ) : (
+          <div className="flex flex-wrap items-center gap-1">
+            {publishTargets.map((t, i) => (
+              <span key={`${t.name}-${i}`} className="inline-flex items-center">
+                {t.href ? (
+                  <a
+                    href={t.href}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-1 rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 hover:bg-emerald-200 dark:bg-emerald-950 dark:text-emerald-400 dark:hover:bg-emerald-900"
+                    title={`在 WordPress 中查看「${t.name}」`}
+                    data-testid={`publish-target-${r.id}`}
+                  >
+                    {t.name}
+                    <ExternalLinkIcon className="size-3" />
+                  </a>
+                ) : (
+                  <span className="inline-flex items-center rounded-md bg-emerald-100 px-2 py-0.5 text-xs text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+                    {t.name}
+                  </span>
+                )}
+                {i < publishTargets.length - 1 && <span className="text-muted-foreground">、</span>}
+              </span>
+            ))}
+          </div>
+        )}
       </td>
       <td className="px-4 py-2">
         <ArticleStatusBadge status={r.status} />
@@ -253,6 +285,7 @@ export function ArticlesTable({
             </th>
             <th className="px-4 py-2 font-medium">标题</th>
             <th className="px-4 py-2 font-medium">文章归属</th>
+            <th className="px-4 py-2 font-medium">已发到</th>
             <th className="px-4 py-2 font-medium">状态</th>
             <th className="px-4 py-2 font-medium">同步</th>
             <th className="px-4 py-2 font-medium">标记</th>
@@ -278,12 +311,19 @@ export function ArticlesTable({
               r.siteConfigId && (r.wpUrl || (siteUrl && r.wpPostId))
                 ? (r.wpUrl ?? `${siteUrl}/?p=${r.wpPostId}`)
                 : null;
+            const publishTargets = (r.publishes ?? []).map((p) => ({
+              name: configMap[p.configId] ?? p.configId,
+              href:
+                p.wpUrl ??
+                (siteUrlMap[p.configId] ? `${siteUrlMap[p.configId]}/?p=${p.wpPostId}` : null),
+            }));
             return (
               <ArticleTableRow
                 key={r.id}
                 r={r}
                 siteName={siteName}
                 siteHref={siteHref}
+                publishTargets={publishTargets}
                 selected={selectedIds.has(r.id)}
                 refreshing={refreshingId === r.id}
                 refreshDisabled={refreshingId === r.id || disabledIds.has(r.id)}
