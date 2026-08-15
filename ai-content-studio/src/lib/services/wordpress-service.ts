@@ -157,7 +157,7 @@ export async function publishArticle(
   // 其它情况不擅自改本地状态（UI 显式控制状态流转）
   await prisma.article.update({
     where: { id: articleId },
-    data: { wpPostId: String(post.id) },
+    data: { wpPostId: String(post.id), wpUrl: post.link ?? null },
   });
 
   return {
@@ -441,6 +441,7 @@ function wpPostToLocalArticle(wpPost: WpPost, configId: string) {
     content: plainContent,
     contentHtml: wpPost.content.rendered,
     wpPostId: String(wpPost.id),
+    wpUrl: wpPost.link,
     siteConfigId: configId,
     status: wpPost.status === "publish" ? "PUBLISHED" : ("DRAFT" as ArticleStatus),
     wpModifiedAt: new Date(wpPost.modified_gmt),

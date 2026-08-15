@@ -4,7 +4,7 @@ import {
   ChevronDown as ChevronDownIcon,
   ChevronsUpDown as ChevronsUpDownIcon,
   ChevronUp as ChevronUpIcon,
-  Download as DownloadIcon,
+  ExternalLink as ExternalLinkIcon,
   Pencil as PencilIcon,
   RefreshCw as RefreshIcon,
   Trash2 as Trash2Icon,
@@ -25,8 +25,12 @@ export interface RefreshOutcome {
 interface ArticleTableProps {
   rows: ArticleRow[];
   configMap: Record<string, string>;
+  siteUrlMap: Record<string, string>;
+  selectedIds: Set<string>;
   refreshingId: string | null;
   disabledIds: Set<string>;
+  onToggleRow: (id: string) => void;
+  onToggleAll: () => void;
   onRefresh: (id: string) => void;
   onDelete: (id: string) => void;
   sortOrder: "asc" | "desc";
@@ -41,7 +45,13 @@ function SortIcon({ order }: { order: "asc" | "desc" }) {
 }
 
 /** 同步状态徽标 */
-export function SyncBadge({ status, lastSyncedAt }: { status: ArticleRow["syncStatus"]; lastSyncedAt: string | null }) {
+export function SyncBadge({
+  status,
+  lastSyncedAt,
+}: {
+  status: ArticleRow["syncStatus"];
+  lastSyncedAt: string | null;
+}) {
   if (status === "CONFLICT") {
     return (
       <span
@@ -75,39 +85,65 @@ export function SyncBadge({ status, lastSyncedAt }: { status: ArticleRow["syncSt
   return null;
 }
 
-/** 文章归属标签 */
+/** 文章归属标签（博客类指向 WP 文章，本地类为静态标签） */
 export function ArticleOriginBadge({
   siteName,
+  isLocal,
+  href,
 }: {
   siteName: string | null;
+  isLocal: boolean;
+  href: string | null;
 }) {
+  const label = siteName ?? "本地";
+  if (isLocal || !href) {
+    return (
+      <span
+        className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${
+          isLocal
+            ? "bg-muted text-muted-foreground"
+            : "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400"
+        }`}
+      >
+        {label}
+      </span>
+    );
+  }
   return (
-    <span
-      className={`inline-flex items-center rounded-md px-2 py-0.5 text-xs ${
-        siteName
-          ? "bg-sky-100 text-sky-700 dark:bg-sky-950 dark:text-sky-400"
-          : "bg-muted text-muted-foreground"
-      }`}
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 rounded-md bg-sky-100 px-2 py-0.5 text-xs text-sky-700 hover:bg-sky-200 dark:bg-sky-950 dark:text-sky-400 dark:hover:bg-sky-900"
+      title={`在 WordPress 中查看「${label}」`}
+      data-testid="wp-article-link"
     >
-      {siteName ?? "本地"}
-    </span>
+      {label}
+      <ExternalLinkIcon className="size-3" />
+    </a>
   );
 }
 
 function ArticleTableRow({
   r,
   siteName,
+  siteHref,
+  selected,
   refreshing,
   refreshDisabled,
   actionDisabled,
+  onToggle,
   onRefresh,
   onDelete,
 }: {
   r: ArticleRow;
   siteName: string | null;
+  siteHref: string | null;
+  selected: boolean;
   refreshing: boolean;
   refreshDisabled: boolean;
   actionDisabled: boolean;
+  onToggle: () => void;
   onRefresh: () => void;
   onDelete: () => void;
 }) {
@@ -115,12 +151,23 @@ function ArticleTableRow({
     updatedAt: r.updatedAt ?? new Date(0),
     seoScore: r.seoScore,
   });
+  const isLocal = !r.siteConfigId;
 
   return (
-    <tr className="border-b last:border-0">
+    <tr className={`border-b last:border-0 ${selected ? "bg-muted/40" : ""}`}>
+      <td className="px-4 py-2">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggle}
+          aria-label={`选择 ${r.title}`}
+          data-testid={`row-checkbox-${r.id}`}
+          className="size-4"
+        />
+      </td>
       <td className="px-4 py-2 text-base font-medium">{r.title}</td>
       <td className="px-4 py-2">
-        <ArticleOriginBadge siteName={siteName} />
+        <ArticleOriginBadge siteName={siteName} isLocal={isLocal} href={siteHref} />
       </td>
       <td className="px-4 py-2">
         <ArticleStatusBadge status={r.status} />
@@ -176,18 +223,34 @@ function ArticleTableRow({
 export function ArticlesTable({
   rows,
   configMap,
+  siteUrlMap,
+  selectedIds,
   refreshingId,
   disabledIds,
+  onToggleRow,
+  onToggleAll,
   onRefresh,
   onDelete,
   sortOrder,
   onToggleSort,
 }: ArticleTableProps) {
+  const allSelected = rows.length > 0 && rows.every((r) => selectedIds.has(r.id));
+
   return (
     <div className="rounded-md border">
       <table className="w-full text-sm">
         <thead className="border-b bg-muted/30 text-left">
           <tr>
+            <th className="w-10 px-4 py-2">
+              <input
+                type="checkbox"
+                checked={allSelected}
+                onChange={onToggleAll}
+                aria-label="全选当前列表文章"
+                data-testid="select-all"
+                className="size-4"
+              />
+            </th>
             <th className="px-4 py-2 font-medium">标题</th>
             <th className="px-4 py-2 font-medium">文章归属</th>
             <th className="px-4 py-2 font-medium">状态</th>
@@ -209,15 +272,23 @@ export function ArticlesTable({
         </thead>
         <tbody>
           {rows.map((r) => {
-            const siteName = r.siteConfigId ? configMap[r.siteConfigId] ?? null : null;
+            const siteName = r.siteConfigId ? (configMap[r.siteConfigId] ?? null) : null;
+            const siteUrl = r.siteConfigId ? (siteUrlMap[r.siteConfigId] ?? null) : null;
+            const siteHref =
+              r.siteConfigId && (r.wpUrl || (siteUrl && r.wpPostId))
+                ? (r.wpUrl ?? `${siteUrl}/?p=${r.wpPostId}`)
+                : null;
             return (
               <ArticleTableRow
                 key={r.id}
                 r={r}
                 siteName={siteName}
+                siteHref={siteHref}
+                selected={selectedIds.has(r.id)}
                 refreshing={refreshingId === r.id}
                 refreshDisabled={refreshingId === r.id || disabledIds.has(r.id)}
                 actionDisabled={disabledIds.has(r.id)}
+                onToggle={() => onToggleRow(r.id)}
                 onRefresh={() => onRefresh(r.id)}
                 onDelete={() => onDelete(r.id)}
               />
