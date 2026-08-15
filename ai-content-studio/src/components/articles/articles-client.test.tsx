@@ -229,11 +229,11 @@ describe("ArticlesClient", () => {
     confirmSpy.mockRestore();
   });
 
-  it("低质文章（SEO<60）显示待刷新标记，优质文章不显示", async () => {
+  it("已移除待刷新标记列，低质文章不再显示待刷新标签", async () => {
     setupFetchWithRefresh([staleRow, freshRow]);
     render(<ArticlesClient />);
     await waitFor(() => expect(screen.getByText("低质文章")).toBeInTheDocument());
-    expect(screen.getByTestId("stale-mark-s1")).toHaveTextContent("待刷新");
+    expect(screen.queryByTestId("stale-mark-s1")).not.toBeInTheDocument();
     expect(screen.queryByTestId("stale-mark-f1")).not.toBeInTheDocument();
   });
 

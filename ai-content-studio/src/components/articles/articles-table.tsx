@@ -11,7 +11,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { isStaleArticle } from "@/lib/article-staleness";
 import type { ArticleRow } from "@/lib/article-types";
 import { ArticleStatusBadge } from "./article-status-badge";
 
@@ -124,36 +123,32 @@ export function ArticleOriginBadge({
   );
 }
 
-function ArticleTableRow({
-  r,
-  siteName,
-  siteHref,
-  publishTargets,
-  selected,
-  refreshing,
-  refreshDisabled,
-  actionDisabled,
-  onToggle,
-  onRefresh,
-  onDelete,
-}: {
-  r: ArticleRow;
-  siteName: string | null;
-  siteHref: string | null;
-  publishTargets: Array<{ name: string; href: string | null }>;
-  selected: boolean;
-  refreshing: boolean;
-  refreshDisabled: boolean;
-  actionDisabled: boolean;
-  onToggle: () => void;
-  onRefresh: () => void;
-  onDelete: () => void;
-}) {
-  const stale = isStaleArticle({
-    updatedAt: r.updatedAt ?? new Date(0),
-    seoScore: r.seoScore,
-  });
-  const isLocal = !r.siteConfigId;
+  function ArticleTableRow({
+    r,
+    siteName,
+    siteHref,
+    publishTargets,
+    selected,
+    refreshing,
+    refreshDisabled,
+    actionDisabled,
+    onToggle,
+    onRefresh,
+    onDelete,
+  }: {
+    r: ArticleRow;
+    siteName: string | null;
+    siteHref: string | null;
+    publishTargets: Array<{ name: string; href: string | null }>;
+    selected: boolean;
+    refreshing: boolean;
+    refreshDisabled: boolean;
+    actionDisabled: boolean;
+    onToggle: () => void;
+    onRefresh: () => void;
+    onDelete: () => void;
+  }) {
+    const isLocal = !r.siteConfigId;
 
   return (
     <tr className={`border-b last:border-0 ${selected ? "bg-muted/40" : ""}`}>
@@ -206,16 +201,6 @@ function ArticleTableRow({
       </td>
       <td className="px-4 py-2">
         <SyncBadge status={r.syncStatus} lastSyncedAt={r.lastSyncedAt} />
-      </td>
-      <td className="px-4 py-2">
-        {stale && (
-          <span
-            className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-xs text-amber-700 dark:bg-amber-950 dark:text-amber-400"
-            data-testid={`stale-mark-${r.id}`}
-          >
-            待刷新
-          </span>
-        )}
       </td>
       <td className="px-4 py-2 text-muted-foreground">
         {r.updatedAt?.slice(0, 16).replace("T", " ")}
@@ -288,7 +273,6 @@ export function ArticlesTable({
             <th className="px-4 py-2 font-medium">已发到</th>
             <th className="px-4 py-2 font-medium">状态</th>
             <th className="px-4 py-2 font-medium">同步</th>
-            <th className="px-4 py-2 font-medium">标记</th>
             <th className="px-4 py-2 font-medium">
               <button
                 type="button"
