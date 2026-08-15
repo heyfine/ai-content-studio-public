@@ -123,6 +123,8 @@ model Article {
   seoScore      Int?
   /// WordPress 文章 ID（发布模块 Phase 4 写入）
   wpPostId      String?
+  /// WordPress 文章永久链接（发布/同步时回填，文章管理页跳博客用）
+  wpUrl         String?
   /// WordPress 站点配置 ID（博客同步功能）
   siteConfigId  String?
   /// 同步状态（博客同步功能）

@@ -213,7 +213,7 @@ describe("wordpress-service", () => {
       expect(r.link).toContain("p=100");
       expect(mocks.articleUpdate).toHaveBeenCalledWith({
         where: { id: "a1" },
-        data: { wpPostId: "100" },
+        data: { wpPostId: "100", wpUrl: "https://blog.example.com/?p=100" },
       });
     });
     it("DRAFT 文章默认 wpStatus=draft", async () => {

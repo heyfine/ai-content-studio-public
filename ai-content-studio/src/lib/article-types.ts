@@ -12,6 +12,7 @@ export interface ArticleRow {
   status: ArticleStatus;
   seoScore: number | null;
   wpPostId: string | null;
+  wpUrl?: string | null;
   siteConfigId: string | null;
   syncStatus: ArticleSyncStatus | null;
   lastSyncedAt: string | null;

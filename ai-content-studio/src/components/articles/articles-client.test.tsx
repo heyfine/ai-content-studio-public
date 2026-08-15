@@ -409,4 +409,105 @@ describe("ArticlesClient", () => {
     await waitFor(() => expect(screen.getByText("我的博客")).toBeInTheDocument());
     expect(screen.getByText("本地")).toBeInTheDocument();
   });
+
+  it("博客归属文章显示为指向 WP 的超链接，本地文章不是链接", async () => {
+    const syncedRowWithUrl: ArticleRow = {
+      ...sampleRows[1],
+      wpUrl: "https://blog.example.com/seo-guide/",
+    };
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0], syncedRowWithUrl] };
+      if (u === "/api/wordpress/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [
+            { id: "wp1", name: "我的博客", siteUrl: "https://blog.example.com", enabled: true },
+          ],
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("SEO 指南")).toBeInTheDocument());
+    const links = screen.getAllByRole("link");
+    const wpLink = links.find(
+      (a) => a.getAttribute("href") === "https://blog.example.com/seo-guide/",
+    );
+    expect(wpLink).toBeTruthy();
+    expect(wpLink).toHaveAttribute("target", "_blank");
+  });
+
+  it("无 wpUrl 但有 wpPostId 时用 siteUrl/?p= 构造链接", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => sampleRows };
+      if (u === "/api/wordpress/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [
+            { id: "wp1", name: "我的博客", siteUrl: "https://blog.example.com", enabled: true },
+          ],
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("SEO 指南")).toBeInTheDocument());
+    const link = screen
+      .getAllByRole("link")
+      .find((a) => a.getAttribute("href") === "https://blog.example.com/?p=12");
+    expect(link).toBeTruthy();
+  });
+
+  it("勾选文章后发送按钮启用并可批量发布", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => sampleRows };
+      if (u === "/api/wordpress/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [
+            { id: "wp1", name: "我的博客", siteUrl: "https://blog.example.com", enabled: true },
+          ],
+        };
+      if (u === "/api/wordpress/publish" && method === "POST")
+        return { ok: true, json: async () => ({ success: true }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    const publishBtn = screen.getByTestId("publish-selected");
+    expect(publishBtn).toBeDisabled();
+    // 勾选两篇文章
+    fireEvent.click(screen.getByTestId("row-checkbox-a1"));
+    fireEvent.click(screen.getByTestId("row-checkbox-a2"));
+    await waitFor(() => expect(publishBtn).not.toBeDisabled());
+    expect(publishBtn).toHaveTextContent("发送到 WordPress（2）");
+    // 打开弹窗
+    fireEvent.click(publishBtn);
+    await waitFor(() => expect(screen.getByText("发送到 WordPress")).toBeInTheDocument());
+    // 选择目标站点
+    fireEvent.click(screen.getByRole("combobox", { name: /目标站点/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "我的博客" })).toBeInTheDocument(),
+    );
+    fireEvent.pointerDown(screen.getByRole("option", { name: "我的博客" }));
+    fireEvent.click(screen.getByRole("option", { name: "我的博客" }));
+    fireEvent.click(screen.getByText("发送"));
+    await waitFor(() => expect(screen.getByText(/发送完成：成功 2 篇/)).toBeInTheDocument());
+  });
+
+  it("全选按钮勾选当前列表全部文章", async () => {
+    fetchMock.mockResolvedValue({ ok: true, json: async () => sampleRows });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("select-all"));
+    await waitFor(() => expect(screen.getByTestId("publish-selected")).not.toBeDisabled());
+    expect(screen.getByTestId("publish-selected")).toHaveTextContent("发送到 WordPress（2）");
+  });
 });

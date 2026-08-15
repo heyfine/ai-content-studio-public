@@ -5,11 +5,13 @@ import {
   Download as DownloadIcon,
   Plus as PlusIcon,
   Search as SearchIcon,
+  Send as SendIcon,
   Server as ServerIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -18,14 +20,15 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ARTICLE_STATUS_LIST, ARTICLE_STATUS_LABELS } from "@/lib/article-status";
+import { ARTICLE_STATUS_LABELS, ARTICLE_STATUS_LIST, type ArticleStatus } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
-import { ArticlesTable } from "./articles-table";
 import type { RefreshOutcome } from "./articles-table";
+import { ArticlesTable } from "./articles-table";
 
 interface WordpressConfig {
   id: string;
   name: string;
+  siteUrl: string;
   enabled: boolean;
 }
 
@@ -63,6 +66,17 @@ export function ArticlesClient() {
   const [statusFilter, setStatusFilter] = useState<string>("ALL");
   const [syncFilter, setSyncFilter] = useState<SyncFilter>("ALL");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  // 批量选择
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  // 发送到 WordPress
+  const [publishDialogOpen, setPublishDialogOpen] = useState(false);
+  const [publishTargetConfigId, setPublishTargetConfigId] = useState("");
+  const [publishing, setPublishing] = useState(false);
+  const [publishResult, setPublishResult] = useState<{
+    success: number;
+    failed: number;
+    errors: string[];
+  } | null>(null);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -102,6 +116,29 @@ export function ArticlesClient() {
     for (const c of wordpressConfigs) map[c.id] = c.name;
     return map;
   }, [wordpressConfigs]);
+
+  const siteUrlMap = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const c of wordpressConfigs) map[c.id] = c.siteUrl;
+    return map;
+  }, [wordpressConfigs]);
+
+  function toggleRow(id: string) {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  function toggleAllRows() {
+    setSelectedIds((prev) => {
+      const allSelected = filteredRows.length > 0 && filteredRows.every((r) => prev.has(r.id));
+      if (allSelected) return new Set();
+      return new Set(filteredRows.map((r) => r.id));
+    });
+  }
 
   function toggleSite(option: string) {
     setSelectedSites((prev) =>
@@ -192,6 +229,53 @@ export function ArticlesClient() {
     }
   }
 
+  /** 打开发送弹窗（右上角发送当前勾选 / 批量发送共用一个） */
+  function openPublishDialog() {
+    setPublishResult(null);
+    setPublishTargetConfigId("");
+    setPublishDialogOpen(true);
+  }
+
+  /** 将选中文章批量发布到选定的 WordPress 站点 */
+  async function doPublish() {
+    if (!publishTargetConfigId) {
+      setError("请选择目标博客站点");
+      return;
+    }
+    const ids = Array.from(selectedIds);
+    if (ids.length === 0) {
+      setError("请先勾选要发送的文章");
+      return;
+    }
+    setPublishing(true);
+    setPublishResult(null);
+    setError(null);
+    const errors: string[] = [];
+    let success = 0;
+    for (const id of ids) {
+      try {
+        const res = await fetch("/api/wordpress/publish", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ articleId: id, configId: publishTargetConfigId }),
+        });
+        const data = (await res.json().catch(() => ({}))) as {
+          error?: string;
+          link?: string;
+        };
+        if (!res.ok) throw new Error(data?.error ?? "发布失败");
+        success++;
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e));
+      }
+    }
+    setPublishResult({ success, failed: errors.length, errors });
+    setPublishing(false);
+    // 发布完成后刷新列表（wpUrl/wpPostId 会回填）并清空选择
+    await refresh();
+    setSelectedIds(new Set());
+  }
+
   // 站点过滤：没选中任何站点 → 全部；选中 __local__ → 本地；选中具体站点 → 只显示这些站点
   const siteFiltered = useMemo(() => {
     if (selectedSites.length === 0) return rows;
@@ -259,8 +343,15 @@ export function ArticlesClient() {
                   <div
                     key={config.id}
                     role="option"
-                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
+                    tabIndex={0}
+                    className="flex w-full items-center gap-2 px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                     onClick={() => toggleSite(config.id)}
+                    onKeyDown={(e) => {
+                      if (e.key === "Enter" || e.key === " ") {
+                        e.preventDefault();
+                        toggleSite(config.id);
+                      }
+                    }}
                   >
                     <input
                       type="checkbox"
@@ -273,8 +364,15 @@ export function ArticlesClient() {
                 ))}
                 <div
                   role="option"
-                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm"
+                  tabIndex={0}
+                  className="flex w-full items-center gap-2 px-2 py-1.5 text-sm outline-none data-[highlighted]:bg-accent"
                   onClick={() => toggleSite(LOCAL_OPTION)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      toggleSite(LOCAL_OPTION);
+                    }
+                  }}
                 >
                   <input
                     type="checkbox"
@@ -296,9 +394,7 @@ export function ArticlesClient() {
               <SelectTrigger className="w-[180px]" aria-label="选择博客站点">
                 <ServerIcon className="size-4 mr-2" />
                 <SelectValue placeholder="选择博客站点">
-                  {(value: string | null) =>
-                    value ? (configMap[value] ?? value) : "选择博客站点"
-                  }
+                  {(value: string | null) => (value ? (configMap[value] ?? value) : "选择博客站点")}
                 </SelectValue>
               </SelectTrigger>
               <SelectContent>
@@ -318,6 +414,16 @@ export function ArticlesClient() {
           >
             <DownloadIcon className="size-4 mr-1" />
             {syncing ? "同步中…" : "从博客同步"}
+          </Button>
+          <Button
+            size="sm"
+            variant="outline"
+            onClick={openPublishDialog}
+            disabled={selectedIds.size === 0}
+            data-testid="publish-selected"
+          >
+            <SendIcon className="size-4 mr-1" />
+            发送到 WordPress{selectedIds.size > 0 ? `（${selectedIds.size}）` : ""}
           </Button>
           <Link href="/articles/trash" data-testid="trash-link">
             <Button variant="outline" size="sm">
@@ -345,16 +451,13 @@ export function ArticlesClient() {
           />
         </div>
         {/* 状态筛选 */}
-        <Select
-          value={statusFilter}
-          onValueChange={(v) => setStatusFilter(v ?? "ALL")}
-        >
+        <Select value={statusFilter} onValueChange={(v) => setStatusFilter(v ?? "ALL")}>
           <SelectTrigger className="w-[140px]" aria-label="状态筛选">
             <SelectValue placeholder="状态筛选">
               {(value: string | null) =>
                 !value || value === "ALL"
                   ? "全部状态"
-                  : (ARTICLE_STATUS_LABELS[value] ?? value)
+                  : (ARTICLE_STATUS_LABELS[value as ArticleStatus] ?? value)
               }
             </SelectValue>
           </SelectTrigger>
@@ -368,16 +471,13 @@ export function ArticlesClient() {
           </SelectContent>
         </Select>
         {/* 同步标记筛选 */}
-        <Select
-          value={syncFilter}
-          onValueChange={(v) => setSyncFilter(v as SyncFilter)}
-        >
+        <Select value={syncFilter} onValueChange={(v) => setSyncFilter(v as SyncFilter)}>
           <SelectTrigger className="w-[140px]" aria-label="同步标记">
             <SelectValue placeholder="同步状态">
               {(value: string | null) =>
                 !value || value === "ALL"
                   ? "同步状态"
-                  : SYNC_FILTER_LABELS[value as SyncFilter] ?? value
+                  : (SYNC_FILTER_LABELS[value as SyncFilter] ?? value)
               }
             </SelectValue>
           </SelectTrigger>
@@ -414,6 +514,20 @@ export function ArticlesClient() {
         </p>
       )}
 
+      {publishResult && (
+        <p className="text-sm">
+          发送完成：成功 {publishResult.success} 篇
+          {publishResult.failed > 0 && (
+            <span className="ml-1 text-destructive">失败 {publishResult.failed} 篇</span>
+          )}
+          {publishResult.errors.length > 0 && (
+            <span className="ml-1 block text-xs text-destructive">
+              {publishResult.errors.slice(0, 3).join("；")}
+            </span>
+          )}
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -426,14 +540,70 @@ export function ArticlesClient() {
         <ArticlesTable
           rows={filteredRows}
           configMap={configMap}
+          siteUrlMap={siteUrlMap}
+          selectedIds={selectedIds}
           refreshingId={refreshingId}
           disabledIds={new Set()}
+          onToggleRow={toggleRow}
+          onToggleAll={toggleAllRows}
           onRefresh={onRefresh}
           onDelete={onDelete}
           sortOrder={sortOrder}
           onToggleSort={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
         />
       )}
+      <Dialog
+        open={publishDialogOpen}
+        onOpenChange={(open) => {
+          if (!publishing) setPublishDialogOpen(open);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>发送到 WordPress</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              已将 {selectedIds.size} 篇文章加入发送队列，选择目标博客站点后发送：
+            </p>
+            <Select
+              value={publishTargetConfigId}
+              onValueChange={(v) => setPublishTargetConfigId(v ?? "")}
+            >
+              <SelectTrigger className="w-full" aria-label="目标站点">
+                <ServerIcon className="size-4 mr-2" />
+                <SelectValue placeholder="选择目标博客站点">
+                  {(value: string | null) =>
+                    value ? (configMap[value] ?? value) : "选择目标博客站点"
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {wordpressConfigs.map((config) => (
+                  <SelectItem key={config.id} value={config.id}>
+                    {config.name}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setPublishDialogOpen(false)}
+              disabled={publishing}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => void doPublish()}
+              disabled={publishing || !publishTargetConfigId}
+            >
+              {publishing ? "发送中…" : "发送"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
