@@ -173,16 +173,16 @@ describe("DELETE /api/articles/[id]（移入回收站）", () => {
     expect(data.wpSynced).toBe(true);
   });
 
-  it("WP 同步失败时本地仍移入回收站并返回 wpError", async () => {
+  it("WP 同步失败返回 502 且本地不移入回收站", async () => {
     authMock.mockResolvedValue({ user: {} });
     getMock.mockResolvedValue(syncedArticle());
-    trashMock.mockResolvedValue({ id: "a1", deletedAt: new Date() });
     wpTrashMock.mockRejectedValue(new Error("WordPress 移入回收站失败（500）"));
     const res = await DELETE(new Request("https://x"), ctx("a1"));
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(502);
+    expect(trashMock).not.toHaveBeenCalled();
     const data = await res.json();
-    expect(data.wpSynced).toBe(false);
-    expect(data.wpError).toContain("WordPress");
+    expect(data.error).toContain("WordPress");
+    expect(data.error).toContain("本地文章未删除");
   });
 
   it("permanent=true 永久删除并同步 WP 彻底删除", async () => {

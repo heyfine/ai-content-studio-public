@@ -406,6 +406,19 @@ describe("wordpress-service", () => {
       ) as unknown as typeof fetch;
       await expect(trashWordPressPost("a1", "c1")).rejects.toThrow(/403.*no permission/);
     });
+    it("WP 404（文章不存在或已在回收站）视为已移入回收站", async () => {
+      mocks.findFirst.mockResolvedValue(config);
+      mocks.articleFindUnique.mockResolvedValue({ id: "a1", wpPostId: "9" });
+      globalThis.fetch = vi.fn(
+        async () =>
+          new Response(JSON.stringify({ code: "rest_post_invalid_id" }), {
+            status: 404,
+            headers: { "Content-Type": "application/json" },
+          }),
+      ) as unknown as typeof fetch;
+      const r = await trashWordPressPost("a1", "c1");
+      expect(r).toEqual({ trashed: true, trashStatus: "trash" });
+    });
   });
 
   describe("untrashWordPressPost", () => {

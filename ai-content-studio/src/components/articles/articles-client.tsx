@@ -155,16 +155,10 @@ export function ArticlesClient() {
     setError(null);
     try {
       const res = await fetch(`/api/articles/${id}`, { method: "DELETE" });
-      const data = (await res.json().catch(() => ({}))) as {
-        error?: string;
-        wpSynced?: boolean;
-        wpError?: string;
-      };
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      // 博客同步文章删除时 WP 移入回收站失败 → 返回 502，本地未删除，提示删除失败
       if (!res.ok) throw new Error(data?.error ?? "移入回收站失败");
       await refresh();
-      if (data.wpSynced === false) {
-        setError(`已移入本地回收站，但博客同步失败：${data.wpError ?? "未知错误"}`);
-      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     }

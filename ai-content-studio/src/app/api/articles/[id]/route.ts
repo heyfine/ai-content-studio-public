@@ -138,22 +138,22 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
       return NextResponse.json({ ...article, deleted: true, permanent: true, wpDeleted, wpError });
     }
 
-    // 移入回收站：本地先软删（确保操作即时生效），再同步博客到回收站
-    const trashed = await trashArticle(id);
-    // 是否博客文章；本地文章（无 siteConfigId/wpPostId）不涉及博客同步
+    // 移入回收站：博客同步文章先同步 WP 到回收站，成功后再本地软删；
+    // WP 失败则本地不动、直接返回删除失败，避免产生「本地已删、WP 未删」的半同步态。
     const isBlogArticle = Boolean(article.siteConfigId && article.wpPostId);
-    let wpSynced: boolean | undefined;
-    let wpError: string | undefined;
     if (isBlogArticle && article.siteConfigId) {
       try {
         await trashWordPressPost(id, article.siteConfigId);
-        wpSynced = true;
       } catch (e) {
-        wpSynced = false;
-        wpError = e instanceof Error ? e.message : String(e);
+        const msg = e instanceof Error ? e.message : String(e);
+        return NextResponse.json(
+          { error: `WordPress 移入回收站失败，本地文章未删除：${msg}` },
+          { status: 502 },
+        );
       }
     }
-    return NextResponse.json({ ...trashed, trashed: true, permanent: false, wpSynced, wpError });
+    const trashed = await trashArticle(id);
+    return NextResponse.json({ ...trashed, trashed: true, permanent: false, wpSynced: true });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     if (/记录不存在|P2025/.test(msg)) {

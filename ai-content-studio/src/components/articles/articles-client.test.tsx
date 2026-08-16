@@ -200,7 +200,7 @@ describe("ArticlesClient", () => {
     confirmSpy.mockRestore();
   });
 
-  it("本地移入回收站成功但博客同步失败时显示提示", async () => {
+  it("博客同步文章删除时 WP 移入回收站失败返回删除失败提示", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
       const method = init?.method ?? "GET";
@@ -209,11 +209,10 @@ describe("ArticlesClient", () => {
         return { ok: true, json: async () => sampleRows };
       if (u === "/api/articles/a1" && method === "DELETE")
         return {
-          ok: true,
+          ok: false,
+          status: 502,
           json: async () => ({
-            trashed: true,
-            wpSynced: false,
-            wpError: "WordPress 移入回收站失败（500）",
+            error: "WordPress 移入回收站失败，本地文章未删除：WordPress 移入回收站失败（500）",
           }),
         };
       return { ok: false, json: async () => ({ error: "未知请求" }) };
@@ -222,9 +221,7 @@ describe("ArticlesClient", () => {
     await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
     fireEvent.click(screen.getAllByLabelText("移入回收站")[0]);
     await waitFor(() =>
-      expect(screen.getByRole("alert")).toHaveTextContent(
-        "博客同步失败：WordPress 移入回收站失败（500）",
-      ),
+      expect(screen.getByRole("alert")).toHaveTextContent("WordPress 移入回收站失败"),
     );
     confirmSpy.mockRestore();
   });

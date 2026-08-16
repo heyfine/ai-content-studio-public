@@ -223,7 +223,8 @@ export async function trashWordPressPost(
       "Content-Type": "application/json",
     },
   });
-  if (!res.ok) {
+  // 404：WP 文章不存在或已在回收站，视为已移入回收站（支持幂等重试）
+  if (!res.ok && res.status !== 404) {
     const data = (await res.json().catch(() => ({}))) as { message?: string };
     throw new Error(`WordPress 移入回收站失败（${res.status}）：${data.message ?? res.statusText}`);
   }
