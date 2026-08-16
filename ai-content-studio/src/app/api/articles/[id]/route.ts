@@ -140,13 +140,16 @@ export async function DELETE(request: Request, ctx: { params: Promise<{ id: stri
 
     // 移入回收站：本地先软删（确保操作即时生效），再同步博客到回收站
     const trashed = await trashArticle(id);
-    let wpSynced = false;
+    // 是否博客文章；本地文章（无 siteConfigId/wpPostId）不涉及博客同步
+    const isBlogArticle = Boolean(article.siteConfigId && article.wpPostId);
+    let wpSynced: boolean | undefined;
     let wpError: string | undefined;
-    if (article.siteConfigId && article.wpPostId) {
+    if (isBlogArticle && article.siteConfigId) {
       try {
         await trashWordPressPost(id, article.siteConfigId);
         wpSynced = true;
       } catch (e) {
+        wpSynced = false;
         wpError = e instanceof Error ? e.message : String(e);
       }
     }
