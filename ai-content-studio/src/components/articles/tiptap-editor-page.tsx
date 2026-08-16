@@ -172,6 +172,8 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [publishPickerOpen, setPublishPickerOpen] = useState(false);
   const [wpConfigs, setWpConfigs] = useState<WpOption[]>([]);
   const [wpConfigId, setWpConfigId] = useState("");
+  // 实际文章 id：编辑模式即 initial.id；新建模式首次保存（POST）后获得，后续转 PUT 更新
+  const [savedArticleId, setSavedArticleId] = useState(initial.id);
 
   const editor: Editor | null = useMarkdownEditor({
     initialContent: initial.content ?? "",
@@ -304,13 +306,14 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   }
 
   /**
-   * 保存文章到后端（不跳转），成功返回 true。
+   * 保存文章到后端（不跳转），成功返回文章 id，失败返回 null。
    * Markdown 事实源（content）+ 三个派生字段（json/html/md）一并提交。
+   * 新建模式首次保存用 POST 创建并拿到 id，之后转 PUT 更新同一篇文章。
    */
-  async function saveArticle(): Promise<boolean> {
+  async function saveArticle(): Promise<string | null> {
     if (!title.trim()) {
       setError("标题不能为空");
-      return false;
+      return null;
     }
     setError(null);
     setSaving(true);
@@ -325,20 +328,27 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         contentHtml: html,
         contentMd: content,
       };
-      const res = await fetch(isEdit ? `/api/articles/${initial.id}` : "/api/articles", {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
+      const isUpdate = isEdit || savedArticleId !== "";
+      const res = await fetch(
+        isUpdate ? `/api/articles/${savedArticleId || initial.id}` : "/api/articles",
+        {
+          method: isUpdate ? "PUT" : "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
         setError(err.error ?? "操作失败");
-        return false;
+        return null;
       }
-      return true;
+      const data = (await res.json()) as { id?: string };
+      const id = data.id ?? (isEdit ? initial.id : "");
+      if (id) setSavedArticleId(id);
+      return id || null;
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
@@ -348,14 +358,14 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
     if (await saveArticle()) router.push("/articles");
   }
 
-  async function doPublish(configId: string) {
+  async function doPublish(configId: string, articleId?: string) {
     setPublishing(true);
     setPublishError(null);
     try {
       const res = await fetch("/api/wordpress/publish", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ articleId: initial.id, configId }),
+        body: JSON.stringify({ articleId: articleId ?? savedArticleId, configId }),
       });
       const data = (await res.json()) as {
         link?: string;
@@ -381,11 +391,10 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
    * 0 个站点提示未配置；1 个站点直接发送；多个站点弹下拉选择。
    */
   async function handlePublishClick() {
-    if (!isEdit) return;
     setPublishError(null);
     setPublishResult(null);
-    const saved = await saveArticle();
-    if (!saved) return;
+    const id = await saveArticle();
+    if (!id) return;
     try {
       const res = await fetch("/api/wordpress/configs");
       if (!res.ok) throw new Error("加载 WordPress 站点失败");
@@ -396,7 +405,7 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         return;
       }
       if (enabled.length === 1) {
-        await doPublish(enabled[0].id);
+        await doPublish(enabled[0].id, id);
       } else {
         setWpConfigs(enabled);
         setWpConfigId((prev) =>
@@ -416,18 +425,16 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           {isEdit ? "编辑文章" : "新建文章"}
         </h1>
         <div className="flex items-center gap-2">
-          {isEdit && (
-            <Button
-              type="button"
-              variant="outline"
-              onClick={() => void handlePublishClick()}
-              disabled={publishing || saving}
-              data-testid="publish-to-wordpress"
-            >
-              <SendIcon className="size-4" />
-              {publishing ? "发送中…" : "发送到 WordPress"}
-            </Button>
-          )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handlePublishClick()}
+            disabled={publishing || saving}
+            data-testid="publish-to-wordpress"
+          >
+            <SendIcon className="size-4" />
+            {publishing ? "发送中…" : "发送到 WordPress"}
+          </Button>
           <Button variant="ghost" onClick={() => router.push("/articles")}>
             取消
           </Button>

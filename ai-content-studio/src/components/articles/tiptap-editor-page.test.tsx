@@ -230,9 +230,43 @@ describe("TiptapEditorPage", () => {
     await waitFor(() => expect(editorMock.commands.setContent).toHaveBeenCalled());
   });
 
-  it("新建模式：无「发送到 WordPress」按钮", () => {
+  it("新建模式：显示「发送到 WordPress」按钮", () => {
     render(<TiptapEditorPage articleId={null} />);
-    expect(screen.queryByTestId("publish-to-wordpress")).not.toBeInTheDocument();
+    expect(screen.getByTestId("publish-to-wordpress")).toBeInTheDocument();
+  });
+
+  it("新建模式：点击「发送到 WordPress」先 POST 创建文章再发布", async () => {
+    // 渲染时 prompts 请求
+    fetchMock.mockResolvedValueOnce({ ok: true, json: async () => [] });
+    // 保存：POST 创建文章返回新 id
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ id: "new1", title: "新文章" }),
+    });
+    // 拉取启用站点（单站点直接发送）
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => [{ id: "w1", name: "博客A", siteUrl: "https://a.example", enabled: true }],
+    });
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ link: "https://a.example/?p=1", wpPostId: "1", status: "publish" }),
+    });
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.change(screen.getByTestId("article-title-input"), {
+      target: { value: "新文章" },
+    });
+    fireEvent.click(screen.getByTestId("publish-to-wordpress"));
+    await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
+    const createCall = fetchMock.mock.calls.find((c) => c[0] === "/api/articles");
+    expect(createCall).toBeDefined();
+    expect(createCall![1]).toEqual(expect.objectContaining({ method: "POST" }));
+    const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
+    expect(pubCall).toBeDefined();
+    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+      articleId: "new1",
+      configId: "w1",
+    });
   });
 
   it("编辑模式：单站点点击后直接发送", async () => {
