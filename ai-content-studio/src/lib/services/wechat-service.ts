@@ -94,7 +94,9 @@ export async function getAccessToken(
 
 // ---------- 图片上传（正文图 uploadimg / 封面 add_material 不可互换） ----------
 
-async function fetchImageBlob(imageUrl: string): Promise<{ blob: Blob; size: number }> {
+async function fetchImageBlob(
+  imageUrl: string,
+): Promise<{ blob: Blob; size: number; contentType: string }> {
   const res = await fetch(imageUrl);
   if (!res.ok) throw new Error(`图片下载失败：${imageUrl}（HTTP ${res.status}）`);
   const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim();
@@ -104,19 +106,28 @@ async function fetchImageBlob(imageUrl: string): Promise<{ blob: Blob; size: num
     );
   }
   const buf = await res.arrayBuffer();
-  return { blob: new Blob([buf], { type: contentType }), size: buf.byteLength };
+  return {
+    blob: new Blob([buf], { type: contentType }),
+    size: buf.byteLength,
+    contentType,
+  };
+}
+
+/** content-type → 文件扩展名（微信靠文件名扩展名识别类型，缺扩展名报 40005） */
+export function imageExtForType(contentType: string): string {
+  return contentType === "image/png" ? "png" : "jpg";
 }
 
 /** 正文图转存微信图床，返回 mmbiz.qpic.cn URL（不占素材配额，仅 jpg/png <1MB） */
 export async function uploadContentImage(accessToken: string, imageUrl: string): Promise<string> {
-  const { blob, size } = await fetchImageBlob(imageUrl);
+  const { blob, size, contentType } = await fetchImageBlob(imageUrl);
   if (size >= CONTENT_IMAGE_MAX_BYTES) {
     throw new Error(
       `正文图需小于 1MB（${imageUrl} 为 ${(size / 1024 / 1024).toFixed(2)}MB），请压缩后重试`,
     );
   }
   const form = new FormData();
-  form.append("media", blob, "image");
+  form.append("media", blob, `image.${imageExtForType(contentType)}`);
   const res = await fetch(`${WX_API_BASE}/media/uploadimg?access_token=${accessToken}`, {
     method: "POST",
     body: form,
@@ -129,12 +140,12 @@ export async function uploadContentImage(accessToken: string, imageUrl: string):
 
 /** 封面上传为永久图片素材，返回 media_id（供 thumb_media_id，≤10MB） */
 export async function uploadCoverMaterial(accessToken: string, imageUrl: string): Promise<string> {
-  const { blob, size } = await fetchImageBlob(imageUrl);
+  const { blob, size, contentType } = await fetchImageBlob(imageUrl);
   if (size >= COVER_MAX_BYTES) {
     throw new Error(`封面图需小于 10MB（${imageUrl} 为 ${(size / 1024 / 1024).toFixed(2)}MB）`);
   }
   const form = new FormData();
-  form.append("media", blob, "cover.jpg");
+  form.append("media", blob, `cover.${imageExtForType(contentType)}`);
   const res = await fetch(
     `${WX_API_BASE}/material/add_material?access_token=${accessToken}&type=image`,
     { method: "POST", body: form },

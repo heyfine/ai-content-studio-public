@@ -163,6 +163,26 @@ describe("图片上传", () => {
     );
   });
 
+  it("上传文件名带扩展名（微信 40005：靠文件名扩展名识别类型）", async () => {
+    let filename = "";
+    globalThis.fetch = vi.fn(async (_url: unknown, init?: RequestInit) => {
+      const body = init?.body as FormData | undefined;
+      if (body instanceof FormData) {
+        filename = (body.get("media") as File).name;
+        return Response.json({ errcode: 0, url: "https://mmbiz.qpic.cn/x" });
+      }
+      return pngResponse(1024);
+    }) as unknown as typeof fetch;
+    await uploadContentImage("AT", "https://cdn.example.com/a.png");
+    expect(filename).toBe("image.png");
+  });
+
+  it("imageExtForType：png→png、jpeg→jpg", async () => {
+    const { imageExtForType } = await import("./wechat-service");
+    expect(imageExtForType("image/png")).toBe("png");
+    expect(imageExtForType("image/jpeg")).toBe("jpg");
+  });
+
   it("uploadCoverMaterial：返回 media_id", async () => {
     mockWechatFetch({ material: { errcode: 0, media_id: "MID" } });
     expect(await uploadCoverMaterial("AT", "https://cdn.example.com/cover.png")).toBe("MID");
