@@ -130,9 +130,6 @@ const TAG_STYLES: Record<string, string> = {
   h5: "margin:16px 0 8px;font-size:15px;font-weight:700;line-height:1.4;color:#1f1f1f;",
   h6: "margin:16px 0 8px;font-size:15px;font-weight:700;line-height:1.4;color:#1f1f1f;",
   p: "margin:0 0 16px;",
-  ul: "margin:0 0 16px;padding-left:24px;list-style:disc;",
-  ol: "margin:0 0 16px;padding-left:24px;list-style:decimal;",
-  li: "margin:4px 0;",
   blockquote:
     "margin:16px 0;padding:8px 12px;border-left:3px solid #d1d5db;background:#f9fafb;color:#6b7280;",
   pre: "margin:16px 0;padding:12px;border-radius:6px;background:#f6f8fa;overflow-x:auto;font-size:13px;line-height:1.6;",
@@ -175,7 +172,36 @@ function inlineStyles(html: string): string {
   const root = doc.getElementById("__w");
   if (!root) return html;
   walkInline(root);
+  convertLists(root);
   return root.innerHTML;
+}
+
+/**
+ * 把 ul/ol/li 降级为带圆点/编号字符的 section 段落。
+ * 微信富文本管道会二次加工原生列表（拆行、制造空列表项），公众号排版工具
+ * （mdnice/doocs-md 等）均不用原生 li；纯文本前缀在任何管道里渲染一致。
+ * 每次替换最外层一个 ul/ol；li 内嵌套的列表随 innerHTML 复制后下一轮继续处理。
+ */
+function convertLists(root: Element): void {
+  const doc = root.ownerDocument;
+  for (;;) {
+    const list = root.querySelector("ul,ol");
+    if (!list) break;
+    const ordered = list.tagName.toLowerCase() === "ol";
+    const fragment = doc.createDocumentFragment();
+    let index = 0;
+    for (const li of Array.from(list.children)) {
+      if (li.tagName.toLowerCase() !== "li") continue;
+      index++;
+      const item = doc.createElement("section");
+      item.setAttribute("style", "margin:4px 0;line-height:1.75;");
+      item.textContent = ordered ? `${index}. ` : "• ";
+      // li 的子节点逐个搬入（前缀文本在前，保留内联结构）
+      for (const node of Array.from(li.childNodes)) item.appendChild(node);
+      fragment.appendChild(item);
+    }
+    list.replaceWith(fragment);
+  }
 }
 
 function escapeHtml(s: string): string {

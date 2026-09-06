@@ -47,7 +47,9 @@ describe("toWechatHtml", () => {
     expect(html).toMatch(/<h1 style="/);
     expect(html).toMatch(/<p style="/);
     expect(html).toMatch(/<strong style="[^"]*font-weight:700/);
-    expect(html).toMatch(/<ul style="[^"]*list-style:disc/);
+    // 原生列表被微信二次加工拆行 → 一律降级为圆点段落（微信 li 顽疾）
+    expect(html).not.toMatch(/<(ul|ol|li)\b/);
+    expect(html).toContain("• ");
     expect(html).toMatch(/<blockquote style="[^"]*border-left:3px solid/);
     expect(html).toMatch(/<th style="[^"]*border:1px solid/);
   });
@@ -125,10 +127,38 @@ describe("toWechatHtml", () => {
     expect(html).toContain(">我的标题</section>");
   });
 
-  it("高亮块内嵌 markdown 列表也被内联化", () => {
+  it("高亮块内嵌 markdown 列表也降级为圆点段落", () => {
     const md = [':::callout{type="info"}', "- 甲", "- 乙", ":::"].join("\n");
     const html = toWechatHtml(md);
-    expect(html).toMatch(/<ul style="[^"]*list-style:disc/);
+    expect(html).not.toMatch(/<(ul|ol|li)\b/);
+    expect(html).toContain("• 甲");
+    expect(html).toContain("• 乙");
+  });
+
+  it("无序列表降级：圆点前缀与加粗词同段同行（防微信拆行）", () => {
+    const md = "- **Agent 编排**：dsh-agent-teams 可在 Harness 里协同";
+    const html = toWechatHtml(md);
+    expect(html).toMatch(
+      /<section style="margin:4px 0;line-height:1\.75;">• <strong style="[^"]*">Agent 编排<\/strong>：dsh-agent-teams/,
+    );
+  });
+
+  it("有序列表降级：按序编号", () => {
+    const md = ["1. 第一", "2. 第二", "3. 第三"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toContain(">1. 第一</section>");
+    expect(html).toContain(">2. 第二</section>");
+    expect(html).toContain(">3. 第三</section>");
+    expect(html).not.toMatch(/<(ul|ol|li)\b/);
+  });
+
+  it("嵌套列表同样降级且内容不丢", () => {
+    const md = ["- 外层", "  - 内层一", "  - 内层二"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).not.toMatch(/<(ul|ol|li)\b/);
+    expect(html).toContain("外层");
+    expect(html).toContain("内层一");
+    expect(html).toContain("内层二");
   });
 });
 
