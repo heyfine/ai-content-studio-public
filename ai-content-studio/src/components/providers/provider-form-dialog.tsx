@@ -1,19 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { Eye as EyeIcon, EyeOff as EyeOffIcon, Copy as CopyIcon } from "lucide-react";
+import { Eye as EyeIcon, EyeOff as EyeOffIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
-  DialogClose,
   DialogContent,
   DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,247 +20,340 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { requestJson } from "./client-api";
+import { FetchedModelsPanel } from "./fetched-models-panel";
 import {
-  createProviderSchema,
-  type CreateProviderValues,
-  type ModelItem,
-} from "@/lib/schemas/provider";
-import { ProviderModelsEditor } from "./provider-models-editor";
+  BASE_URL_HINTS,
+  parseModelsText,
+  type ModelTestState,
+  type ProviderFormTarget,
+  type ProviderType,
+} from "./provider-types";
 
-/** 编辑场景的 API Key 占位：type=password 下显示一串圆点表示"已存在但隐藏"；
- *  提交时若值仍是占位则不更新 Key。 */
-const KEY_PLACEHOLDER = "UNCHANGED_KEY_PLACEHOLDER";
+const TYPE_OPTIONS: Array<{ value: ProviderType; label: string }> = [
+  { value: "OPENAI", label: "OpenAI 官方" },
+  { value: "OPENAI_COMPATIBLE", label: "OpenAI 兼容" },
+  { value: "ANTHROPIC", label: "Anthropic (Claude)" },
+  { value: "GEMINI", label: "Google Gemini" },
+];
 
 export interface ProviderFormDialogProps {
-  trigger: React.ReactNode;
-  initialValues?: Partial<CreateProviderValues> & { id?: string };
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  /** null = 新建 */
+  target: ProviderFormTarget | null;
+  /** 复制渠道场景带入的已存 Key 明文 */
+  initialApiKey?: string;
   onSaved?: () => void;
 }
 
-function buildDefaults(iv: Partial<CreateProviderValues> & { id?: string }) {
-  const isEdit = !!iv?.id;
-  return {
-    name: iv?.name ?? "",
-    type: iv?.type ?? "OPENAI_COMPATIBLE",
-    baseUrl: iv?.baseUrl ?? "",
-    apiKey: isEdit ? KEY_PLACEHOLDER : "",
-    enabled: iv?.enabled ?? true,
-    models: (iv?.models as ModelItem[] | undefined) ?? [],
-  };
-}
-
-export function ProviderFormDialog({ trigger, initialValues, onSaved }: ProviderFormDialogProps) {
-  const [open, setOpen] = useState(false);
-  const [submitError, setSubmitError] = useState<string | null>(null);
+/** 渠道式供应商表单浮窗：Key 留空不修改（眼睛查看）、获取模型勾选、逐模型/全部连通测试 */
+export function ProviderFormDialog({
+  open,
+  onOpenChange,
+  target,
+  initialApiKey,
+  onSaved,
+}: ProviderFormDialogProps) {
+  const isEdit = !!target?.id;
+  const [name, setName] = useState("");
+  const [type, setType] = useState<ProviderType>("OPENAI_COMPATIBLE");
+  const [baseUrl, setBaseUrl] = useState("");
+  const [apiKey, setApiKey] = useState("");
   const [showKey, setShowKey] = useState(false);
-  const [revealing, setRevealing] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const isEdit = !!initialValues?.id;
+  const [modelsText, setModelsText] = useState("");
+  const [fetchingModels, setFetchingModels] = useState(false);
+  const [fetchedModels, setFetchedModels] = useState<string[] | null>(null);
+  const [checkedModels, setCheckedModels] = useState<Set<string>>(new Set());
+  const [modelTests, setModelTests] = useState<Record<string, ModelTestState>>({});
+  const [testingAll, setTestingAll] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
 
-  const {
-    register,
-    handleSubmit,
-    setValue,
-    watch,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<CreateProviderValues>({
-    resolver: zodResolver(createProviderSchema),
-    defaultValues: buildDefaults(initialValues ?? {}),
-  });
-
-  // 每次打开对话框都重置为初始值：编辑时 Key 显示屏蔽占位，关闭重开仍显示占位
+  // 每次打开时从目标初始化；关闭时重置临时状态
   useEffect(() => {
-    if (open) {
-      reset(buildDefaults(initialValues ?? {}));
-      setShowKey(false);
-      setSubmitError(null);
-      setCopied(false);
-    }
-  }, [open, initialValues, reset]);
+    if (!open) return;
+    setName(target?.name ?? "");
+    setType(target?.type ?? "OPENAI_COMPATIBLE");
+    setBaseUrl(target?.baseUrl ?? "");
+    setApiKey(initialApiKey ?? "");
+    setShowKey(false);
+    setModelsText((target?.models ?? []).map((m) => m.name).join("\n"));
+    setFetchingModels(false);
+    setFetchedModels(null);
+    setCheckedModels(new Set());
+    setModelTests({});
+    setTestingAll(false);
+    setSaving(false);
+    setError("");
+  }, [open, target, initialApiKey]);
 
-  const type = watch("type");
-  const baseUrl = watch("baseUrl") ?? "";
-  const apiKey = watch("apiKey") ?? "";
-  const models = watch("models") ?? [];
+  function close() {
+    onOpenChange(false);
+  }
 
-  async function toggleReveal() {
+  /** 眼睛图标：编辑时首次点击取回已保存的 Key，之后切换明文/密文显示 */
+  async function toggleKeyVisibility() {
     if (showKey) {
       setShowKey(false);
       return;
     }
-    if (isEdit) {
-      setRevealing(true);
+    if (isEdit && !apiKey && target?.id) {
       try {
-        const res = await fetch(`/api/providers/${initialValues?.id}`);
-        const data = (await res.json()) as { apiKey?: string; error?: string };
-        if (!res.ok) throw new Error(data.error ?? "获取失败");
-        setValue("apiKey", data.apiKey ?? "", { shouldDirty: true });
+        const res = await requestJson<{ apiKey: string }>(`/api/providers/${target.id}`);
+        setApiKey(res.apiKey);
       } catch (e) {
-        setSubmitError(e instanceof Error ? e.message : String(e));
-      } finally {
-        setRevealing(false);
+        setError(e instanceof Error ? e.message : String(e));
+        return;
       }
     }
     setShowKey(true);
   }
 
-  async function copyKey() {
-    const v = watch("apiKey");
-    if (!v) return;
+  /** 从上游供应商拉取可用模型列表，弹出行内勾选面板 */
+  async function fetchModels() {
+    if (!baseUrl && type === "OPENAI_COMPATIBLE") {
+      setError("请先填写 Base URL");
+      return;
+    }
+    setFetchingModels(true);
+    setError("");
     try {
-      await navigator.clipboard.writeText(v);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    } catch {
-      // 无剪贴板权限时静默
+      const res = await requestJson<{ models: string[] }>("/api/providers/fetch-models", {
+        method: "POST",
+        body: JSON.stringify({ type, baseUrl, apiKey, providerId: target?.id }),
+      });
+      if (res.models.length === 0) {
+        setError("上游返回了空模型列表");
+      } else {
+        setFetchedModels(res.models);
+        setCheckedModels(new Set());
+        setModelTests({});
+      }
+    } catch (e) {
+      setError(`获取模型失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setFetchingModels(false);
     }
   }
 
-  async function onSubmit(values: CreateProviderValues) {
-    setSubmitError(null);
-    // 编辑且 Key 仍是占位 → 不传 apiKey（保持不变）
-    const body: Record<string, unknown> = { ...values };
-    if (isEdit && values.apiKey === KEY_PLACEHOLDER) {
-      delete body.apiKey;
-    }
-    if (body.models === undefined) {
-      delete body.models;
-    }
+  /** 对面板中的单个模型做连通性测试 */
+  async function testOneModel(model: string) {
+    setModelTests((prev) => ({ ...prev, [model]: { status: "running" } }));
     try {
-      const res = await fetch(isEdit ? `/api/providers/${initialValues?.id}` : "/api/providers", {
-        method: isEdit ? "PUT" : "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({}))) as { error?: string };
-        setSubmitError(err.error ?? "操作失败");
-        return;
+      const res = await requestJson<{ ok: boolean; latencyMs: number; error?: string }>(
+        "/api/providers/test-model",
+        {
+          method: "POST",
+          body: JSON.stringify({ type, baseUrl, apiKey, providerId: target?.id, model }),
+        },
+      );
+      setModelTests((prev) => ({
+        ...prev,
+        [model]: res.ok
+          ? { status: "ok", latencyMs: res.latencyMs }
+          : { status: "fail", error: res.error ?? "测试失败" },
+      }));
+    } catch (e) {
+      setModelTests((prev) => ({
+        ...prev,
+        [model]: { status: "fail", error: e instanceof Error ? e.message : String(e) },
+      }));
+    }
+  }
+
+  /** 全部测试：并发 5 个一组，逐组完成 */
+  async function testAllModels() {
+    if (!fetchedModels) return;
+    setTestingAll(true);
+    setModelTests(Object.fromEntries(fetchedModels.map((m) => [m, { status: "running" as const }])));
+    const chunkSize = 5;
+    for (let i = 0; i < fetchedModels.length; i += chunkSize) {
+      await Promise.all(fetchedModels.slice(i, i + chunkSize).map((m) => testOneModel(m)));
+    }
+    setTestingAll(false);
+  }
+
+  /** 把勾选的模型并入文本框并关闭面板 */
+  function confirmFetchedModels() {
+    const picked = (fetchedModels ?? []).filter((m) => checkedModels.has(m));
+    setModelsText([...new Set([...parseModelsText(modelsText), ...picked])].join("\n"));
+    setFetchedModels(null);
+    setCheckedModels(new Set());
+    setModelTests({});
+  }
+
+  async function save() {
+    const models = parseModelsText(modelsText);
+    if (!name.trim()) {
+      setError("请输入名称");
+      return;
+    }
+    if (models.length === 0) {
+      setError("至少填写一个支持的模型");
+      return;
+    }
+    if (type === "OPENAI_COMPATIBLE" && !baseUrl.trim()) {
+      setError("OpenAI 兼容接口必须填写 Base URL");
+      return;
+    }
+    setSaving(true);
+    setError("");
+    try {
+      const body = {
+        name: name.trim(),
+        type,
+        baseUrl,
+        // 编辑时留空表示不修改
+        apiKey: apiKey || undefined,
+        enabled: target?.enabled ?? true,
+        models: models.map((m) => ({ name: m })),
+      };
+      if (isEdit && target?.id) {
+        await requestJson(`/api/providers/${target.id}`, {
+          method: "PUT",
+          body: JSON.stringify(body),
+        });
+      } else {
+        await requestJson("/api/providers", { method: "POST", body: JSON.stringify(body) });
       }
-      setOpen(false);
+      onOpenChange(false);
       onSaved?.();
     } catch (e) {
-      setSubmitError(e instanceof Error ? e.message : String(e));
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger render={trigger as never} />
-      <DialogContent>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{isEdit ? "编辑供应商" : "添加供应商"}</DialogTitle>
+          <DialogTitle>{isEdit ? "编辑供应商" : "新建供应商"}</DialogTitle>
           <DialogDescription>配置 AI 供应商连接信息，API Key 将被加密存储。</DialogDescription>
         </DialogHeader>
-        <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-          {submitError && (
+        <div className="space-y-4">
+          {error && (
             <p role="alert" className="text-sm text-destructive">
-              {submitError}
+              {error}
             </p>
           )}
           <div className="space-y-2">
-            <Label htmlFor="name">名称</Label>
-            <Input id="name" {...register("name")} />
-            {errors.name && (
-              <p role="alert" className="text-sm text-destructive">
-                {errors.name.message}
-              </p>
-            )}
+            <Label htmlFor="provider-name">名称</Label>
+            <Input
+              id="provider-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="如 DeepSeek 官方"
+            />
           </div>
           <div className="space-y-2">
             <Label>类型</Label>
-            <Select
-              value={type}
-              onValueChange={(v) => setValue("type", v as CreateProviderValues["type"])}
-            >
-              <SelectTrigger>
+            <Select value={type} onValueChange={(v) => v && setType(v as ProviderType)}>
+              <SelectTrigger data-testid="type-select">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="OPENAI">OpenAI 官方</SelectItem>
-                <SelectItem value="OPENAI_COMPATIBLE">OpenAI 兼容</SelectItem>
-                <SelectItem value="ANTHROPIC">Anthropic</SelectItem>
-                <SelectItem value="GEMINI">Gemini</SelectItem>
+                {TYPE_OPTIONS.map((o) => (
+                  <SelectItem key={o.value} value={o.value}>
+                    {o.label}
+                  </SelectItem>
+                ))}
               </SelectContent>
             </Select>
           </div>
-          {(type === "OPENAI_COMPATIBLE" || type === "OPENAI") && (
-            <div className="space-y-2">
-              <Label htmlFor="baseUrl">
-                Base URL{type === "OPENAI_COMPATIBLE" ? "（必填）" : "（官方默认可留空）"}
-              </Label>
-              <Input id="baseUrl" placeholder="https://api.deepseek.com" {...register("baseUrl")} />
-              {errors.baseUrl && (
-                <p role="alert" className="text-sm text-destructive">
-                  {errors.baseUrl.message}
-                </p>
-              )}
-            </div>
-          )}
           <div className="space-y-2">
-            <Label htmlFor="apiKey">API Key{isEdit ? "（点眼睛查看）" : ""}</Label>
-            <div className="flex items-center gap-2">
+            <Label htmlFor="provider-base-url">Base URL（填到域名即可）</Label>
+            <Input
+              id="provider-base-url"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              placeholder={BASE_URL_HINTS[type]}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="provider-api-key">API Key{isEdit ? "（留空表示不修改）" : ""}</Label>
+            <div className="relative">
               <Input
-                id="apiKey"
+                id="provider-api-key"
                 type={showKey ? "text" : "password"}
-                {...register("apiKey")}
+                value={apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder={isEdit && !apiKey ? "已保存（点眼睛图标查看）" : ""}
                 data-testid="api-key-input"
               />
               <Button
                 type="button"
                 variant="ghost"
                 size="icon"
-                onClick={() => void toggleReveal()}
-                disabled={revealing}
-                aria-label={showKey ? "隐藏 API Key" : "显示 API Key"}
-                aria-pressed={showKey}
+                className="absolute right-1 top-1/2 size-7 -translate-y-1/2"
+                onClick={() => void toggleKeyVisibility()}
+                aria-label={showKey ? "隐藏 API Key" : "查看 API Key"}
                 data-testid="toggle-reveal"
               >
                 {showKey ? <EyeOffIcon className="size-4" /> : <EyeIcon className="size-4" />}
               </Button>
+            </div>
+          </div>
+          <div className="space-y-1">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="provider-models">支持的模型（每行一个）</Label>
               <Button
                 type="button"
-                variant="ghost"
-                size="icon"
-                onClick={() => void copyKey()}
-                disabled={!apiKey}
-                aria-label="复制 API Key"
-                data-testid="copy-key"
+                variant="outline"
+                size="sm"
+                disabled={fetchingModels}
+                onClick={() => void fetchModels()}
+                data-testid="fetch-models"
               >
-                <CopyIcon className="size-4" />
+                {fetchingModels ? "获取中..." : "获取模型"}
               </Button>
-              {copied && (
-                <span className="text-xs text-emerald-600" data-testid="copied-tip">
-                  已复制
-                </span>
-              )}
             </div>
-            {errors.apiKey && (
-              <p role="alert" className="text-sm text-destructive">
-                {errors.apiKey.message}
-              </p>
+            <textarea
+              id="provider-models"
+              className="flex min-h-[100px] w-full rounded-md border border-input bg-background px-3 py-2 font-mono text-xs shadow-xs outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              value={modelsText}
+              onChange={(e) => setModelsText(e.target.value)}
+              placeholder={"deepseek-chat\ndeepseek-reasoner"}
+              data-testid="models-textarea"
+            />
+            {fetchedModels && (
+              <FetchedModelsPanel
+                models={fetchedModels}
+                checked={checkedModels}
+                tests={modelTests}
+                testingAll={testingAll}
+                onToggle={(m) =>
+                  setCheckedModels((prev) => {
+                    const next = new Set(prev);
+                    if (next.has(m)) next.delete(m);
+                    else next.add(m);
+                    return next;
+                  })
+                }
+                onToggleAll={(checked) =>
+                  setCheckedModels(checked ? new Set(fetchedModels) : new Set())
+                }
+                onTestOne={(m) => void testOneModel(m)}
+                onTestAll={() => void testAllModels()}
+                onCancel={() => {
+                  setFetchedModels(null);
+                  setModelTests({});
+                }}
+                onConfirm={confirmFetchedModels}
+              />
             )}
           </div>
-          <ProviderModelsEditor
-            models={models}
-            onChange={(next) => setValue("models", next, { shouldDirty: true })}
-            providerConfig={{ type, baseUrl, apiKey }}
-            providerId={initialValues?.id}
-          />
           <DialogFooter>
-            <DialogClose
-              render={
-                <Button type="button" variant="ghost">
-                  取消
-                </Button>
-              }
-            />
-            <Button type="submit" disabled={isSubmitting}>
-              {isSubmitting ? "保存中…" : "保存"}
+            <Button type="button" variant="ghost" onClick={close}>
+              取消
+            </Button>
+            <Button type="button" onClick={() => void save()} disabled={saving} data-testid="save-provider">
+              {saving ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>
-        </form>
+        </div>
       </DialogContent>
     </Dialog>
   );

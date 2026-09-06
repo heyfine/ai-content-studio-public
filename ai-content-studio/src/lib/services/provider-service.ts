@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { encrypt, decrypt } from "@/lib/crypto";
 import { getAdapter, type AIProviderConfig } from "@/lib/ai";
+import { providerTypeEnum } from "@/lib/schemas/provider";
 
 export interface ProviderModelInput {
   name: string;
@@ -130,4 +131,71 @@ export async function fetchModels(config: AIProviderConfig): Promise<string[]> {
   }
   const adapter = getAdapter(config);
   return adapter.listModels();
+}
+
+export interface ProbeResult {
+  ok: boolean;
+  latencyMs: number;
+  error?: string;
+}
+
+/** 对单个模型发一次极短请求做连通性探测，返回延迟或错误 */
+async function probeModel(config: AIProviderConfig, model: string): Promise<ProbeResult> {
+  if (config.type === "GEMINI") {
+    return { ok: false, latencyMs: 0, error: "Gemini 适配器将在后续 Phase 接入" };
+  }
+  const start = Date.now();
+  try {
+    const adapter = getAdapter(config);
+    await adapter.generate({
+      model,
+      messages: [{ role: "user", content: "hi" }],
+      maxTokens: 8,
+    });
+    return { ok: true, latencyMs: Date.now() - start };
+  } catch (e) {
+    return {
+      ok: false,
+      latencyMs: Date.now() - start,
+      error: e instanceof Error ? e.message : String(e),
+    };
+  }
+}
+
+export interface TestModelInput {
+  providerId?: string;
+  type?: string;
+  baseUrl?: string;
+  apiKey?: string;
+  model?: string;
+}
+
+/** 逐模型连通测试：表单明文凭证优先，编辑已有供应商时回退库存加密 Key */
+export async function testProviderModel(input: TestModelInput): Promise<ProbeResult> {
+  const model = (input.model ?? "").trim();
+  if (!model) {
+    return { ok: false, latencyMs: 0, error: "缺少模型名" };
+  }
+  let config: AIProviderConfig;
+  if (input.apiKey) {
+    if (!input.type || !(providerTypeEnum.options as readonly string[]).includes(input.type)) {
+      return { ok: false, latencyMs: 0, error: "未知供应商类型" };
+    }
+    config = {
+      type: input.type as AIProviderConfig["type"],
+      baseUrl: input.baseUrl || undefined,
+      apiKey: input.apiKey,
+    };
+  } else if (input.providerId) {
+    const row = await prisma.aIProvider.findUnique({ where: { id: input.providerId } });
+    if (!row) {
+      return { ok: false, latencyMs: 0, error: "供应商不存在" };
+    }
+    config = toProviderConfig(row);
+    // 表单里改了 Base URL 但尚未保存时，以表单为准
+    if (input.baseUrl) config = { ...config, baseUrl: input.baseUrl };
+  } else {
+    return { ok: false, latencyMs: 0, error: "缺少 API Key（或先保存该供应商）" };
+  }
+  return probeModel(config, model);
 }

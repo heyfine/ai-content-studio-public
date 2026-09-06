@@ -15,14 +15,16 @@ export async function POST(request: Request) {
     const providerId = body?.providerId;
     const baseUrl = typeof body.baseUrl === "string" && body.baseUrl ? body.baseUrl : undefined;
 
-    // 编辑已有供应商：传 providerId 用库里的加密 Key 解密后拉取（无需重新输入 Key）
+    // 编辑已有供应商：传 providerId 用库里的加密 Key 解密后拉取（无需重新输入 Key）；
+    // 表单里改了 Base URL 但尚未保存时以表单为准
     if (providerId) {
       const row = await getProvider(providerId);
       if (!row) return NextResponse.json({ error: "供应商不存在" }, { status: 404 });
       if (row.type === "GEMINI") {
         return NextResponse.json({ error: "Gemini 适配器将在后续 Phase 接入" }, { status: 400 });
       }
-      const models = await fetchModels(toProviderConfig(row));
+      const config = toProviderConfig(row);
+      const models = await fetchModels(baseUrl ? { ...config, baseUrl } : config);
       return NextResponse.json({ models });
     }
 
