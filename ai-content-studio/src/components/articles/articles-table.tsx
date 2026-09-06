@@ -29,13 +29,13 @@ interface ArticleTableProps {
   siteUrlMap: Record<string, string>;
   selectedIds: Set<string>;
   refreshingId: string | null;
-  copyingId: string | null;
+  duplicatingId: string | null;
   sendingWechatId: string | null;
   disabledIds: Set<string>;
   onToggleRow: (id: string) => void;
   onToggleAll: () => void;
   onRefresh: (id: string) => void;
-  onCopyWechat: (id: string) => void;
+  onDuplicate: (id: string) => void;
   onSendWechat: (id: string) => void;
   onDelete: (id: string) => void;
   sortOrder: "asc" | "desc";
@@ -136,13 +136,13 @@ function ArticleTableRow({
   publishTargets,
   selected,
   refreshing,
-  copying,
+  duplicating,
   sendingWechat,
   refreshDisabled,
   actionDisabled,
   onToggle,
   onRefresh,
-  onCopyWechat,
+  onDuplicate,
   onSendWechat,
   onDelete,
 }: {
@@ -152,13 +152,13 @@ function ArticleTableRow({
   publishTargets: Array<{ name: string; href: string | null }>;
   selected: boolean;
   refreshing: boolean;
-  copying: boolean;
+  duplicating: boolean;
   sendingWechat: boolean;
   refreshDisabled: boolean;
   actionDisabled: boolean;
   onToggle: () => void;
   onRefresh: () => void;
-  onCopyWechat: () => void;
+  onDuplicate: () => void;
   onSendWechat: () => void;
   onDelete: () => void;
 }) {
@@ -239,13 +239,13 @@ function ArticleTableRow({
           <Button
             variant="ghost"
             size="icon"
-            aria-label="复制公众号格式"
-            title="复制为微信公众号格式，粘贴到公众号后台编辑器"
-            onClick={onCopyWechat}
-            disabled={copying || actionDisabled}
-            data-testid={`copy-wechat-${r.id}`}
+            aria-label="复制这篇文章"
+            title="创建这篇文章的副本"
+            onClick={onDuplicate}
+            disabled={duplicating || actionDisabled}
+            data-testid={`duplicate-${r.id}`}
           >
-            <CopyIcon className={copying ? "size-4 animate-spin" : "size-4"} />
+            <CopyIcon className={duplicating ? "size-4 animate-spin" : "size-4"} />
           </Button>
           <Button
             variant="ghost"
@@ -279,13 +279,13 @@ export function ArticlesTable({
   siteUrlMap,
   selectedIds,
   refreshingId,
-  copyingId,
+  duplicatingId,
   sendingWechatId,
   disabledIds,
   onToggleRow,
   onToggleAll,
   onRefresh,
-  onCopyWechat,
+  onDuplicate,
   onSendWechat,
   onDelete,
   sortOrder,
@@ -350,13 +350,13 @@ export function ArticlesTable({
                 publishTargets={publishTargets}
                 selected={selectedIds.has(r.id)}
                 refreshing={refreshingId === r.id}
-                copying={copyingId === r.id}
+                duplicating={duplicatingId === r.id}
                 sendingWechat={sendingWechatId === r.id}
                 refreshDisabled={refreshingId === r.id || disabledIds.has(r.id)}
                 actionDisabled={disabledIds.has(r.id)}
                 onToggle={() => onToggleRow(r.id)}
                 onRefresh={() => onRefresh(r.id)}
-                onCopyWechat={() => onCopyWechat(r.id)}
+                onDuplicate={() => onDuplicate(r.id)}
                 onSendWechat={() => onSendWechat(r.id)}
                 onDelete={() => onDelete(r.id)}
               />

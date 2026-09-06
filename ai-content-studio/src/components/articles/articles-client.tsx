@@ -26,8 +26,7 @@ import {
   type ArticleStatus,
 } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
-import { copyRichText } from "@/lib/clipboard/copy-rich-text";
-import { htmlToText, toWechatHtml } from "@/lib/content/wechat-format";
+import { toWechatHtml } from "@/lib/content/wechat-format";
 import type { RefreshOutcome } from "./articles-table";
 import { ArticlesTable } from "./articles-table";
 
@@ -65,8 +64,8 @@ export function ArticlesClient() {
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
   // 复制公众号格式
-  const [copyingId, setCopyingId] = useState<string | null>(null);
-  const [copyWechatResult, setCopyWechatResult] = useState<string | null>(null);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
+  const [duplicateResult, setDuplicateResult] = useState<string | null>(null);
   // 发送到公众号草稿箱
   const [wechatAccounts, setWechatAccounts] = useState<WechatAccount[]>([]);
   const [wechatDialogArticleId, setWechatDialogArticleId] = useState<string | null>(null);
@@ -225,28 +224,27 @@ export function ArticlesClient() {
     }
   }
 
-  /** 复制为微信公众号格式（个人未认证订阅号无发布 API，走粘贴通道） */
-  async function onCopyWechat(id: string) {
-    setCopyingId(id);
-    setCopyWechatResult(null);
+  /** 复制这篇文章为一份新副本（标题加「（副本）」，状态重置草稿） */
+  async function onDuplicate(id: string) {
+    const source = rows.find((r) => r.id === id);
+    if (!confirm(`确认创建「${source?.title ?? "该文章"}」的副本？`)) return;
+    setDuplicatingId(id);
+    setDuplicateResult(null);
     setError(null);
     try {
-      const res = await fetch(`/api/articles/${id}`);
+      const res = await fetch(`/api/articles/${id}/duplicate`, { method: "POST" });
       const data = (await res.json().catch(() => ({}))) as {
+        id?: string;
         title?: string;
-        content?: string;
         error?: string;
       };
-      if (!res.ok) throw new Error(data?.error ?? "加载文章失败");
-      const html = toWechatHtml(data.content ?? "");
-      const plain = `${data.title ?? ""}\n\n${htmlToText(html)}`;
-      const ok = await copyRichText(html, plain);
-      if (!ok) throw new Error("当前浏览器不支持复制，请改用 Chrome/Edge 或手动复制");
-      setCopyWechatResult("已复制公众号格式，请到公众号后台编辑器粘贴正文，标题需单独填写");
+      if (!res.ok) throw new Error(data?.error ?? "复制失败");
+      setDuplicateResult(`已创建副本「${data.title ?? "副本"}」，可点击「编辑」继续修改`);
+      await refresh();
     } catch (e) {
-      setError(`复制公众号格式失败：${e instanceof Error ? e.message : String(e)}`);
+      setError(`复制文章失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
-      setCopyingId(null);
+      setDuplicatingId(null);
     }
   }
 
@@ -625,9 +623,9 @@ export function ArticlesClient() {
         </p>
       )}
 
-      {copyWechatResult && (
-        <p className="text-sm text-emerald-600" data-testid="copy-wechat-result">
-          {copyWechatResult}
+      {duplicateResult && (
+        <p className="text-sm text-emerald-600" data-testid="duplicate-result">
+          {duplicateResult}
         </p>
       )}
 
@@ -652,13 +650,13 @@ export function ArticlesClient() {
           siteUrlMap={siteUrlMap}
           selectedIds={selectedIds}
           refreshingId={refreshingId}
-          copyingId={copyingId}
+          duplicatingId={duplicatingId}
           sendingWechatId={sendingWechatId}
           disabledIds={new Set()}
           onToggleRow={toggleRow}
           onToggleAll={toggleAllRows}
           onRefresh={onRefresh}
-          onCopyWechat={(id) => void onCopyWechat(id)}
+          onDuplicate={(id) => void onDuplicate(id)}
           onSendWechat={openWechatDialog}
           onDelete={onDelete}
           sortOrder={sortOrder}

@@ -1,4 +1,4 @@
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
 import { type ArticleStatus, assertTransition } from "@/lib/article-status";
 import { prisma } from "@/lib/prisma";
 
@@ -134,4 +134,40 @@ export async function updateArticle(id: string, input: UpdateArticleInput) {
 
 export async function deleteArticle(id: string) {
   return prisma.article.delete({ where: { id } });
+}
+
+/**
+ * 复制文章为一份新副本：标题加「（副本）」，slug 自动去重（-2/-3…）；
+ * 正文三字段与特色图片/分类/标签保留，状态重置 DRAFT，发布相关字段不复制
+ * （副本未发布过，wpPostId/wpUrl/同步状态均为空）。
+ */
+export async function duplicateArticle(id: string) {
+  const source = await prisma.article.findUnique({ where: { id } });
+  if (!source) {
+    throw new Error("文章不存在");
+  }
+  const title = `${source.title}（副本）`;
+  const baseSlug = slugify(title);
+  let slug = baseSlug;
+  let n = 2;
+  while (await prisma.article.findUnique({ where: { slug }, select: { id: true } })) {
+    slug = `${baseSlug}-${n++}`;
+  }
+  return prisma.article.create({
+    data: {
+      title,
+      slug,
+      content: source.content,
+      contentJson:
+        source.contentJson === null ? Prisma.DbNull : (source.contentJson as Prisma.InputJsonValue),
+      contentHtml: source.contentHtml,
+      contentMd: source.contentMd,
+      status: "DRAFT",
+      featuredImage: source.featuredImage,
+      categories:
+        source.categories === null ? Prisma.DbNull : (source.categories as Prisma.InputJsonValue),
+      tags: source.tags === null ? Prisma.DbNull : (source.tags as Prisma.InputJsonValue),
+      promptId: source.promptId,
+    },
+  });
 }

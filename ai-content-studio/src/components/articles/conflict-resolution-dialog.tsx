@@ -1,7 +1,7 @@
 "use client";
 
+import { AlertTriangle, ExternalLink, FileText } from "lucide-react";
 import { useState } from "react";
-import { AlertTriangle, FileText, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -60,7 +60,8 @@ export function ConflictResolutionDialog({
             <DialogTitle>检测到文章冲突</DialogTitle>
           </div>
           <DialogDescription>
-            文章「{articleTitle}」（WordPress ID: {wpPostId}）在本地和博客都有修改，请选择保留哪一方的版本。
+            文章「{articleTitle}」（WordPress ID: {wpPostId}
+            ）在本地和博客都有修改，请选择保留哪一方的版本。
           </DialogDescription>
         </DialogHeader>
 
@@ -80,9 +81,7 @@ export function ConflictResolutionDialog({
               >
                 <FileText className="size-6 text-primary" />
                 <span className="font-medium">保留本地版本</span>
-                <span className="text-xs text-muted-foreground">
-                  将本地修改同步到博客
-                </span>
+                <span className="text-xs text-muted-foreground">将本地修改同步到博客</span>
               </button>
               <button
                 type="button"
@@ -95,9 +94,7 @@ export function ConflictResolutionDialog({
               >
                 <ExternalLink className="size-6 text-primary" />
                 <span className="font-medium">保留博客版本</span>
-                <span className="text-xs text-muted-foreground">
-                从博客拉取最新修改
-                </span>
+                <span className="text-xs text-muted-foreground">从博客拉取最新修改</span>
               </button>
             </div>
           </div>
@@ -113,12 +110,7 @@ export function ConflictResolutionDialog({
                     最后更新: {new Date().toLocaleString()}
                   </span>
                 </div>
-                <Textarea
-                  value={localContent}
-                  readOnly
-                  rows={8}
-                  className="text-xs"
-                />
+                <Textarea value={localContent} readOnly rows={8} className="text-xs" />
               </div>
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
@@ -132,21 +124,14 @@ export function ConflictResolutionDialog({
                     在博客编辑
                   </a>
                 </div>
-                <Textarea
-                  value={remoteContent}
-                  readOnly
-                  rows={8}
-                  className="text-xs"
-                />
+                <Textarea value={remoteContent} readOnly rows={8} className="text-xs" />
               </div>
             </div>
           </div>
         </div>
 
         {error && (
-          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">
-            {error}
-          </div>
+          <div className="rounded-md bg-destructive/10 p-3 text-sm text-destructive">{error}</div>
         )}
 
         <DialogFooter>

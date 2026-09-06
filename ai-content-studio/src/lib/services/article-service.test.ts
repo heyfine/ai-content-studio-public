@@ -223,3 +223,75 @@ describe("article-service", () => {
     });
   });
 });
+
+describe("duplicateArticle", () => {
+  beforeEach(() => {
+    findUnique.mockReset();
+    create.mockReset();
+  });
+
+  it("复制成功：标题加（副本）、状态重置 DRAFT、发布字段不复制", async () => {
+    const source = {
+      id: "a1",
+      title: "原标题",
+      slug: "yuan-biao-ti",
+      content: "正文",
+      contentJson: { type: "doc" },
+      contentHtml: "<p>正文</p>",
+      contentMd: "正文",
+      status: "PUBLISHED",
+      seoScore: 80,
+      wpPostId: "123",
+      wpUrl: "https://blog.example.com/x",
+      siteConfigId: "wp1",
+      featuredImage: "https://cdn.example.com/cover.jpg",
+      categories: [1, 2],
+      tags: ["a"],
+      promptId: null,
+    };
+    findUnique.mockResolvedValueOnce(source).mockResolvedValueOnce(null); // slug 查重
+    create.mockResolvedValue({ id: "a2" });
+    const { duplicateArticle } = await import("./article-service");
+    await duplicateArticle("a1");
+    const data = create.mock.calls[0][0].data;
+    expect(data.title).toBe("原标题（副本）");
+    expect(data.slug).toBe("原标题-副本");
+    expect(data.status).toBe("DRAFT");
+    expect(data.content).toBe("正文");
+    expect(data.featuredImage).toBe("https://cdn.example.com/cover.jpg");
+    expect(data.wpPostId).toBeUndefined();
+    expect(data.siteConfigId).toBeUndefined();
+    expect(data.seoScore).toBeUndefined();
+  });
+
+  it("slug 冲突时自动追加序号", async () => {
+    const source = {
+      title: "T",
+      slug: "t",
+      content: "",
+      contentJson: null,
+      contentHtml: null,
+      contentMd: null,
+      status: "DRAFT",
+      featuredImage: null,
+      categories: null,
+      tags: null,
+      promptId: null,
+    };
+    findUnique
+      .mockResolvedValueOnce(source)
+      .mockResolvedValueOnce({ id: "x" }) // t-副本 已存在
+      .mockResolvedValueOnce({ id: "y" }) // t-副本-2 已存在
+      .mockResolvedValueOnce(null); // t-副本-3 可用
+    create.mockResolvedValue({ id: "a3" });
+    const { duplicateArticle } = await import("./article-service");
+    await duplicateArticle("a1");
+    expect(create.mock.calls[0][0].data.slug).toBe("t-副本-3");
+  });
+
+  it("源文章不存在时抛错", async () => {
+    findUnique.mockResolvedValue(null);
+    const { duplicateArticle } = await import("./article-service");
+    await expect(duplicateArticle("nope")).rejects.toThrow("文章不存在");
+  });
+});

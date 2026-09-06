@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { htmlToText, oklchToHex, toWechatHtml } from "./wechat-format";
+import { oklchToHex, toWechatHtml } from "./wechat-format";
 
 describe("oklchToHex", () => {
   it("白色 oklch(1,0,0) → #ffffff", () => {
@@ -159,12 +159,5 @@ describe("toWechatHtml", () => {
     expect(html).toContain("外层");
     expect(html).toContain("内层一");
     expect(html).toContain("内层二");
-  });
-});
-
-describe("htmlToText", () => {
-  it("剥掉标签取纯文本并压缩空行", () => {
-    const html = "<section><p>第一段</p><p>第二段</p></section>";
-    expect(htmlToText(html)).toBe("第一段\n第二段");
   });
 });
