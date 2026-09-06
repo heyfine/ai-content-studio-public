@@ -132,7 +132,6 @@ const TAG_STYLES: Record<string, string> = {
   p: "margin:0 0 16px;",
   blockquote:
     "margin:16px 0;padding:8px 12px;border-left:3px solid #d1d5db;background:#f9fafb;color:#6b7280;",
-  pre: "margin:16px 0;padding:12px;border-radius:6px;background:#f6f8fa;overflow-x:auto;font-size:13px;line-height:1.6;",
   a: "color:#576b95;text-decoration:none;",
   img: "display:block;max-width:100%;border-radius:4px;margin:16px auto;",
   table: "border-collapse:collapse;margin:16px 0;width:100%;",
@@ -146,16 +145,11 @@ const TAG_STYLES: Record<string, string> = {
 const INLINE_CODE_STYLE =
   "font-family:Menlo,Consolas,monospace;font-size:0.9em;background:#f1f5f9;color:#c0392b;padding:2px 4px;border-radius:2px;";
 
-/** 深度走查 DOM，把样式表按标签内联、剥掉 class/data-*。pre 内的 code 走 pre 配色。 */
+/** 深度走查 DOM，把样式表按标签内联、剥掉 class/data-*。 */
 function walkInline(el: Element): void {
   for (const child of Array.from(el.children)) {
     const tag = child.tagName.toLowerCase();
-    const style =
-      tag === "code"
-        ? child.parentElement?.tagName.toLowerCase() === "pre"
-          ? "font-family:Menlo,Consolas,monospace;"
-          : INLINE_CODE_STYLE
-        : (TAG_STYLES[tag] ?? "");
+    const style = tag === "code" ? INLINE_CODE_STYLE : (TAG_STYLES[tag] ?? "");
     const existing = child.getAttribute("style") ?? "";
     if (style) child.setAttribute("style", style + existing);
     child.removeAttribute("class");
@@ -171,9 +165,40 @@ function inlineStyles(html: string): string {
   const doc = new DOMParser().parseFromString(`<div id="__w">${html}</div>`, "text/html");
   const root = doc.getElementById("__w");
   if (!root) return html;
+  convertCodeBlocks(root);
   walkInline(root);
   convertLists(root);
   return root.innerHTML;
+}
+
+const CODE_BLOCK_OUTER_STYLE =
+  "margin:16px 0;padding:12px;border-radius:6px;background:#f6f8fa;font-size:13px;line-height:1.6;font-family:Menlo,Consolas,monospace;word-break:break-all;";
+const CODE_LINE_STYLE = "font-family:Menlo,Consolas,monospace;";
+
+/**
+ * 把 <pre><code> 按行拆成独立 section，空格转 &nbsp;。
+ * 微信富文本管道会折叠 <pre> 内的换行与连续空格（整块代码塌成一行只能横向滚动）；
+ * 每行一个 section + &nbsp; 缩进在任何管道里渲染一致，word-break:break-all
+ * 让超长行自动折行不丢内容。
+ */
+function convertCodeBlocks(root: Element): void {
+  const doc = root.ownerDocument;
+  for (;;) {
+    const pre = root.querySelector("pre");
+    if (!pre) break;
+    const outer = doc.createElement("section");
+    outer.setAttribute("style", CODE_BLOCK_OUTER_STYLE);
+    const lines = (pre.textContent ?? "").replace(/\t/g, "    ").split("\n");
+    // 末尾换行产生的空行不渲染（marked 输出末尾通常带一个 \n）
+    if (lines.length > 1 && lines[lines.length - 1] === "") lines.pop();
+    for (const line of lines) {
+      const row = doc.createElement("section");
+      row.setAttribute("style", CODE_LINE_STYLE);
+      row.innerHTML = escapeHtml(line).replace(/ /g, "&nbsp;") || "&nbsp;";
+      outer.appendChild(row);
+    }
+    pre.replaceWith(outer);
+  }
 }
 
 /**

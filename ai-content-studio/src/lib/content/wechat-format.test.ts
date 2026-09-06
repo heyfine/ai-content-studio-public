@@ -72,12 +72,27 @@ describe("toWechatHtml", () => {
     );
   });
 
-  it("行内代码与代码块走不同配色", () => {
+  it("行内代码走红色配色，代码块降级为按行 section（防微信折叠换行）", () => {
     const md = "行内 `code` 与：\n\n```\nblock code\n```";
     const html = toWechatHtml(md);
     expect(html).toMatch(/<code style="[^"]*color:#c0392b/);
-    expect(html).toMatch(/<pre style="[^"]*background:#f6f8fa/);
-    expect(html).toMatch(/<pre style="[^"]*"><code style="font-family:[^"]*">block code/);
+    // 无原生 pre/code 块残留
+    expect(html).not.toMatch(/<pre\b/);
+    expect(html).toMatch(/background:#f6f8fa/);
+    expect(html).toMatch(/<section style="font-family:Menlo[^"]*;">block&nbsp;code<\/section>/);
+  });
+
+  it("代码块按行拆分：缩进转 nbsp、空行转 &nbsp;、末尾换行不产生空行", () => {
+    const md = "```\nconst a = 1;\n\n  if (a) {\n    go();\n  }\n```";
+    const html = toWechatHtml(md);
+    expect(html).toContain(">const&nbsp;a&nbsp;=&nbsp;1;</section>");
+    // 空行保留为 &nbsp; 行
+    expect(html).toMatch(/<section style="font-family:Menlo[^"]*;">&nbsp;<\/section>/);
+    // 缩进空格转 nbsp（保持 ASCII 对齐）
+    expect(html).toContain("&nbsp;&nbsp;if&nbsp;(a)&nbsp;{");
+    expect(html).toContain("&nbsp;&nbsp;&nbsp;&nbsp;go();");
+    // 末尾换行不产生多余空行：} 行是最后一个代码行
+    expect(html).not.toMatch(/<pre\b/);
   });
 
   it("高亮块转为内联样式卡片：hex 颜色 + 图标标题 + 内容", () => {
