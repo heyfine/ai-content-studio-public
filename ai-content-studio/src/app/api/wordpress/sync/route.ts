@@ -15,10 +15,7 @@ export async function POST(request: NextRequest) {
     const { configId, limit, offset, status } = body;
 
     if (!configId) {
-      return NextResponse.json(
-        { error: "请提供博客站点 ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "请提供博客站点 ID" }, { status: 400 });
     }
 
     const result = await syncBlogPosts({
@@ -39,7 +36,7 @@ export async function POST(request: NextRequest) {
     console.error("同步博客文章失败:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "同步博客文章失败" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

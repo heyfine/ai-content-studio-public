@@ -60,9 +60,7 @@ describe("ProviderFormDialog", () => {
   });
 
   it("新建标题与编辑标题", () => {
-    const { rerender } = render(
-      <ProviderFormDialog open onOpenChange={() => {}} target={null} />,
-    );
+    const { rerender } = render(<ProviderFormDialog open onOpenChange={() => {}} target={null} />);
     expect(screen.getByText("新建供应商")).toBeInTheDocument();
     rerender(<ProviderFormDialog open onOpenChange={() => {}} target={editTarget} />);
     expect(screen.getByText("编辑供应商")).toBeInTheDocument();
@@ -109,9 +107,7 @@ describe("ProviderFormDialog", () => {
     fetchMock.mockResolvedValue({ ok: true, json: async () => ({ apiKey: "sk-saved" }) });
     render(<ProviderFormDialog open onOpenChange={() => {}} target={editTarget} />);
     fireEvent.click(screen.getByTestId("toggle-reveal"));
-    await waitFor(() =>
-      expect(screen.getByTestId("api-key-input")).toHaveValue("sk-saved"),
-    );
+    await waitFor(() => expect(screen.getByTestId("api-key-input")).toHaveValue("sk-saved"));
   });
 
   it("缺模型保存报错，不发请求", async () => {
@@ -119,7 +115,9 @@ describe("ProviderFormDialog", () => {
     fireEvent.change(screen.getByLabelText("名称"), { target: { value: "DS" } });
     fireEvent.change(screen.getByLabelText(/Base URL/), { target: { value: "https://x" } });
     fireEvent.click(screen.getByTestId("save-provider"));
-    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("至少填写一个支持的模型"));
+    await waitFor(() =>
+      expect(screen.getByRole("alert")).toHaveTextContent("至少填写一个支持的模型"),
+    );
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
@@ -130,9 +128,7 @@ describe("ProviderFormDialog", () => {
       }
       return Promise.resolve({ ok: true, json: async () => ({}) });
     });
-    render(
-      <ProviderFormDialog open onOpenChange={() => {}} target={null} />,
-    );
+    render(<ProviderFormDialog open onOpenChange={() => {}} target={null} />);
     fireEvent.change(screen.getByLabelText(/Base URL/), { target: { value: "https://x" } });
     fireEvent.click(screen.getByTestId("fetch-models"));
     await waitFor(() => expect(screen.getByTestId("fetched-models-panel")).toBeInTheDocument());

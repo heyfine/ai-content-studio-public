@@ -109,7 +109,10 @@ export function ProvidersManager() {
     }
     setRowTestErrors((prev) => ({ ...prev, [row.id]: "" }));
     setTestingId(row.id);
-    setChannelTests((prev) => ({ ...prev, [row.id]: { done: 0, total: models.length, results: {} } }));
+    setChannelTests((prev) => ({
+      ...prev,
+      [row.id]: { done: 0, total: models.length, results: {} },
+    }));
 
     const results: Record<string, ModelTestState> = {};
     let done = 0;
@@ -127,7 +130,9 @@ export function ProvidersManager() {
       }
       done++;
       setChannelTests((prev) =>
-        prev[row.id] ? { ...prev, [row.id]: { done, total: models.length, results: { ...results } } } : prev,
+        prev[row.id]
+          ? { ...prev, [row.id]: { done, total: models.length, results: { ...results } } }
+          : prev,
       );
     };
 
@@ -163,7 +168,9 @@ export function ProvidersManager() {
         </Button>
       </div>
       {rows.length === 0 ? (
-        <p className="text-sm text-muted-foreground">还没有供应商，点击右上角「新建供应商」添加。</p>
+        <p className="text-sm text-muted-foreground">
+          还没有供应商，点击右上角「新建供应商」添加。
+        </p>
       ) : (
         <div className="rounded-md border overflow-x-auto">
           <Table>
@@ -190,10 +197,16 @@ export function ProvidersManager() {
                     <TableCell>
                       <ProviderTypeBadge type={row.type} />
                     </TableCell>
-                    <TableCell className="max-w-[200px] truncate font-mono text-xs" title={row.baseUrl ?? ""}>
+                    <TableCell
+                      className="max-w-[200px] truncate font-mono text-xs"
+                      title={row.baseUrl ?? ""}
+                    >
                       {row.baseUrl || <span className="text-muted-foreground">官方默认</span>}
                     </TableCell>
-                    <TableCell className="max-w-[240px] truncate font-mono text-xs" title={row.models.map((m) => m.name).join(", ")}>
+                    <TableCell
+                      className="max-w-[240px] truncate font-mono text-xs"
+                      title={row.models.map((m) => m.name).join(", ")}
+                    >
                       {row.models.length === 0 ? (
                         <span className="text-muted-foreground">暂无模型</span>
                       ) : (
@@ -203,7 +216,9 @@ export function ProvidersManager() {
                     <TableCell>
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs ${
-                          row.enabled ? "bg-green-100 text-green-700" : "bg-muted text-muted-foreground"
+                          row.enabled
+                            ? "bg-green-100 text-green-700"
+                            : "bg-muted text-muted-foreground"
                         }`}
                       >
                         {row.enabled ? "启用" : "停用"}
@@ -229,26 +244,37 @@ export function ProvidersManager() {
                         <div className="mt-1 text-xs text-destructive">{rowTestErrors[row.id]}</div>
                       )}
                       {progress && (
-                        <div className="mt-1 max-h-40 overflow-y-auto rounded-lg border bg-muted/40 px-2 py-1" data-testid={`channel-tests-${row.id}`}>
+                        <div
+                          className="mt-1 max-h-40 overflow-y-auto rounded-lg border bg-muted/40 px-2 py-1"
+                          data-testid={`channel-tests-${row.id}`}
+                        >
                           <div className="pb-1 text-[11px] text-muted-foreground">
                             可用 {okCount} / {progress.total}
                           </div>
                           {row.models.map((m) => {
                             const r = progress.results[m.name];
                             return (
-                              <div key={m.id} className="flex items-center gap-1.5 text-[11px] leading-5">
+                              <div
+                                key={m.id}
+                                className="flex items-center gap-1.5 text-[11px] leading-5"
+                              >
                                 <span className="font-mono max-w-[120px] truncate" title={m.name}>
                                   {m.name}
                                 </span>
                                 {!r ? (
                                   <span className="text-muted-foreground">…</span>
                                 ) : r.status === "ok" ? (
-                                  <span className="whitespace-nowrap text-green-600">✓ {r.latencyMs}ms</span>
-                                ) : (
-                                  <span className="max-w-[140px] truncate text-red-500" title={r.error}>
+                                  <span className="whitespace-nowrap text-green-600">
+                                    ✓ {r.latencyMs}ms
+                                  </span>
+                                ) : r.status === "fail" ? (
+                                  <span
+                                    className="max-w-[140px] truncate text-red-500"
+                                    title={r.error}
+                                  >
                                     ✗ {r.error}
                                   </span>
-                                )}
+                                ) : null}
                               </div>
                             );
                           })}
@@ -257,7 +283,11 @@ export function ProvidersManager() {
                     </TableCell>
                     <TableCell>
                       <div className="flex items-center gap-2 whitespace-nowrap text-sm">
-                        <button type="button" className="text-blue-600 hover:underline" onClick={() => openEdit(row)}>
+                        <button
+                          type="button"
+                          className="text-blue-600 hover:underline"
+                          onClick={() => openEdit(row)}
+                        >
                           编辑
                         </button>
                         <button
@@ -275,7 +305,11 @@ export function ProvidersManager() {
                         >
                           {row.enabled ? "停用" : "启用"}
                         </button>
-                        <button type="button" className="text-red-500 hover:underline" onClick={() => void remove(row)}>
+                        <button
+                          type="button"
+                          className="text-red-500 hover:underline"
+                          onClick={() => void remove(row)}
+                        >
                           删除
                         </button>
                       </div>

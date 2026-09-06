@@ -1,16 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-const { authMock, getMock, updateMock, trashMock, purgeMock, schemaParse, wpTrashMock, wpUntrashMock } =
-  vi.hoisted(() => ({
-    authMock: vi.fn(),
-    getMock: vi.fn(),
-    updateMock: vi.fn(),
-    trashMock: vi.fn(),
-    purgeMock: vi.fn(),
-    schemaParse: vi.fn(),
-    wpTrashMock: vi.fn(),
-    wpUntrashMock: vi.fn(),
-  }));
+const {
+  authMock,
+  getMock,
+  updateMock,
+  trashMock,
+  purgeMock,
+  schemaParse,
+  wpTrashMock,
+  wpUntrashMock,
+} = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  getMock: vi.fn(),
+  updateMock: vi.fn(),
+  trashMock: vi.fn(),
+  purgeMock: vi.fn(),
+  schemaParse: vi.fn(),
+  wpTrashMock: vi.fn(),
+  wpUntrashMock: vi.fn(),
+}));
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/services/article-service", () => ({

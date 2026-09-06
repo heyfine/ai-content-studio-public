@@ -207,7 +207,12 @@ describe("provider-service testProviderModel", () => {
   });
 
   it("providerId 场景用库存加密 Key，并调用 adapter.generate 探测", async () => {
-    findUnique.mockResolvedValue({ id: "p1", type: "OPENAI_COMPATIBLE", baseUrl: "https://x", apiKey: "enc" });
+    findUnique.mockResolvedValue({
+      id: "p1",
+      type: "OPENAI_COMPATIBLE",
+      baseUrl: "https://x",
+      apiKey: "enc",
+    });
     adapterGenerate.mockResolvedValue({ content: "hi" });
     const r = await testProviderModel({ providerId: "p1", model: " deepseek-chat " });
     expect(r.ok).toBe(true);
@@ -240,7 +245,12 @@ describe("provider-service testProviderModel", () => {
   });
 
   it("表单 baseUrl 覆盖库存值", async () => {
-    findUnique.mockResolvedValue({ id: "p1", type: "OPENAI_COMPATIBLE", baseUrl: "https://old", apiKey: "enc" });
+    findUnique.mockResolvedValue({
+      id: "p1",
+      type: "OPENAI_COMPATIBLE",
+      baseUrl: "https://old",
+      apiKey: "enc",
+    });
     adapterGenerate.mockResolvedValue({ content: "hi" });
     await testProviderModel({ providerId: "p1", baseUrl: "https://new", model: "m1" });
     const config = getAdapter.mock.calls[0][0];

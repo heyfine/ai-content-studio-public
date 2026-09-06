@@ -148,9 +148,7 @@ describe("ProvidersManager", () => {
     await waitFor(() => expect(screen.getByText("DeepSeek")).toBeInTheDocument());
     const row = screen.getByText("DeepSeek").closest("tr") as HTMLElement;
     fireEvent.click(within(row).getByRole("button", { name: "复制" }));
-    await waitFor(() =>
-      expect(screen.getByTestId("api-key-input")).toHaveValue("sk-copy"),
-    );
+    await waitFor(() => expect(screen.getByTestId("api-key-input")).toHaveValue("sk-copy"));
     expect(screen.getByLabelText("名称")).toHaveValue("DeepSeek 副本");
     // 弹窗标题为「新建供应商」（h2），区别于右上角同文案按钮
     expect(screen.getByRole("heading", { name: "新建供应商" })).toBeInTheDocument();
@@ -190,8 +188,6 @@ describe("ProvidersManager", () => {
     render(<ProvidersManager />);
     await waitFor(() => expect(screen.getByText("空模型")).toBeInTheDocument());
     fireEvent.click(screen.getByTestId("test-channel-p2"));
-    await waitFor(() =>
-      expect(screen.getByText("✗ 未配置任何模型")).toBeInTheDocument(),
-    );
+    await waitFor(() => expect(screen.getByText("✗ 未配置任何模型")).toBeInTheDocument());
   });
 });

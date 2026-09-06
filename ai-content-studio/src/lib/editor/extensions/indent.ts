@@ -47,9 +47,7 @@ export const Indent = Extension.create<IndentOptions>({
               return Number.isFinite(v) ? v : 0;
             },
             renderHTML: (attrs) =>
-              attrs.indent && attrs.indent > 0
-                ? { style: `padding-left: ${attrs.indent}px` }
-                : {},
+              attrs.indent && attrs.indent > 0 ? { style: `padding-left: ${attrs.indent}px` } : {},
           },
         },
       },

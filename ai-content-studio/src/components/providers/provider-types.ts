@@ -1,5 +1,7 @@
 import type { ProviderType } from "./provider-type-badge";
 
+export type { ProviderType };
+
 /** 列表页单行供应商（GET /api/providers 返回，apiKey 已脱敏） */
 export interface ProviderRow {
   id: string;
@@ -43,5 +45,12 @@ export const BASE_URL_HINTS: Record<ProviderType, string> = {
 
 /** 按行/逗号拆分模型文本，去空去重 */
 export function parseModelsText(text: string): string[] {
-  return [...new Set(text.split(/[\n,]/).map((s) => s.trim()).filter(Boolean))];
+  return [
+    ...new Set(
+      text
+        .split(/[\n,]/)
+        .map((s) => s.trim())
+        .filter(Boolean),
+    ),
+  ];
 }

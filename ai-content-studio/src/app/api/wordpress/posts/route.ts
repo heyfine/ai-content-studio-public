@@ -18,10 +18,7 @@ export async function GET(request: NextRequest) {
     const status = searchParams.get("status");
 
     if (!configId) {
-      return NextResponse.json(
-        { error: "请提供博客站点 ID" },
-        { status: 400 }
-      );
+      return NextResponse.json({ error: "请提供博客站点 ID" }, { status: 400 });
     }
 
     const posts = await fetchBlogPosts(configId, {
@@ -35,7 +32,7 @@ export async function GET(request: NextRequest) {
     console.error("获取博客文章列表失败:", error);
     return NextResponse.json(
       { error: error instanceof Error ? error.message : "获取博客文章列表失败" },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

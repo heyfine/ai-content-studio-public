@@ -25,7 +25,16 @@ function isNotFound(e: unknown) {
 /**
  * 在更新或删除文章时，同步到 WordPress（如果是博客同步的文章）
  */
-async function syncToWordPress(articleId: string, article: { siteConfigId: string | null; wpPostId: string | null; status: string; title: string; content: string }) {
+async function syncToWordPress(
+  articleId: string,
+  article: {
+    siteConfigId: string | null;
+    wpPostId: string | null;
+    status: string;
+    title: string;
+    content: string;
+  },
+) {
   if (!article.siteConfigId || !article.wpPostId) {
     return; // 不是从博客同步的文章，无需同步
   }
@@ -35,7 +44,11 @@ async function syncToWordPress(articleId: string, article: { siteConfigId: strin
     const wpStatus = article.status === "PUBLISHED" ? "publish" : "draft";
 
     // 调用 publishArticle 同步到 WordPress
-    const result = await publishArticle(articleId, article.siteConfigId, wpStatus as "publish" | "draft");
+    const result = await publishArticle(
+      articleId,
+      article.siteConfigId,
+      wpStatus as "publish" | "draft",
+    );
 
     // 更新本地文章的最后同步时间
     await updateArticle(articleId, {

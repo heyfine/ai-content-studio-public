@@ -29,7 +29,10 @@ export function FetchedModelsPanel({
   onConfirm,
 }: FetchedModelsPanelProps) {
   return (
-    <div className="mt-2 rounded-lg border border-blue-200 bg-blue-50/50" data-testid="fetched-models-panel">
+    <div
+      className="mt-2 rounded-lg border border-blue-200 bg-blue-50/50"
+      data-testid="fetched-models-panel"
+    >
       <div className="flex items-center justify-between px-3 py-2 border-b border-blue-100">
         <label className="flex items-center gap-2 text-sm cursor-pointer select-none">
           <input

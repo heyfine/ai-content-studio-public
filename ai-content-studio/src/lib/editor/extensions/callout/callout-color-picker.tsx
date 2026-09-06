@@ -54,9 +54,7 @@ export function CalloutColorPicker({
             current
               ? {
                   background:
-                    mode === "fill"
-                      ? `color-mix(in oklab, ${current} 12%, transparent)`
-                      : current,
+                    mode === "fill" ? `color-mix(in oklab, ${current} 12%, transparent)` : current,
                   borderColor: mode === "fill" ? current : undefined,
                 }
               : undefined

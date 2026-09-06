@@ -81,7 +81,8 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
   const isQuote = editor.isActive("blockquote");
   const textStyleAttrs = editor.getAttributes("textStyle") as Record<string, unknown>;
   const textColor = typeof textStyleAttrs.color === "string" ? textStyleAttrs.color : "";
-  const textBg = typeof textStyleAttrs.backgroundColor === "string" ? textStyleAttrs.backgroundColor : "";
+  const textBg =
+    typeof textStyleAttrs.backgroundColor === "string" ? textStyleAttrs.backgroundColor : "";
 
   function applyTextColor(color: string) {
     const ed = editorRef.current ?? editor;
@@ -134,9 +135,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
       content = allBlocks ? slice.content : schema.nodes.paragraph.create(null, slice.content);
     }
 
-    ed.commands.insertContent(
-      schema.nodes.callout.create({ type, title: "", icon: "" }, content),
-    );
+    ed.commands.insertContent(schema.nodes.callout.create({ type, title: "", icon: "" }, content));
   }
 
   function insertImage() {
@@ -173,9 +172,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="加粗"
         title="加粗"
-        onClick={() =>
-          runCommand("加粗", (ed) => ed.commands.toggleBold())
-        }
+        onClick={() => runCommand("加粗", (ed) => ed.commands.toggleBold())}
         onMouseDown={(e) => e.stopPropagation()}
         className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
           isBold ? "bg-accent text-accent-foreground" : "text-muted-foreground"
@@ -187,9 +184,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="斜体"
         title="斜体"
-        onClick={() =>
-          runCommand("斜体", (ed) => ed.commands.toggleItalic())
-        }
+        onClick={() => runCommand("斜体", (ed) => ed.commands.toggleItalic())}
         onMouseDown={(e) => e.stopPropagation()}
         className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
           isItalic ? "bg-accent text-accent-foreground" : "text-muted-foreground"
@@ -201,9 +196,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="删除线"
         title="删除线"
-        onClick={() =>
-          runCommand("删除线", (ed) => ed.commands.toggleStrike())
-        }
+        onClick={() => runCommand("删除线", (ed) => ed.commands.toggleStrike())}
         onMouseDown={(e) => e.stopPropagation()}
         className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
           isStrike ? "bg-accent text-accent-foreground" : "text-muted-foreground"
@@ -215,9 +208,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="下划线"
         title="下划线"
-        onClick={() =>
-          runCommand("下划线", (ed) => ed.commands.toggleUnderline())
-        }
+        onClick={() => runCommand("下划线", (ed) => ed.commands.toggleUnderline())}
         onMouseDown={(e) => e.stopPropagation()}
         className={`inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors hover:bg-accent ${
           isUnderline ? "bg-accent text-accent-foreground" : "text-muted-foreground"
@@ -308,9 +299,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="标题 1"
         title="标题 1"
-        onClick={() =>
-          runCommand("标题1", (ed) => ed.commands.setHeading({ level: 1 }))
-        }
+        onClick={() => runCommand("标题1", (ed) => ed.commands.setHeading({ level: 1 }))}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -320,9 +309,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="标题 2"
         title="标题 2"
-        onClick={() =>
-          runCommand("标题2", (ed) => ed.commands.setHeading({ level: 2 }))
-        }
+        onClick={() => runCommand("标题2", (ed) => ed.commands.setHeading({ level: 2 }))}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -332,9 +319,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="标题 3"
         title="标题 3"
-        onClick={() =>
-          runCommand("标题3", (ed) => ed.commands.setHeading({ level: 3 }))
-        }
+        onClick={() => runCommand("标题3", (ed) => ed.commands.setHeading({ level: 3 }))}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -444,9 +429,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="无序列表"
         title="无序列表"
-        onClick={() =>
-          runCommand("无序列表", (ed) => ed.commands.toggleBulletList())
-        }
+        onClick={() => runCommand("无序列表", (ed) => ed.commands.toggleBulletList())}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -456,9 +439,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="有序列表"
         title="有序列表"
-        onClick={() =>
-          runCommand("有序列表", (ed) => ed.commands.toggleOrderedList())
-        }
+        onClick={() => runCommand("有序列表", (ed) => ed.commands.toggleOrderedList())}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -468,9 +449,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="任务列表"
         title="任务列表"
-        onClick={() =>
-          runCommand("任务列表", (ed) => ed.commands.toggleTaskList())
-        }
+        onClick={() => runCommand("任务列表", (ed) => ed.commands.toggleTaskList())}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >
@@ -486,7 +465,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         title="表格"
         onClick={() =>
           runCommand("表格", (ed) =>
-            ed.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true })
+            ed.commands.insertTable({ rows: 3, cols: 3, withHeaderRow: true }),
           )
         }
         onMouseDown={(e) => e.stopPropagation()}
@@ -518,9 +497,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         type="button"
         aria-label="分割线"
         title="分割线"
-        onClick={() =>
-          runCommand("分割线", (ed) => ed.commands.setHorizontalRule())
-        }
+        onClick={() => runCommand("分割线", (ed) => ed.commands.setHorizontalRule())}
         onMouseDown={(e) => e.stopPropagation()}
         className="inline-flex h-8 w-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground"
       >

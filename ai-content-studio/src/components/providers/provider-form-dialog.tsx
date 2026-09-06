@@ -166,7 +166,9 @@ export function ProviderFormDialog({
   async function testAllModels() {
     if (!fetchedModels) return;
     setTestingAll(true);
-    setModelTests(Object.fromEntries(fetchedModels.map((m) => [m, { status: "running" as const }])));
+    setModelTests(
+      Object.fromEntries(fetchedModels.map((m) => [m, { status: "running" as const }])),
+    );
     const chunkSize = 5;
     for (let i = 0; i < fetchedModels.length; i += chunkSize) {
       await Promise.all(fetchedModels.slice(i, i + chunkSize).map((m) => testOneModel(m)));
@@ -349,7 +351,12 @@ export function ProviderFormDialog({
             <Button type="button" variant="ghost" onClick={close}>
               取消
             </Button>
-            <Button type="button" onClick={() => void save()} disabled={saving} data-testid="save-provider">
+            <Button
+              type="button"
+              onClick={() => void save()}
+              disabled={saving}
+              data-testid="save-provider"
+            >
               {saving ? "保存中…" : "保存"}
             </Button>
           </DialogFooter>

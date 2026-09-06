@@ -27,7 +27,14 @@ function parseCalloutAttrs(raw: string): {
   borderColor?: string;
   fillColor?: string;
 } {
-  const out: { type?: string; title?: string; icon?: string; textColor?: string; borderColor?: string; fillColor?: string } = {};
+  const out: {
+    type?: string;
+    title?: string;
+    icon?: string;
+    textColor?: string;
+    borderColor?: string;
+    fillColor?: string;
+  } = {};
   const inner = raw.replace(/^\{/, "").replace(/\}$/, "");
   const re = /(\w+)\s*=\s*"([^"]*)"|(\w+)\s*=\s*'([^']*)'/g;
   let m = re.exec(inner);
@@ -84,11 +91,7 @@ export function calloutBlockPlugin(md: MarkdownIt): void {
     const attrs = parseCalloutAttrs(attrsRaw);
     // 未指定 type 时给 info（蓝色）而非 neutral（灰白），与 render.ts renderCallout 一致，
     // 避免 AI 生成的 callout 全是白色底；只有 type 是非法字符串时才降级 neutral。
-    const type = attrs.type
-      ? VALID_TYPES.has(attrs.type)
-        ? attrs.type
-        : FALLBACK
-      : "info";
+    const type = attrs.type ? (VALID_TYPES.has(attrs.type) ? attrs.type : FALLBACK) : "info";
     const title = attrs.title ?? "";
     const icon = attrs.icon ?? "";
     const textColor = attrs.textColor ?? "";

@@ -22,8 +22,7 @@ export async function POST(_request: Request, ctx: { params: Promise<{ id: strin
     let wpError: string | undefined;
     if (article.siteConfigId && article.wpPostId) {
       try {
-        const wpStatus: "publish" | "draft" =
-          restored.status === "PUBLISHED" ? "publish" : "draft";
+        const wpStatus: "publish" | "draft" = restored.status === "PUBLISHED" ? "publish" : "draft";
         await untrashWordPressPost(id, article.siteConfigId, wpStatus);
         wpSynced = true;
       } catch (e) {

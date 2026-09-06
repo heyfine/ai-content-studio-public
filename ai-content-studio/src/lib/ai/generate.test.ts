@@ -96,9 +96,7 @@ describe("generate", () => {
     generateByTask.mockResolvedValue({ content: "c", context: ctx });
     createGen.mockResolvedValue({ id: "g" });
     await generate({ task: "t", input: "y", systemPrompt: "显式" });
-    expect(generateByTask).toHaveBeenCalledWith(
-      expect.objectContaining({ systemPrompt: "显式" }),
-    );
+    expect(generateByTask).toHaveBeenCalledWith(expect.objectContaining({ systemPrompt: "显式" }));
     expect(getActivePromptByType).not.toHaveBeenCalled();
   });
 

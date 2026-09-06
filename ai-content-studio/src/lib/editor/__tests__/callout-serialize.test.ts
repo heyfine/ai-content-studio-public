@@ -35,7 +35,8 @@ describe("callout 序列化与预览一致性", () => {
   });
 
   it("自定义三色随序列化输出，预览渲染出同款 style", () => {
-    const md = ':::callout{type="info" title="提示" icon="📌" textColor="#dc2626" borderColor="#60a5fa" fillColor="#3b82f6"}\n自定义颜色内容\n:::';
+    const md =
+      ':::callout{type="info" title="提示" icon="📌" textColor="#dc2626" borderColor="#60a5fa" fillColor="#3b82f6"}\n自定义颜色内容\n:::';
     const segs = scanCalloutSegments(md);
     expect(segs[0].kind).toBe("callout");
     if (segs[0].kind !== "callout") return;
@@ -51,7 +52,8 @@ describe("callout 序列化与预览一致性", () => {
   });
 
   it("编辑器内设三色，序列化 markdown 携带三色，往返回编辑器不丢色", () => {
-    const md = ':::callout{type="warning" title="注意" icon="⚠️" textColor="#9a3412" borderColor="#fb923c" fillColor="#f97316"}\n内容\n:::';
+    const md =
+      ':::callout{type="warning" title="注意" icon="⚠️" textColor="#9a3412" borderColor="#fb923c" fillColor="#f97316"}\n内容\n:::';
     const editor = makeEditor(md);
     const out = getMarkdown(editor);
     editor.destroy();
@@ -64,7 +66,7 @@ describe("callout 序列化与预览一致性", () => {
   });
 
   it("callout 与正文不空行的 markdown 也能正确渲染", () => {
-    const md = "第一段\n:::callout{type=\"tip\" title=\"要点\" icon=\"📌\"}\n内容\n:::\n第二段";
+    const md = '第一段\n:::callout{type="tip" title="要点" icon="📌"}\n内容\n:::\n第二段';
     const preview = renderArticleContent(md);
     expect(preview).toContain("callout-tip");
     expect(preview).toContain("第二段");

@@ -1,22 +1,53 @@
 "use client";
 
 import { useState } from "react";
-import {
-  NodeViewContent,
-  NodeViewWrapper,
-  type NodeViewProps,
-} from "@tiptap/react";
+import { NodeViewContent, NodeViewWrapper, type NodeViewProps } from "@tiptap/react";
 
 import { CALLOUT_TYPES, type CalloutType, isCalloutType } from "@/lib/content/callout-types";
 import { CalloutColorPicker } from "./callout-color-picker";
 
 /** 常用可换图标（Emoji/符号），点图标弹出选择 */
 const CALLOUT_EMOJIS = [
-  "💡", "ℹ️", "📌", "⭐", "🔥", "✅", "⚠️", "⛔",
-  "📝", "🔎", "💬", "🎯", "❤️", "👍", "👀", "🕐",
-  "💰", "🚀", "🧠", "📚", "🎨", "🔔", "💎", "🔑",
-  "🛡️", "💊", "🧪", "📈", "🌱", "🌍", "☀️", "🌈",
-  "🎉", "🍀", "📣", "🕯️", "🧭", "🗺️", "✏️", "❗",
+  "💡",
+  "ℹ️",
+  "📌",
+  "⭐",
+  "🔥",
+  "✅",
+  "⚠️",
+  "⛔",
+  "📝",
+  "🔎",
+  "💬",
+  "🎯",
+  "❤️",
+  "👍",
+  "👀",
+  "🕐",
+  "💰",
+  "🚀",
+  "🧠",
+  "📚",
+  "🎨",
+  "🔔",
+  "💎",
+  "🔑",
+  "🛡️",
+  "💊",
+  "🧪",
+  "📈",
+  "🌱",
+  "🌍",
+  "☀️",
+  "🌈",
+  "🎉",
+  "🍀",
+  "📣",
+  "🕯️",
+  "🧭",
+  "🗺️",
+  "✏️",
+  "❗",
 ];
 
 /**
@@ -56,9 +87,7 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
         color: textColor || undefined,
         borderColor: borderColor || undefined,
         // 填充色加透明度调浅，避免抢文字注意力（飞书式淡色填充）
-        background: fillColor
-          ? `color-mix(in oklab, ${fillColor} 12%, transparent)`
-          : undefined,
+        background: fillColor ? `color-mix(in oklab, ${fillColor} 12%, transparent)` : undefined,
       }}
     >
       <span
@@ -134,7 +163,10 @@ export function CalloutView({ node, updateAttributes, selected, deleteNode }: No
               title={colorLabel(k)}
             >
               {k === "text" ? (
-                <span className="callout-color-swatch-text" style={{ color: textColor || undefined }}>
+                <span
+                  className="callout-color-swatch-text"
+                  style={{ color: textColor || undefined }}
+                >
                   A
                 </span>
               ) : (
