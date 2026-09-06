@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MarkdownPreview } from "@/components/studio/markdown-preview";
 import {
   type PromptOption,
@@ -38,6 +38,11 @@ import type { ArticleRow } from "@/lib/article-types";
 import { acceptSuggestion, type CalloutSuggestion } from "@/lib/content/callout-suggest-ui";
 import { CALLOUT_TYPES } from "@/lib/content/callout-types";
 import { toWechatHtml } from "@/lib/content/wechat-format";
+import {
+  clearNewArticleDraft,
+  loadNewArticleDraft,
+  saveNewArticleDraft,
+} from "@/lib/editor/autosave-draft";
 import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
 import { useStudioStore } from "@/stores/studio-store";
@@ -106,11 +111,13 @@ export function TiptapEditorPage({ articleId }: TiptapEditorPageProps) {
 
   useEffect(() => {
     if (!articleId) {
+      // 新建模式：恢复上次未保存的本地暂存草稿（标题为空时无法落库，退出前暂存 localStorage）
+      const draft = loadNewArticleDraft();
       setLoaded({
         id: "",
-        title: "",
+        title: draft?.title ?? "",
         slug: "",
-        content: "",
+        content: draft?.content ?? "",
         status: "DRAFT",
         seoScore: null,
         wpPostId: null,
@@ -199,12 +206,53 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [versionsOpen, setVersionsOpen] = useState(false);
   // 实际文章 id：编辑模式即 initial.id；新建模式首次保存（POST）后获得，后续转 PUT 更新
   const [savedArticleId, setSavedArticleId] = useState(initial.id);
+  // 自动保存：输入停顿 2s 静默保存；切选项卡立即保存；无标题新建暂存 localStorage
+  const [autoSavedLabel, setAutoSavedLabel] = useState<string | null>(null);
+  const savedSnapshotRef = useRef({ title: initial.title, content: initial.content ?? "" });
+  const autosaveBusyRef = useRef(false);
 
   const editor: Editor | null = useMarkdownEditor({
     initialContent: initial.content ?? "",
     editable: true,
     onChange: (md) => setContent(md),
   });
+
+  /** 静默自动保存：有 id 或有标题 → 落库；无标题新建 → localStorage 暂存（退出后可恢复） */
+  async function autosaveNow() {
+    if (autosaveBusyRef.current) return;
+    const dirty =
+      title !== savedSnapshotRef.current.title || content !== savedSnapshotRef.current.content;
+    if (!dirty) return;
+    const time = new Date().toTimeString().slice(0, 5);
+    if (isEdit || savedArticleId !== "" || title.trim()) {
+      autosaveBusyRef.current = true;
+      const ok = await saveArticle({ silent: true });
+      autosaveBusyRef.current = false;
+      if (ok) {
+        savedSnapshotRef.current = { title, content };
+        setAutoSavedLabel(`已自动保存 ${time}`);
+      }
+      return;
+    }
+    // 标题和正文都清空了 → 本地暂存一并清除（避免恢复出空文章）
+    if (!title && !content) {
+      clearNewArticleDraft();
+      savedSnapshotRef.current = { title, content };
+      return;
+    }
+    saveNewArticleDraft(title, content);
+    savedSnapshotRef.current = { title, content };
+    setAutoSavedLabel(`已暂存本地 ${time}`);
+  }
+
+  // 输入停顿 2s 触发自动保存（挂载后首次运行内容未变，no-op）
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void autosaveNow();
+    }, 2000);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title, content]);
 
   // 加载 Prompt 模板列表（供「AI 智能排版」选择模板时使用）
   useEffect(() => {
@@ -335,12 +383,13 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
    * Markdown 事实源（content）+ 三个派生字段（json/html/md）一并提交。
    * 新建模式首次保存用 POST 创建并拿到 id，之后转 PUT 更新同一篇文章。
    */
-  async function saveArticle(): Promise<string | null> {
+  async function saveArticle(opts: { silent?: boolean } = {}): Promise<string | null> {
+    const { silent = false } = opts;
     if (!title.trim()) {
-      setError("标题不能为空");
+      if (!silent) setError("标题不能为空");
       return null;
     }
-    setError(null);
+    if (!silent) setError(null);
     setSaving(true);
     try {
       const json = editor?.getJSON() ?? null;
@@ -364,15 +413,17 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
       );
       if (!res.ok) {
         const err = (await res.json().catch(() => ({}))) as { error?: string };
-        setError(err.error ?? "操作失败");
+        if (!silent) setError(err.error ?? "操作失败");
         return null;
       }
       const data = (await res.json()) as { id?: string };
       const id = data.id ?? (isEdit ? initial.id : "");
       if (id) setSavedArticleId(id);
+      // 新建文章落库成功后，本地暂存草稿不再需要
+      if (!isUpdate) clearNewArticleDraft();
       return id || null;
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      if (!silent) setError(e instanceof Error ? e.message : String(e));
       return null;
     } finally {
       setSaving(false);
@@ -555,6 +606,12 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         </p>
       )}
 
+      {autoSavedLabel && (
+        <p className="text-xs text-muted-foreground" data-testid="autosave-indicator">
+          {autoSavedLabel}
+        </p>
+      )}
+
       {publishError && (
         <p role="alert" className="text-sm text-destructive" data-testid="publish-error">
           {publishError}
@@ -640,7 +697,11 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
                 variant="ghost"
                 size="xs"
                 data-testid="toggle-preview"
-                onClick={() => setMode((m) => (m === "edit" ? "preview" : "edit"))}
+                onClick={() => {
+                  // 切换编辑/预览选项卡时立即自动保存（要求 1：切换选项卡不丢内容）
+                  void autosaveNow();
+                  setMode((m) => (m === "edit" ? "preview" : "edit"));
+                }}
               >
                 {mode === "edit" ? "预览" : "编辑"}
               </Button>

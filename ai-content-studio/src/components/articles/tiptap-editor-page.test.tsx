@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const pushMock = vi.fn();
@@ -48,6 +48,7 @@ describe("TiptapEditorPage", () => {
     editorMock.getHTML.mockClear();
     editorMock.commands.setContent.mockClear();
     streamMock.mockReset();
+    localStorage.clear();
   });
 
   it("新建模式：标题为空时提交按钮禁用", () => {
@@ -260,10 +261,10 @@ describe("TiptapEditorPage", () => {
     await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
     const createCall = fetchMock.mock.calls.find((c) => c[0] === "/api/articles");
     expect(createCall).toBeDefined();
-    expect(createCall![1]).toEqual(expect.objectContaining({ method: "POST" }));
+    expect(createCall?.[1]).toEqual(expect.objectContaining({ method: "POST" }));
     const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
-    expect(pubCall).toBeDefined();
-    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+    if (!pubCall) throw new Error("未调用 /api/wordpress/publish");
+    expect(JSON.parse((pubCall[1] as RequestInit).body as string)).toEqual({
       articleId: "new1",
       configId: "w1",
     });
@@ -299,8 +300,8 @@ describe("TiptapEditorPage", () => {
     await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
     expect(screen.queryByTestId("publish-confirm")).not.toBeInTheDocument();
     const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
-    expect(pubCall).toBeDefined();
-    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+    if (!pubCall) throw new Error("未调用 /api/wordpress/publish");
+    expect(JSON.parse((pubCall[1] as RequestInit).body as string)).toEqual({
       articleId: "a1",
       configId: "w1",
     });
@@ -341,7 +342,7 @@ describe("TiptapEditorPage", () => {
     await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
     const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
     expect(pubCall).toBeDefined();
-    expect(JSON.parse((pubCall![1] as RequestInit).body as string)).toEqual({
+    expect(JSON.parse((pubCall?.[1] as RequestInit).body as string)).toEqual({
       articleId: "a1",
       configId: "w2",
     });
@@ -489,5 +490,127 @@ describe("TiptapEditorPage", () => {
   it("历史版本：新建模式不显示入口", () => {
     render(<TiptapEditorPage articleId={null} />);
     expect(screen.queryByTestId("open-versions")).not.toBeInTheDocument();
+  });
+
+  it("自动保存：填写标题停顿 2 秒后自动创建文章并显示指示器", async () => {
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: "a9" }) });
+      render(<TiptapEditorPage articleId={null} />);
+      fireEvent.change(screen.getByTestId("article-title-input"), {
+        target: { value: "自动保存标题" },
+      });
+      expect(fetchMock).not.toHaveBeenCalledWith("/api/articles", expect.anything());
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/articles",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(screen.getByTestId("autosave-indicator")).toHaveTextContent("已自动保存");
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("自动保存：切换预览选项卡立即保存当前内容", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles/a1" && method === "GET")
+        return {
+          ok: true,
+          json: async () => ({
+            id: "a1",
+            title: "原标题",
+            slug: "x",
+            content: "旧正文",
+            status: "DRAFT",
+            seoScore: null,
+            wpPostId: null,
+            promptId: null,
+          }),
+        };
+      if (u === "/api/articles/a1" && method === "PUT")
+        return { ok: true, json: async () => ({ id: "a1" }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("原标题"));
+    fireEvent.change(screen.getByTestId("article-title-input"), {
+      target: { value: "改过的标题" },
+    });
+    // 未到 2s 防抖即切选项卡 → 立即保存
+    fireEvent.click(screen.getByTestId("toggle-preview"));
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/articles/a1",
+        expect.objectContaining({ method: "PUT" }),
+      ),
+    );
+  });
+
+  it("自动保存：无有效标题的新建内容暂存 localStorage（不落库）", async () => {
+    vi.useFakeTimers();
+    try {
+      render(<TiptapEditorPage articleId={null} />);
+      // 仅空格标题：trim 为空 → 不创建文章，走 localStorage 暂存分支
+      fireEvent.change(screen.getByTestId("article-title-input"), { target: { value: " " } });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(fetchMock).not.toHaveBeenCalledWith(
+        "/api/articles",
+        expect.objectContaining({ method: "POST" }),
+      );
+      const draft = JSON.parse(localStorage.getItem("article-new-draft") ?? "null") as {
+        title?: string;
+      } | null;
+      expect(draft?.title).toBe(" ");
+      expect(screen.getByTestId("autosave-indicator")).toHaveTextContent("已暂存本地");
+    } finally {
+      vi.useRealTimers();
+      localStorage.clear();
+    }
+  });
+
+  it("自动保存：本地暂存草稿在新建模式打开时恢复", () => {
+    localStorage.setItem(
+      "article-new-draft",
+      JSON.stringify({
+        title: "暂存标题",
+        content: "暂存正文",
+        savedAt: "2026-09-06T00:00:00.000Z",
+      }),
+    );
+    render(<TiptapEditorPage articleId={null} />);
+    expect(screen.getByTestId("article-title-input")).toHaveValue("暂存标题");
+    localStorage.clear();
+  });
+
+  it("自动保存：新建文章创建成功后清除本地暂存", async () => {
+    vi.useFakeTimers();
+    try {
+      localStorage.setItem(
+        "article-new-draft",
+        JSON.stringify({ title: "旧暂存", content: "x", savedAt: "2026-09-06T00:00:00.000Z" }),
+      );
+      fetchMock.mockResolvedValue({ ok: true, json: async () => ({ id: "a9" }) });
+      render(<TiptapEditorPage articleId={null} />);
+      fireEvent.change(screen.getByTestId("article-title-input"), {
+        target: { value: "正式标题" },
+      });
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2100);
+      });
+      expect(fetchMock).toHaveBeenCalledWith(
+        "/api/articles",
+        expect.objectContaining({ method: "POST" }),
+      );
+      expect(localStorage.getItem("article-new-draft")).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
