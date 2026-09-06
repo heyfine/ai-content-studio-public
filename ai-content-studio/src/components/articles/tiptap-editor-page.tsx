@@ -1,12 +1,21 @@
 "use client";
 
-import { Check, Send as SendIcon, Sparkles, X } from "lucide-react";
+import { type Editor, EditorContent } from "@tiptap/react";
+import {
+  Check,
+  MessageCircle as MessageCircleIcon,
+  Send as SendIcon,
+  Sparkles,
+  X,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { EditorContent, type Editor } from "@tiptap/react";
+import { MarkdownPreview } from "@/components/studio/markdown-preview";
+import {
+  type PromptOption,
+  TemplatePickerDialog,
+} from "@/components/studio/template-picker-dialog";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Dialog,
   DialogContent,
@@ -15,24 +24,22 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { taskRouteDefinitions } from "@/config/task-routes";
+import { streamGenerateRequest } from "@/lib/ai/stream-client";
 import {
   ARTICLE_STATUS_LABELS,
   ARTICLE_STATUS_LIST,
   type ArticleStatus,
 } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
-import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
-import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
-import { MarkdownPreview } from "@/components/studio/markdown-preview";
-import {
-  TemplatePickerDialog,
-  type PromptOption,
-} from "@/components/studio/template-picker-dialog";
-import { taskRouteDefinitions } from "@/config/task-routes";
-import { useStudioStore } from "@/stores/studio-store";
-import { streamGenerateRequest } from "@/lib/ai/stream-client";
-import { type CalloutSuggestion, acceptSuggestion } from "@/lib/content/callout-suggest-ui";
+import { acceptSuggestion, type CalloutSuggestion } from "@/lib/content/callout-suggest-ui";
 import { CALLOUT_TYPES } from "@/lib/content/callout-types";
+import { toWechatHtml } from "@/lib/content/wechat-format";
+import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
+import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
+import { useStudioStore } from "@/stores/studio-store";
 
 export interface TiptapEditorPageProps {
   articleId: string | null;
@@ -42,6 +49,13 @@ interface WpOption {
   id: string;
   name: string;
   siteUrl: string;
+  enabled: boolean;
+}
+
+interface WechatOption {
+  id: string;
+  name: string;
+  appId: string;
   enabled: boolean;
 }
 
@@ -172,6 +186,13 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [publishPickerOpen, setPublishPickerOpen] = useState(false);
   const [wpConfigs, setWpConfigs] = useState<WpOption[]>([]);
   const [wpConfigId, setWpConfigId] = useState("");
+  // 发送到微信公众号（草稿箱）
+  const [sendingWechat, setSendingWechat] = useState(false);
+  const [wechatError, setWechatError] = useState<string | null>(null);
+  const [wechatResult, setWechatResult] = useState<string | null>(null);
+  const [wechatPickerOpen, setWechatPickerOpen] = useState(false);
+  const [wechatAccounts, setWechatAccounts] = useState<WechatOption[]>([]);
+  const [wechatConfigId, setWechatConfigId] = useState("");
   // 实际文章 id：编辑模式即 initial.id；新建模式首次保存（POST）后获得，后续转 PUT 更新
   const [savedArticleId, setSavedArticleId] = useState(initial.id);
 
@@ -408,13 +429,68 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
         await doPublish(enabled[0].id, id);
       } else {
         setWpConfigs(enabled);
-        setWpConfigId((prev) =>
-          enabled.some((c) => c.id === prev) ? prev : enabled[0].id,
-        );
+        setWpConfigId((prev) => (enabled.some((c) => c.id === prev) ? prev : enabled[0].id));
         setPublishPickerOpen(true);
       }
     } catch (e) {
       setPublishError(e instanceof Error ? e.message : String(e));
+    }
+  }
+
+  /** 转换当前正文为微信 HTML 并送进所选公众号的草稿箱 */
+  async function doSendWechat(configId: string, articleId?: string) {
+    setSendingWechat(true);
+    setWechatError(null);
+    try {
+      const wechatHtml = toWechatHtml(content);
+      const res = await fetch("/api/wechat/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          articleId: articleId ?? savedArticleId,
+          configId,
+          content: wechatHtml,
+        }),
+      });
+      const data = (await res.json()) as { mediaId?: string; error?: string };
+      if (!res.ok) throw new Error(data.error ?? "发送失败");
+      setWechatResult(
+        `已进入公众号草稿箱（media_id: ${data.mediaId}），请到公众号后台「草稿箱」检查排版后手动发表`,
+      );
+    } catch (e) {
+      setWechatError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSendingWechat(false);
+    }
+  }
+
+  /**
+   * 点击「发送到微信公众号」：先保存最新内容，再拉公众号账号列表。
+   * 0 个账号提示未配置；1 个账号直接发送；多个账号弹下拉选择。
+   */
+  async function handleSendWechatClick() {
+    setWechatError(null);
+    setWechatResult(null);
+    const id = await saveArticle();
+    if (!id) return;
+    try {
+      const res = await fetch("/api/wechat/configs");
+      if (!res.ok) throw new Error("加载公众号账号失败");
+      const all = (await res.json()) as WechatOption[];
+      const enabled = all.filter((c) => c.enabled);
+      if (enabled.length === 0) {
+        setWechatError("未配置公众号账号，请先到「发布」板块添加微信公众号");
+        return;
+      }
+      if (enabled.length === 1) {
+        await doSendWechat(enabled[0].id, id);
+      } else {
+        setWechatAccounts(enabled);
+        setWechatConfigId((prev) => (enabled.some((c) => c.id === prev) ? prev : enabled[0].id));
+        setWechatPickerOpen(true);
+      }
+    } catch (e) {
+      setWechatError(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -434,6 +510,16 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           >
             <SendIcon className="size-4" />
             {publishing ? "发送中…" : "发送到 WordPress"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => void handleSendWechatClick()}
+            disabled={sendingWechat || saving}
+            data-testid="send-to-wechat"
+          >
+            <MessageCircleIcon className="size-4" />
+            {sendingWechat ? "发送中…" : "发送到微信公众号"}
           </Button>
           <Button variant="ghost" onClick={() => router.push("/articles")}>
             取消
@@ -457,6 +543,16 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
       {publishError && (
         <p role="alert" className="text-sm text-destructive" data-testid="publish-error">
           {publishError}
+        </p>
+      )}
+      {wechatError && (
+        <p role="alert" className="text-sm text-destructive" data-testid="wechat-error">
+          {wechatError}
+        </p>
+      )}
+      {wechatResult && (
+        <p className="text-sm text-emerald-600" data-testid="wechat-result">
+          {wechatResult}
         </p>
       )}
       {publishResult && (
@@ -736,6 +832,55 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
               data-testid="publish-confirm"
             >
               <SendIcon className="size-4" /> {publishing ? "发送中…" : "发送"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      {/* 发送到微信公众号：多账号时选择目标账号 */}
+      <Dialog
+        open={wechatPickerOpen}
+        onOpenChange={(o) => (o ? undefined : setWechatPickerOpen(false))}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>发送到微信公众号</DialogTitle>
+            <DialogDescription>
+              自动上传图片并创建公众号草稿；正式发表需到公众号后台手动操作。
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2 py-1">
+            <Label htmlFor="article-wechat-config">发送到哪个公众号</Label>
+            <select
+              id="article-wechat-config"
+              aria-label="发送到哪个公众号"
+              className="w-full rounded-md border border-input bg-transparent px-3 py-2 text-sm"
+              value={wechatConfigId}
+              onChange={(e) => setWechatConfigId(e.target.value)}
+            >
+              {wechatAccounts.map((c) => (
+                <option key={c.id} value={c.id}>
+                  {c.name}
+                </option>
+              ))}
+            </select>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="ghost"
+              onClick={() => setWechatPickerOpen(false)}
+              disabled={sendingWechat}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => {
+                setWechatPickerOpen(false);
+                void doSendWechat(wechatConfigId);
+              }}
+              disabled={!wechatConfigId || sendingWechat}
+              data-testid="wechat-send-confirm"
+            >
+              <MessageCircleIcon className="size-4" /> {sendingWechat ? "发送中…" : "发送到草稿箱"}
             </Button>
           </DialogFooter>
         </DialogContent>

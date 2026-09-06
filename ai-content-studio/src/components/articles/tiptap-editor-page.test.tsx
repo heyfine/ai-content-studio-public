@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -368,9 +368,94 @@ describe("TiptapEditorPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("publish-error")).toHaveTextContent("未配置启用中的 WordPress"),
     );
-    expect(fetchMock).not.toHaveBeenCalledWith(
-      "/api/wordpress/publish",
-      expect.anything(),
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/wordpress/publish", expect.anything());
+  });
+
+  it("发送到微信公众号：先保存再单账号直发，展示草稿成功提示", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "POST")
+        return { ok: true, json: async () => ({ id: "a9" }) };
+      if (u === "/api/wechat/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [{ id: "wc1", name: "我的订阅号", appId: "wx123", enabled: true }],
+        };
+      if (u === "/api/wechat/draft" && method === "POST")
+        return { ok: true, json: async () => ({ mediaId: "DRAFT_MID" }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.change(screen.getByTestId("article-title-input"), {
+      target: { value: "新文章" },
+    });
+    fireEvent.click(screen.getByTestId("send-to-wechat"));
+    await waitFor(() =>
+      expect(screen.getByTestId("wechat-result")).toHaveTextContent(/已进入公众号草稿箱/),
     );
+    const draftCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wechat/draft");
+    expect(draftCall).toBeTruthy();
+    const body = JSON.parse(draftCall?.[1]?.body as string);
+    expect(body).toMatchObject({ articleId: "a9", configId: "wc1" });
+    // content 为内联样式的微信格式 HTML
+    expect(body.content).toMatch(/font-size:15px/);
+    expect(body.content).not.toMatch(/class=/);
+  });
+
+  it("发送到微信公众号：多账号时弹选择框确认发送", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "POST")
+        return { ok: true, json: async () => ({ id: "a9" }) };
+      if (u === "/api/wechat/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [
+            { id: "wc1", name: "订阅号A", appId: "wx1", enabled: true },
+            { id: "wc2", name: "订阅号B", appId: "wx2", enabled: true },
+          ],
+        };
+      if (u === "/api/wechat/draft" && method === "POST")
+        return { ok: true, json: async () => ({ mediaId: "D2" }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.change(screen.getByTestId("article-title-input"), {
+      target: { value: "新文章" },
+    });
+    fireEvent.click(screen.getByTestId("send-to-wechat"));
+    await waitFor(() => expect(screen.getByText("发送到微信公众号")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("wechat-send-confirm"));
+    await waitFor(() =>
+      expect(screen.getByTestId("wechat-result")).toHaveTextContent(/已进入公众号草稿箱/),
+    );
+    const body = JSON.parse(
+      (fetchMock.mock.calls.find((c) => c[0] === "/api/wechat/draft")?.[1] as RequestInit)
+        .body as string,
+    );
+    expect(body.configId).toBe("wc1");
+  });
+
+  it("发送到微信公众号：无账号时提示先配置", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "POST")
+        return { ok: true, json: async () => ({ id: "a9" }) };
+      if (u === "/api/wechat/configs" && method === "GET")
+        return { ok: true, json: async () => [] };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<TiptapEditorPage articleId={null} />);
+    fireEvent.change(screen.getByTestId("article-title-input"), {
+      target: { value: "新文章" },
+    });
+    fireEvent.click(screen.getByTestId("send-to-wechat"));
+    await waitFor(() =>
+      expect(screen.getByTestId("wechat-error")).toHaveTextContent(/未配置公众号账号/),
+    );
+    expect(fetchMock).not.toHaveBeenCalledWith("/api/wechat/draft", expect.anything());
   });
 });
