@@ -6,6 +6,7 @@ import {
   ChevronUp as ChevronUpIcon,
   Copy as CopyIcon,
   ExternalLink as ExternalLinkIcon,
+  MessageCircle as MessageCircleIcon,
   Pencil as PencilIcon,
   RefreshCw as RefreshIcon,
   Trash2 as Trash2Icon,
@@ -29,11 +30,13 @@ interface ArticleTableProps {
   selectedIds: Set<string>;
   refreshingId: string | null;
   copyingId: string | null;
+  sendingWechatId: string | null;
   disabledIds: Set<string>;
   onToggleRow: (id: string) => void;
   onToggleAll: () => void;
   onRefresh: (id: string) => void;
   onCopyWechat: (id: string) => void;
+  onSendWechat: (id: string) => void;
   onDelete: (id: string) => void;
   sortOrder: "asc" | "desc";
   onToggleSort: () => void;
@@ -134,11 +137,13 @@ function ArticleTableRow({
   selected,
   refreshing,
   copying,
+  sendingWechat,
   refreshDisabled,
   actionDisabled,
   onToggle,
   onRefresh,
   onCopyWechat,
+  onSendWechat,
   onDelete,
 }: {
   r: ArticleRow;
@@ -148,11 +153,13 @@ function ArticleTableRow({
   selected: boolean;
   refreshing: boolean;
   copying: boolean;
+  sendingWechat: boolean;
   refreshDisabled: boolean;
   actionDisabled: boolean;
   onToggle: () => void;
   onRefresh: () => void;
   onCopyWechat: () => void;
+  onSendWechat: () => void;
   onDelete: () => void;
 }) {
   const isLocal = !r.siteConfigId;
@@ -243,6 +250,17 @@ function ArticleTableRow({
           <Button
             variant="ghost"
             size="icon"
+            aria-label="发送到公众号草稿箱"
+            title="自动上传图片并创建公众号草稿，到公众号后台手动发表"
+            onClick={onSendWechat}
+            disabled={sendingWechat || actionDisabled}
+            data-testid={`send-wechat-${r.id}`}
+          >
+            <MessageCircleIcon className={sendingWechat ? "size-4 animate-spin" : "size-4"} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label="移入回收站"
             onClick={onDelete}
             disabled={actionDisabled}
@@ -262,11 +280,13 @@ export function ArticlesTable({
   selectedIds,
   refreshingId,
   copyingId,
+  sendingWechatId,
   disabledIds,
   onToggleRow,
   onToggleAll,
   onRefresh,
   onCopyWechat,
+  onSendWechat,
   onDelete,
   sortOrder,
   onToggleSort,
@@ -331,11 +351,13 @@ export function ArticlesTable({
                 selected={selectedIds.has(r.id)}
                 refreshing={refreshingId === r.id}
                 copying={copyingId === r.id}
+                sendingWechat={sendingWechatId === r.id}
                 refreshDisabled={refreshingId === r.id || disabledIds.has(r.id)}
                 actionDisabled={disabledIds.has(r.id)}
                 onToggle={() => onToggleRow(r.id)}
                 onRefresh={() => onRefresh(r.id)}
                 onCopyWechat={() => onCopyWechat(r.id)}
+                onSendWechat={() => onSendWechat(r.id)}
                 onDelete={() => onDelete(r.id)}
               />
             );

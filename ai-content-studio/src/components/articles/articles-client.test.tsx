@@ -597,4 +597,81 @@ describe("ArticlesClient", () => {
       links.some((a) => a.getAttribute("href") === "https://blog2.example.com/a/"),
     ).toBeTruthy();
   });
+
+  it("发送到公众号：选账号 → 转换正文 → POST draft → 提示去后台发表", async () => {
+    const postBodies: unknown[] = [];
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0]] };
+      if (u === "/api/wechat/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [{ id: "wc1", name: "我的订阅号", appId: "wx123", enabled: true }],
+        };
+      if (u === "/api/articles/a1" && method === "GET")
+        return { ok: true, json: async () => ({ title: "T", content: "# 标题\n\n正文" }) };
+      if (u === "/api/wechat/draft" && method === "POST") {
+        postBodies.push(JSON.parse(init?.body as string));
+        return { ok: true, json: async () => ({ mediaId: "DRAFT_MID" }) };
+      }
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("send-wechat-a1"));
+    await waitFor(() => expect(screen.getByText("发送到公众号草稿箱")).toBeInTheDocument());
+    // 选择公众号账号
+    fireEvent.click(screen.getByRole("combobox", { name: /目标公众号/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "我的订阅号" })).toBeInTheDocument(),
+    );
+    fireEvent.pointerDown(screen.getByRole("option", { name: "我的订阅号" }));
+    fireEvent.click(screen.getByRole("option", { name: "我的订阅号" }));
+    fireEvent.click(screen.getByTestId("wechat-send-confirm"));
+    await waitFor(() =>
+      expect(screen.getByTestId("wechat-send-result")).toHaveTextContent(/已进入公众号草稿箱/),
+    );
+    const body = postBodies[0] as { articleId: string; configId: string; content: string };
+    expect(body).toMatchObject({ articleId: "a1", configId: "wc1" });
+    // 提交的是内联样式的微信格式 HTML
+    expect(body.content).toMatch(/font-size:15px/);
+    expect(body.content).not.toMatch(/class=/);
+  });
+
+  it("发送到公众号失败（如 IP 白名单）时显示错误提示", async () => {
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0]] };
+      if (u === "/api/wechat/configs" && method === "GET")
+        return {
+          ok: true,
+          json: async () => [{ id: "wc1", name: "我的订阅号", appId: "wx123", enabled: true }],
+        };
+      if (u === "/api/articles/a1" && method === "GET")
+        return { ok: true, json: async () => ({ title: "T", content: "正文" }) };
+      if (u === "/api/wechat/draft" && method === "POST")
+        return {
+          ok: false,
+          status: 502,
+          json: async () => ({ errcode: 40164, error: "本机出口 IP 不在公众号 IP 白名单内" }),
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("send-wechat-a1"));
+    await waitFor(() => expect(screen.getByText("发送到公众号草稿箱")).toBeInTheDocument());
+    fireEvent.click(screen.getByRole("combobox", { name: /目标公众号/ }));
+    await waitFor(() =>
+      expect(screen.getByRole("option", { name: "我的订阅号" })).toBeInTheDocument(),
+    );
+    fireEvent.pointerDown(screen.getByRole("option", { name: "我的订阅号" }));
+    fireEvent.click(screen.getByRole("option", { name: "我的订阅号" }));
+    fireEvent.click(screen.getByTestId("wechat-send-confirm"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent(/IP 白名单/));
+  });
 });

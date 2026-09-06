@@ -38,6 +38,13 @@ interface WordpressConfig {
   enabled: boolean;
 }
 
+interface WechatAccount {
+  id: string;
+  name: string;
+  appId: string;
+  enabled: boolean;
+}
+
 type SyncFilter = "ALL" | "SYNCED" | "CONFLICT" | "FAILED" | "NONE";
 
 const SYNC_FILTER_LABELS: Record<SyncFilter, string> = {
@@ -60,6 +67,12 @@ export function ArticlesClient() {
   // 复制公众号格式
   const [copyingId, setCopyingId] = useState<string | null>(null);
   const [copyWechatResult, setCopyWechatResult] = useState<string | null>(null);
+  // 发送到公众号草稿箱
+  const [wechatAccounts, setWechatAccounts] = useState<WechatAccount[]>([]);
+  const [wechatDialogArticleId, setWechatDialogArticleId] = useState<string | null>(null);
+  const [wechatTargetConfigId, setWechatTargetConfigId] = useState("");
+  const [sendingWechatId, setSendingWechatId] = useState<string | null>(null);
+  const [wechatSendResult, setWechatSendResult] = useState<string | null>(null);
   const [wordpressConfigs, setWordpressConfigs] = useState<WordpressConfig[]>([]);
   // 文章归属筛选（多选：博客站点 + 本地文章），只用于过滤文章列表
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
@@ -118,6 +131,21 @@ export function ArticlesClient() {
       }
     };
     void loadConfigs();
+  }, []);
+
+  // 加载公众号账号配置
+  useEffect(() => {
+    const loadWechatAccounts = async () => {
+      try {
+        const res = await fetch("/api/wechat/configs");
+        if (res.ok) {
+          setWechatAccounts(await res.json());
+        }
+      } catch (e) {
+        console.error("加载公众号账号失败:", e);
+      }
+    };
+    void loadWechatAccounts();
   }, []);
 
   const configMap = useMemo(() => {
@@ -219,6 +247,47 @@ export function ArticlesClient() {
       setError(`复制公众号格式失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {
       setCopyingId(null);
+    }
+  }
+
+  /** 打开「发送到公众号草稿箱」弹窗（行级单篇） */
+  function openWechatDialog(id: string) {
+    setWechatSendResult(null);
+    setError(null);
+    setWechatTargetConfigId("");
+    setWechatDialogArticleId(id);
+  }
+
+  /** 转换正文 → 服务端传图 + draft/add 进草稿箱 */
+  async function doSendWechat() {
+    const articleId = wechatDialogArticleId;
+    if (!articleId || !wechatTargetConfigId) return;
+    setSendingWechatId(articleId);
+    setWechatSendResult(null);
+    setError(null);
+    try {
+      const detailRes = await fetch(`/api/articles/${articleId}`);
+      const detail = (await detailRes.json().catch(() => ({}))) as {
+        content?: string;
+        error?: string;
+      };
+      if (!detailRes.ok) throw new Error(detail?.error ?? "加载文章失败");
+      const wechatHtml = toWechatHtml(detail.content ?? "");
+      const res = await fetch("/api/wechat/draft", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ articleId, configId: wechatTargetConfigId, content: wechatHtml }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { mediaId?: string; error?: string };
+      if (!res.ok) throw new Error(data?.error ?? "发送草稿失败");
+      setWechatSendResult(
+        `已进入公众号草稿箱（media_id: ${data.mediaId}），请到公众号后台「草稿箱」检查排版后手动发表`,
+      );
+      setWechatDialogArticleId(null);
+    } catch (e) {
+      setError(`发送公众号草稿失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setSendingWechatId(null);
     }
   }
 
@@ -562,6 +631,12 @@ export function ArticlesClient() {
         </p>
       )}
 
+      {wechatSendResult && (
+        <div className="text-sm text-emerald-600" data-testid="wechat-send-result">
+          {wechatSendResult}
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -578,11 +653,13 @@ export function ArticlesClient() {
           selectedIds={selectedIds}
           refreshingId={refreshingId}
           copyingId={copyingId}
+          sendingWechatId={sendingWechatId}
           disabledIds={new Set()}
           onToggleRow={toggleRow}
           onToggleAll={toggleAllRows}
           onRefresh={onRefresh}
           onCopyWechat={(id) => void onCopyWechat(id)}
+          onSendWechat={openWechatDialog}
           onDelete={onDelete}
           sortOrder={sortOrder}
           onToggleSort={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}
@@ -636,6 +713,72 @@ export function ArticlesClient() {
               disabled={publishing || !publishTargetConfigId}
             >
               {publishing ? "发送中…" : "发送"}
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
+      {/* 发送到公众号草稿箱弹窗 */}
+      <Dialog
+        open={wechatDialogArticleId !== null}
+        onOpenChange={(open) => {
+          if (!sendingWechatId && !open) setWechatDialogArticleId(null);
+        }}
+      >
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>发送到公众号草稿箱</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            <p className="text-sm text-muted-foreground">
+              将自动上传正文/封面图片并创建公众号草稿；个人未认证订阅号不能 API
+              发布，创建后请到公众号后台手动发表。
+            </p>
+            {wechatAccounts.filter((a) => a.enabled).length === 0 ? (
+              <p className="text-sm text-amber-600">
+                尚未配置公众号账号，请先到「发布」页的「微信公众号账号」添加（需 AppID/AppSecret 与
+                IP 白名单）。
+              </p>
+            ) : (
+              <Select
+                value={wechatTargetConfigId}
+                onValueChange={(v) => setWechatTargetConfigId(v ?? "")}
+              >
+                <SelectTrigger className="w-full" aria-label="目标公众号">
+                  <ServerIcon className="size-4 mr-2" />
+                  <SelectValue placeholder="选择公众号账号">
+                    {(value: string | null) => {
+                      const account = wechatAccounts.find((a) => a.id === value);
+                      return value ? (account?.name ?? value) : "选择公众号账号";
+                    }}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {wechatAccounts
+                    .filter((a) => a.enabled)
+                    .map((a) => (
+                      <SelectItem key={a.id} value={a.id}>
+                        {a.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
+            )}
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setWechatDialogArticleId(null)}
+              disabled={sendingWechatId !== null}
+            >
+              取消
+            </Button>
+            <Button
+              onClick={() => void doSendWechat()}
+              disabled={sendingWechatId !== null || !wechatTargetConfigId}
+              data-testid="wechat-send-confirm"
+            >
+              {sendingWechatId ? "发送中…" : "发送到草稿箱"}
             </Button>
           </div>
         </DialogContent>
