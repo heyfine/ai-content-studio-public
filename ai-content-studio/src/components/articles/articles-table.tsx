@@ -4,6 +4,7 @@ import {
   ChevronDown as ChevronDownIcon,
   ChevronsUpDown as ChevronsUpDownIcon,
   ChevronUp as ChevronUpIcon,
+  Copy as CopyIcon,
   ExternalLink as ExternalLinkIcon,
   Pencil as PencilIcon,
   RefreshCw as RefreshIcon,
@@ -27,10 +28,12 @@ interface ArticleTableProps {
   siteUrlMap: Record<string, string>;
   selectedIds: Set<string>;
   refreshingId: string | null;
+  copyingId: string | null;
   disabledIds: Set<string>;
   onToggleRow: (id: string) => void;
   onToggleAll: () => void;
   onRefresh: (id: string) => void;
+  onCopyWechat: (id: string) => void;
   onDelete: (id: string) => void;
   sortOrder: "asc" | "desc";
   onToggleSort: () => void;
@@ -123,32 +126,36 @@ export function ArticleOriginBadge({
   );
 }
 
-  function ArticleTableRow({
-    r,
-    siteName,
-    siteHref,
-    publishTargets,
-    selected,
-    refreshing,
-    refreshDisabled,
-    actionDisabled,
-    onToggle,
-    onRefresh,
-    onDelete,
-  }: {
-    r: ArticleRow;
-    siteName: string | null;
-    siteHref: string | null;
-    publishTargets: Array<{ name: string; href: string | null }>;
-    selected: boolean;
-    refreshing: boolean;
-    refreshDisabled: boolean;
-    actionDisabled: boolean;
-    onToggle: () => void;
-    onRefresh: () => void;
-    onDelete: () => void;
-  }) {
-    const isLocal = !r.siteConfigId;
+function ArticleTableRow({
+  r,
+  siteName,
+  siteHref,
+  publishTargets,
+  selected,
+  refreshing,
+  copying,
+  refreshDisabled,
+  actionDisabled,
+  onToggle,
+  onRefresh,
+  onCopyWechat,
+  onDelete,
+}: {
+  r: ArticleRow;
+  siteName: string | null;
+  siteHref: string | null;
+  publishTargets: Array<{ name: string; href: string | null }>;
+  selected: boolean;
+  refreshing: boolean;
+  copying: boolean;
+  refreshDisabled: boolean;
+  actionDisabled: boolean;
+  onToggle: () => void;
+  onRefresh: () => void;
+  onCopyWechat: () => void;
+  onDelete: () => void;
+}) {
+  const isLocal = !r.siteConfigId;
 
   return (
     <tr className={`border-b last:border-0 ${selected ? "bg-muted/40" : ""}`}>
@@ -225,6 +232,17 @@ export function ArticleOriginBadge({
           <Button
             variant="ghost"
             size="icon"
+            aria-label="复制公众号格式"
+            title="复制为微信公众号格式，粘贴到公众号后台编辑器"
+            onClick={onCopyWechat}
+            disabled={copying || actionDisabled}
+            data-testid={`copy-wechat-${r.id}`}
+          >
+            <CopyIcon className={copying ? "size-4 animate-spin" : "size-4"} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
             aria-label="移入回收站"
             onClick={onDelete}
             disabled={actionDisabled}
@@ -243,10 +261,12 @@ export function ArticlesTable({
   siteUrlMap,
   selectedIds,
   refreshingId,
+  copyingId,
   disabledIds,
   onToggleRow,
   onToggleAll,
   onRefresh,
+  onCopyWechat,
   onDelete,
   sortOrder,
   onToggleSort,
@@ -310,10 +330,12 @@ export function ArticlesTable({
                 publishTargets={publishTargets}
                 selected={selectedIds.has(r.id)}
                 refreshing={refreshingId === r.id}
+                copying={copyingId === r.id}
                 refreshDisabled={refreshingId === r.id || disabledIds.has(r.id)}
                 actionDisabled={disabledIds.has(r.id)}
                 onToggle={() => onToggleRow(r.id)}
                 onRefresh={() => onRefresh(r.id)}
+                onCopyWechat={() => onCopyWechat(r.id)}
                 onDelete={() => onDelete(r.id)}
               />
             );

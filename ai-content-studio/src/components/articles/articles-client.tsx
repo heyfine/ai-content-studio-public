@@ -26,6 +26,8 @@ import {
   type ArticleStatus,
 } from "@/lib/article-status";
 import type { ArticleRow } from "@/lib/article-types";
+import { copyRichText } from "@/lib/clipboard/copy-rich-text";
+import { htmlToText, toWechatHtml } from "@/lib/content/wechat-format";
 import type { RefreshOutcome } from "./articles-table";
 import { ArticlesTable } from "./articles-table";
 
@@ -55,6 +57,9 @@ export function ArticlesClient() {
   const [error, setError] = useState<string | null>(null);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
   const [refreshOutcome, setRefreshOutcome] = useState<RefreshOutcome | null>(null);
+  // 复制公众号格式
+  const [copyingId, setCopyingId] = useState<string | null>(null);
+  const [copyWechatResult, setCopyWechatResult] = useState<string | null>(null);
   const [wordpressConfigs, setWordpressConfigs] = useState<WordpressConfig[]>([]);
   // 文章归属筛选（多选：博客站点 + 本地文章），只用于过滤文章列表
   const [selectedSites, setSelectedSites] = useState<string[]>([]);
@@ -189,6 +194,31 @@ export function ArticlesClient() {
       setError(e instanceof Error ? `AI 刷新失败：${e.message}` : String(e));
     } finally {
       setRefreshingId(null);
+    }
+  }
+
+  /** 复制为微信公众号格式（个人未认证订阅号无发布 API，走粘贴通道） */
+  async function onCopyWechat(id: string) {
+    setCopyingId(id);
+    setCopyWechatResult(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/articles/${id}`);
+      const data = (await res.json().catch(() => ({}))) as {
+        title?: string;
+        content?: string;
+        error?: string;
+      };
+      if (!res.ok) throw new Error(data?.error ?? "加载文章失败");
+      const html = toWechatHtml(data.content ?? "");
+      const plain = `${data.title ?? ""}\n\n${htmlToText(html)}`;
+      const ok = await copyRichText(html, plain);
+      if (!ok) throw new Error("当前浏览器不支持复制，请改用 Chrome/Edge 或手动复制");
+      setCopyWechatResult("已复制公众号格式，请到公众号后台编辑器粘贴正文，标题需单独填写");
+    } catch (e) {
+      setError(`复制公众号格式失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setCopyingId(null);
     }
   }
 
@@ -526,6 +556,12 @@ export function ArticlesClient() {
         </p>
       )}
 
+      {copyWechatResult && (
+        <p className="text-sm text-emerald-600" data-testid="copy-wechat-result">
+          {copyWechatResult}
+        </p>
+      )}
+
       {error && (
         <p role="alert" className="text-sm text-destructive">
           {error}
@@ -541,10 +577,12 @@ export function ArticlesClient() {
           siteUrlMap={siteUrlMap}
           selectedIds={selectedIds}
           refreshingId={refreshingId}
+          copyingId={copyingId}
           disabledIds={new Set()}
           onToggleRow={toggleRow}
           onToggleAll={toggleAllRows}
           onRefresh={onRefresh}
+          onCopyWechat={(id) => void onCopyWechat(id)}
           onDelete={onDelete}
           sortOrder={sortOrder}
           onToggleSort={() => setSortOrder((o) => (o === "desc" ? "asc" : "desc"))}

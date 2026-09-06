@@ -508,6 +508,55 @@ describe("ArticlesClient", () => {
     expect(screen.getByTestId("publish-selected")).toHaveTextContent("发送到 WordPress（2）");
   });
 
+  it("点击复制公众号格式：取文章 → 转内联样式 HTML → 写剪贴板并提示成功", async () => {
+    let copiedHtml = "";
+    const exec = vi.fn(() => {
+      // 复制瞬间容器仍在 DOM 中，抓取选区内 HTML 验证格式
+      copiedHtml = document.querySelector("div[contenteditable='true']")?.innerHTML ?? "";
+      return true;
+    });
+    document.execCommand = exec as unknown as typeof document.execCommand;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0]] };
+      if (u === "/api/articles/a1" && method === "GET")
+        return {
+          ok: true,
+          json: async () => ({ title: "Next.js 教程", content: "# 标题\n\n正文" }),
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("copy-wechat-a1"));
+    await waitFor(() => expect(screen.getByTestId("copy-wechat-result")).toBeInTheDocument());
+    expect(screen.getByTestId("copy-wechat-result")).toHaveTextContent("已复制公众号格式");
+    // execCommand 兜底路径被调用（jsdom 无 ClipboardItem），选区内容为内联样式微信格式 HTML
+    expect(exec).toHaveBeenCalledWith("copy");
+    expect(copiedHtml).toMatch(/font-size:15px/);
+    expect(copiedHtml).not.toMatch(/class=/);
+  });
+
+  it("复制失败（浏览器不支持）时显示错误提示", async () => {
+    const exec = vi.fn(() => false);
+    document.execCommand = exec as unknown as typeof document.execCommand;
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      const method = init?.method ?? "GET";
+      const u = typeof url === "string" ? url : "";
+      if (u === "/api/articles" && method === "GET")
+        return { ok: true, json: async () => [sampleRows[0]] };
+      if (u === "/api/articles/a1" && method === "GET")
+        return { ok: true, json: async () => ({ title: "T", content: "正文" }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ArticlesClient />);
+    await waitFor(() => expect(screen.getByText("Next.js 教程")).toBeInTheDocument());
+    fireEvent.click(screen.getByTestId("copy-wechat-a1"));
+    await waitFor(() => expect(screen.getByRole("alert")).toHaveTextContent("复制公众号格式失败"));
+  });
+
   it("「已发到」列显示文章发布过的所有博客名", async () => {
     const multiPublishRow: ArticleRow = {
       ...sampleRows[1],

@@ -1,0 +1,140 @@
+import { describe, expect, it } from "vitest";
+import { htmlToText, oklchToHex, toWechatHtml } from "./wechat-format";
+
+describe("oklchToHex", () => {
+  it("白色 oklch(1,0,0) → #ffffff", () => {
+    expect(oklchToHex({ l: 1, c: 0, h: 0 })).toBe("#ffffff");
+  });
+
+  it("黑色 oklch(0,0,0) → #000000", () => {
+    expect(oklchToHex({ l: 0, c: 0, h: 0 })).toBe("#000000");
+  });
+
+  it("info 蓝 oklch(0.623 0.214 259.815) → #2b7fff（culori 参考值，与编辑器 oklch 同源）", () => {
+    expect(oklchToHex({ l: 0.623, c: 0.214, h: 259.815 })).toBe("#2b7fff");
+  });
+
+  it("输出恒为合法 hex", () => {
+    for (const h of [0, 60, 120, 180, 240, 300, 359]) {
+      for (const l of [0.2, 0.5, 0.8]) {
+        expect(oklchToHex({ l, c: 0.2, h })).toMatch(/^#[0-9a-f]{6}$/);
+      }
+    }
+  });
+});
+
+describe("toWechatHtml", () => {
+  it("所有标签样式内联：输出无 class、无 <style>、无 oklch/color-mix", () => {
+    const md = [
+      "# 标题",
+      "",
+      "正文段落 **加粗** *斜体*。",
+      "",
+      "- 项目一",
+      "- 项目二",
+      "",
+      "> 引用内容",
+      "",
+      "| a | b |",
+      "| --- | --- |",
+      "| 1 | 2 |",
+    ].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).not.toMatch(/class=/);
+    expect(html).not.toMatch(/<style/i);
+    expect(html).not.toMatch(/oklch\(/);
+    expect(html).not.toMatch(/color-mix\(/);
+    expect(html).toMatch(/<h1 style="/);
+    expect(html).toMatch(/<p style="/);
+    expect(html).toMatch(/<strong style="[^"]*font-weight:700/);
+    expect(html).toMatch(/<ul style="[^"]*list-style:disc/);
+    expect(html).toMatch(/<blockquote style="[^"]*border-left:3px solid/);
+    expect(html).toMatch(/<th style="[^"]*border:1px solid/);
+  });
+
+  it("整体包一层带基础字号的 section", () => {
+    const html = toWechatHtml("正文");
+    expect(html.startsWith('<section style="font-size:15px;')).toBe(true);
+    expect(html.endsWith("</section>")).toBe(true);
+  });
+
+  it("链接保留 href 并内联微信蓝", () => {
+    const html = toWechatHtml("[例子](https://example.com)");
+    expect(html).toMatch(/<a href="https:\/\/example\.com" style="[^"]*color:#576b95/);
+  });
+
+  it("图片保留 src 并内联自适应宽度", () => {
+    const html = toWechatHtml("![图](https://cdn.example.com/a.png)");
+    expect(html).toMatch(
+      /<img src="https:\/\/cdn\.example\.com\/a\.png" alt="图" style="[^"]*max-width:100%/,
+    );
+  });
+
+  it("行内代码与代码块走不同配色", () => {
+    const md = "行内 `code` 与：\n\n```\nblock code\n```";
+    const html = toWechatHtml(md);
+    expect(html).toMatch(/<code style="[^"]*color:#c0392b/);
+    expect(html).toMatch(/<pre style="[^"]*background:#f6f8fa/);
+    expect(html).toMatch(/<pre style="[^"]*"><code style="font-family:[^"]*">block code/);
+  });
+
+  it("高亮块转为内联样式卡片：hex 颜色 + 图标标题 + 内容", () => {
+    const md = [':::callout{type="tip" title="建议" icon="💡"}', "正文内容", ":::"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toMatch(/border-left:4px solid #[0-9a-f]{6}/);
+    expect(html).toContain("background:#e6f5e8");
+    expect(html).toContain("💡 建议");
+    expect(html).toContain('<section style="color:#00a63e;">');
+  });
+
+  it("tip 类型填充色为绿系淡色（oklch 源值混白 12%，culori 参考值 #e6f5e8）", () => {
+    const md = [':::callout{type="tip"}', "内容", ":::"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toContain("background:#e6f5e8");
+  });
+
+  it("非法类型降级 neutral（灰系淡色）且不吞正文", () => {
+    const md = [':::callout{type="不存在的类型"}', "保留内容", ":::"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toContain("保留内容");
+    expect(html).toContain("background:#ededee");
+  });
+
+  it("未闭合高亮块按普通文本保留", () => {
+    const md = [':::callout{type="info"}', "没有闭合行"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toContain("没有闭合行");
+    expect(html).toContain(":::callout");
+  });
+
+  it("自定义 textColor/borderColor hex 直接内联", () => {
+    const md = [
+      ':::callout{type="info" textColor="#123456" borderColor="#abcdef" fillColor="#098765"}',
+      "内容",
+      ":::",
+    ].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toContain("color:#123456");
+    expect(html).toContain("border-left:4px solid #abcdef");
+    // 填充色按编辑器规则混白 12%（culori 参考值 #e5f0eb）
+    expect(html).toContain("background:#e5f0eb");
+  });
+
+  it("传入 title 时在顶部渲染标题区", () => {
+    const html = toWechatHtml("正文", { title: "我的标题" });
+    expect(html).toContain(">我的标题</section>");
+  });
+
+  it("高亮块内嵌 markdown 列表也被内联化", () => {
+    const md = [':::callout{type="info"}', "- 甲", "- 乙", ":::"].join("\n");
+    const html = toWechatHtml(md);
+    expect(html).toMatch(/<ul style="[^"]*list-style:disc/);
+  });
+});
+
+describe("htmlToText", () => {
+  it("剥掉标签取纯文本并压缩空行", () => {
+    const html = "<section><p>第一段</p><p>第二段</p></section>";
+    expect(htmlToText(html)).toBe("第一段\n第二段");
+  });
+});
