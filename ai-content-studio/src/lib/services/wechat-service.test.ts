@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   weChatConfigCreate: vi.fn(),
   weChatConfigFindMany: vi.fn(),
   weChatConfigDelete: vi.fn(),
+  weChatConfigUpdate: vi.fn(),
   encrypt: vi.fn((s: string) => `enc:${s}`),
   decrypt: vi.fn((s: string) => `sec-of-${s}`),
 }));
@@ -18,6 +19,7 @@ vi.mock("@/lib/prisma", () => ({
       findMany: mocks.weChatConfigFindMany,
       create: mocks.weChatConfigCreate,
       delete: mocks.weChatConfigDelete,
+      update: mocks.weChatConfigUpdate,
     },
     article: { findUnique: mocks.articleFindUnique },
     weChatPublish: { upsert: mocks.weChatPublishUpsert },
@@ -78,6 +80,7 @@ import {
   resolveCoverUrl,
   sendArticleToWechatDraft,
   stripHtml,
+  updateWechatDefaultCover,
   uploadContentImage,
   uploadCoverMaterial,
 } from "./wechat-service";
@@ -87,6 +90,8 @@ const config = {
   appId: "wx1234567890abcdef",
   appSecret: "enc-secret",
   name: "我的订阅号",
+  defaultCoverUrl: null,
+  defaultCoverMediaId: null,
   enabled: true,
 };
 
@@ -211,12 +216,20 @@ describe("草稿编排", () => {
     vi.clearAllMocks();
   });
 
-  it("resolveCoverUrl：优先特色图片，其次正文第一张图，无图报错", () => {
+  it("resolveCoverUrl：优先特色图片，其次正文第一张图，再降级账号默认封面，全无报错", () => {
     expect(resolveCoverUrl('<img src="https://x/1.jpg">', "https://x/cover.jpg")).toBe(
       "https://x/cover.jpg",
     );
     expect(resolveCoverUrl('<p>前</p><img src="https://x/first.jpg">')).toBe("https://x/first.jpg");
-    expect(() => resolveCoverUrl("<p>没图</p>")).toThrow(/封面图/);
+    // 无特色图片、无正文图 → 账号默认封面
+    expect(resolveCoverUrl("<p>纯文字</p>", null, "https://x/default.jpg")).toBe(
+      "https://x/default.jpg",
+    );
+    // 特色图片优先级高于默认封面
+    expect(resolveCoverUrl("<p>纯文字</p>", "https://x/cover.jpg", "https://x/default.jpg")).toBe(
+      "https://x/cover.jpg",
+    );
+    expect(() => resolveCoverUrl("<p>没图</p>", null, null)).toThrow(/默认封面/);
   });
 
   it("sendArticleToWechatDraft：完整链路 token→封面→转存→draft/add→落库", async () => {
@@ -241,8 +254,8 @@ describe("草稿编排", () => {
     expect(result).toEqual({ mediaId: "DRAFT_MID" });
 
     // draft/add 请求体：thumb 为封面素材，正文图已替换为微信图床 URL
-    const addCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find(
-      (c: unknown[]) => String(c[0]).includes("draft/add"),
+    const addCall = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.find((c: unknown[]) =>
+      String(c[0]).includes("draft/add"),
     );
     if (!addCall) throw new Error("未调用 draft/add");
     const payload = JSON.parse(addCall[1].body);
@@ -264,12 +277,56 @@ describe("草稿编排", () => {
     );
   });
 
-  it("文章无图（无特色图片且正文无图）时报错且不调 draft/add", async () => {
+  it("文章无图且未配默认封面时报错且不调 draft/add", async () => {
     mocks.weChatConfigFindUnique.mockResolvedValue(config);
     mocks.articleFindUnique.mockResolvedValue({ id: "a1", title: "T", featuredImage: null });
     mockFetchSequence([TOKEN]);
-    await expect(sendArticleToWechatDraft("wc1", "a1", "<p>纯文字</p>")).rejects.toThrow(/封面图/);
+    await expect(sendArticleToWechatDraft("wc1", "a1", "<p>纯文字</p>")).rejects.toThrow(
+      /默认封面/,
+    );
   });
+
+  it("无图文章用默认封面：首次上传并回写 media_id 缓存，再次发送复用不再上传", async () => {
+    const withCover = {
+      ...config,
+      defaultCoverUrl: "https://cdn.example.com/default.jpg",
+      defaultCoverMediaId: null,
+    };
+    mocks.articleFindUnique.mockResolvedValue({ id: "a1", title: "T", featuredImage: null });
+    mocks.weChatPublishUpsert.mockResolvedValue({});
+    mocks.weChatConfigUpdate.mockResolvedValue({});
+    mockWechatFetch({
+      material: { errcode: 0, media_id: "DEF_THUMB" },
+      draft: { errcode: 0, media_id: "D1" },
+    });
+
+    // 第一次发送：默认封面首次上传 → 回写缓存
+    mocks.weChatConfigFindUnique.mockResolvedValue(withCover);
+    expect(await sendArticleToWechatDraft("wc1", "a1", "<p>纯文字</p>")).toEqual({
+      mediaId: "D1",
+    });
+    expect(mocks.weChatConfigUpdate).toHaveBeenCalledWith({
+      where: { id: "wc1" },
+      data: { defaultCoverMediaId: "DEF_THUMB" },
+    });
+
+    // 第二次发送：命中缓存，不再调 add_material（fetch 只有 token + draft/add 两次微信调用）
+    mocks.weChatConfigFindUnique.mockResolvedValue({
+      ...withCover,
+      defaultCoverMediaId: "DEF_THUMB",
+    });
+    vi.mocked(globalThis.fetch).mockClear();
+    mocks.weChatPublishUpsert.mockClear();
+    expect(await sendArticleToWechatDraft("wc1", "a1", "<p>纯文字</p>")).toEqual({
+      mediaId: "D1",
+    });
+    const wxCalls = (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls.filter((c) =>
+      String(c[0]).includes("api.weixin.qq.com"),
+    );
+    expect(wxCalls.some((c) => String(c[0]).includes("add_material"))).toBe(false);
+  });
+  // 注：「默认封面 URL 变更后不复用旧 media_id」由 updateWechatDefaultCover 在改 URL 时
+  // 直接清空 defaultCoverMediaId 保证（见配置 CRUD 用例），服务层不会出现新旧错配状态。
 
   it("配置不存在或未启用时报错", async () => {
     mocks.weChatConfigFindUnique.mockResolvedValue(null);
@@ -296,6 +353,19 @@ describe("配置 CRUD 与工具函数", () => {
   it("deleteWechatConfig：删除失败给中文提示", async () => {
     mocks.weChatConfigDelete.mockRejectedValue(new Error("P2025"));
     await expect(deleteWechatConfig("nope")).rejects.toThrow(/不存在/);
+  });
+
+  it("updateWechatDefaultCover：写入 URL 并失效 media_id 缓存", async () => {
+    mocks.weChatConfigUpdate.mockResolvedValue({
+      id: "wc1",
+      defaultCoverUrl: "https://cdn.example.com/new.jpg",
+    });
+    const result = await updateWechatDefaultCover("wc1", "https://cdn.example.com/new.jpg");
+    expect(result?.defaultCoverUrl).toBe("https://cdn.example.com/new.jpg");
+    expect(mocks.weChatConfigUpdate).toHaveBeenCalledWith({
+      where: { id: "wc1" },
+      data: { defaultCoverUrl: "https://cdn.example.com/new.jpg", defaultCoverMediaId: null },
+    });
   });
 
   it("stripHtml 去标签压缩空白", () => {

@@ -1,6 +1,6 @@
 "use client";
 
-import { Plus as PlusIcon, Trash2 as Trash2Icon } from "lucide-react";
+import { ImageUp as ImageUpIcon, Plus as PlusIcon, Trash2 as Trash2Icon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -19,6 +19,7 @@ export interface WechatAccountOption {
   id: string;
   name: string;
   appId: string;
+  defaultCoverUrl: string | null;
   enabled: boolean;
 }
 
@@ -29,6 +30,7 @@ export interface WechatAccountOption {
 export function WechatAccountManager() {
   const [configs, setConfigs] = useState<WechatAccountOption[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [coverDialogAccount, setCoverDialogAccount] = useState<WechatAccountOption | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   async function refresh() {
@@ -87,17 +89,32 @@ export function WechatAccountManager() {
             >
               <div className="min-w-0">
                 <p className="truncate text-sm font-medium">{c.name}</p>
-                <p className="truncate text-xs text-muted-foreground">AppID：{c.appId}</p>
+                <p className="truncate text-xs text-muted-foreground">
+                  AppID：{c.appId}
+                  {c.defaultCoverUrl && " · 已设默认封面"}
+                </p>
               </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label={`删除公众号 ${c.name}`}
-                onClick={() => void removeAccount(c)}
-                data-testid={`wechat-delete-${c.id}`}
-              >
-                <Trash2Icon className="size-4" />
-              </Button>
+              <div className="flex shrink-0 items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`设置默认封面 ${c.name}`}
+                  title="文章无图时用此封面创建草稿"
+                  onClick={() => setCoverDialogAccount(c)}
+                  data-testid={`wechat-cover-${c.id}`}
+                >
+                  <ImageUpIcon className="size-4" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  aria-label={`删除公众号 ${c.name}`}
+                  onClick={() => void removeAccount(c)}
+                  data-testid={`wechat-delete-${c.id}`}
+                >
+                  <Trash2Icon className="size-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -111,7 +128,120 @@ export function WechatAccountManager() {
           await refresh();
         }}
       />
+
+      {coverDialogAccount && (
+        <CoverDialog
+          account={coverDialogAccount}
+          onClose={() => setCoverDialogAccount(null)}
+          onSaved={() => refresh()}
+        />
+      )}
     </div>
+  );
+}
+
+/** 默认封面设置弹窗：URL 变更即失效 media_id 缓存，下次发送时重新上传永久素材 */
+function CoverDialog({
+  account,
+  onClose,
+  onSaved,
+}: {
+  account: WechatAccountOption;
+  onClose: () => void;
+  onSaved: () => void | Promise<void>;
+}) {
+  const [url, setUrl] = useState(account.defaultCoverUrl ?? "");
+  const [formError, setFormError] = useState<string | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  async function save(clear = false) {
+    setFormError(null);
+    const value = clear ? null : url.trim();
+    if (!clear) {
+      if (!value) return setFormError("请填写图片 URL，或点「清除默认封面」移除设置");
+      if (!/^https?:\/\/.+/i.test(value)) return setFormError("封面图 URL 需以 http(s):// 开头");
+    }
+    setSubmitting(true);
+    try {
+      const res = await fetch(`/api/wechat/configs/${account.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ defaultCoverUrl: value }),
+      });
+      const data = (await res.json().catch(() => ({}))) as { error?: string };
+      if (!res.ok) throw new Error(data?.error ?? "保存失败");
+      await onSaved();
+      onClose();
+    } catch (e) {
+      setFormError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  return (
+    <Dialog
+      open
+      onOpenChange={(o) => {
+        if (!submitting && !o) onClose();
+      }}
+    >
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>默认封面 · {account.name}</DialogTitle>
+          <DialogDescription>
+            文章无特色图片且正文无图时，用此图作为公众号草稿封面；可随时修改或清除。
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4 py-1">
+          <div className="rounded-md border bg-muted/40 p-3 text-xs text-muted-foreground">
+            <ul className="list-disc space-y-1 pl-4">
+              <li>建议 900×383（2.35:1 大图）或 ≥500×500，仅支持 jpg/png，≤10MB。</li>
+              <li>
+                图片 URL
+                需可公网访问（可先用博客媒体库/图床）；保存后首次发送时自动上传到微信永久素材并缓存。
+              </li>
+            </ul>
+          </div>
+          {formError && (
+            <p role="alert" className="text-sm text-destructive">
+              {formError}
+            </p>
+          )}
+          <div className="space-y-2">
+            <Label htmlFor="wechat-cover-url">封面图片 URL</Label>
+            <Input
+              id="wechat-cover-url"
+              placeholder="https://example.com/cover.jpg"
+              value={url}
+              onChange={(e) => setUrl(e.target.value)}
+            />
+          </div>
+        </div>
+        <DialogFooter>
+          {account.defaultCoverUrl && (
+            <Button
+              variant="ghost"
+              onClick={() => void save(true)}
+              disabled={submitting}
+              data-testid="wechat-cover-clear"
+            >
+              清除默认封面
+            </Button>
+          )}
+          <DialogClose
+            render={
+              <Button type="button" variant="outline" disabled={submitting}>
+                取消
+              </Button>
+            }
+          />
+          <Button onClick={() => void save()} disabled={submitting} data-testid="wechat-cover-save">
+            {submitting ? "保存中…" : "保存"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 

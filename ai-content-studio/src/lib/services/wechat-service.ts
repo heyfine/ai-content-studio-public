@@ -147,12 +147,22 @@ export async function uploadCoverMaterial(accessToken: string, imageUrl: string)
 
 const IMG_SRC_RE = /<img\b[^>]*?\bsrc="([^"]+)"/gi;
 
-/** 封面取值：优先文章特色图片，否则正文第一张图（在正文图转存前调用，拿原始可下载 URL） */
-export function resolveCoverUrl(html: string, featuredImage?: string | null): string {
-  const cover = (featuredImage ?? "").trim() || IMG_SRC_RE.exec(html)?.[1] || "";
+/**
+ * 封面取值降级链：文章特色图片 → 正文第一张图 → 账号默认封面。
+ * （在正文图转存前调用，拿原始可下载 URL；全都没有时报错。）
+ */
+export function resolveCoverUrl(
+  html: string,
+  featuredImage?: string | null,
+  defaultCoverUrl?: string | null,
+): string {
+  const cover =
+    (featuredImage ?? "").trim() || IMG_SRC_RE.exec(html)?.[1] || (defaultCoverUrl ?? "").trim();
   IMG_SRC_RE.lastIndex = 0;
   if (!cover) {
-    throw new Error("公众号草稿必须有封面图：请先在文章中插入至少一张图片，或为文章设置特色图片");
+    throw new Error(
+      "公众号草稿必须有封面图：请给文章插入图片、设置特色图片，或在「发布 → 微信公众号账号」里配置默认封面",
+    );
   }
   return cover;
 }
@@ -252,12 +262,51 @@ export async function deleteWechatConfig(id: string): Promise<void> {
   }
 }
 
+/**
+ * 更新账号默认封面 URL。URL 变更（含清空）即失效 media_id 缓存，
+ * 下次发送时重新上传永久素材。
+ */
+export async function updateWechatDefaultCover(id: string, defaultCoverUrl: string | null) {
+  try {
+    const updated = await prisma.weChatConfig.update({
+      where: { id },
+      data: { defaultCoverUrl, defaultCoverMediaId: null },
+    });
+    return { id: updated.id, defaultCoverUrl: updated.defaultCoverUrl };
+  } catch {
+    throw new Error("公众号配置不存在或已删除");
+  }
+}
+
 // ---------- 编排：文章 → 公众号草稿箱 ----------
 
 /**
+ * 封面素材解析：默认封面 URL 未变时复用已缓存的永久素材 media_id（免重复上传），
+ * 首次使用或 URL 变更时上传并把 media_id 回写账号配置。
+ */
+async function resolveThumbMediaId(
+  accessToken: string,
+  config: { id: string; defaultCoverUrl: string | null; defaultCoverMediaId: string | null },
+  coverUrl: string,
+): Promise<string> {
+  if (coverUrl === (config.defaultCoverUrl ?? "").trim() && config.defaultCoverMediaId) {
+    return config.defaultCoverMediaId;
+  }
+  const mediaId = await uploadCoverMaterial(accessToken, coverUrl);
+  if (coverUrl === (config.defaultCoverUrl ?? "").trim()) {
+    // 只有默认封面才值得长期缓存；文章自身的图每次都可能不同
+    await prisma.weChatConfig.update({
+      where: { id: config.id },
+      data: { defaultCoverMediaId: mediaId },
+    });
+  }
+  return mediaId;
+}
+
+/**
  * 把文章送进公众号草稿箱：
- * token → 封面素材（featuredImage / 正文第一张图）→ 正文图转存 → draft/add → 记录落库。
- * 同一文章重复发送同一公众号时覆盖旧草稿记录（草稿箱内微信按 media_id 各自成稿）。
+ * token → 封面素材（特色图片 → 正文第一张图 → 账号默认封面）→ 正文图转存
+ * → draft/add → 记录落库。同一文章重复发送同一公众号时覆盖旧草稿记录。
  */
 export async function sendArticleToWechatDraft(
   configId: string,
@@ -270,10 +319,8 @@ export async function sendArticleToWechatDraft(
   if (!article) throw new Error("文章不存在");
 
   const accessToken = await getAccessToken(config);
-  const thumbMediaId = await uploadCoverMaterial(
-    accessToken,
-    resolveCoverUrl(wechatHtml, article.featuredImage),
-  );
+  const coverUrl = resolveCoverUrl(wechatHtml, article.featuredImage, config.defaultCoverUrl);
+  const thumbMediaId = await resolveThumbMediaId(accessToken, config, coverUrl);
   const content = await replaceContentImages(wechatHtml, accessToken);
   const mediaId = await createWechatDraft(accessToken, {
     title: article.title,

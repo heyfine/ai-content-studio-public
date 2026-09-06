@@ -224,17 +224,21 @@ model WordPressConfig {
 
 /// 微信公众号配置：个人未认证订阅号走「API 建草稿 → 后台手动发表」通道
 model WeChatConfig {
-  id         String  @id @default(uuid())
-  name       String
+  id        String  @id @default(uuid())
+  name      String
   /// 公众号 AppID（明文，公开标识）
-  appId      String  @unique
+  appId     String  @unique
   /// AES-256-GCM 加密后的 AppSecret（base64），复用 crypto.ts
-  appSecret  String
-  enabled    Boolean @default(true)
-  createdAt  DateTime @default(now())
-  updatedAt  DateTime @updatedAt
+  appSecret String
+  /// 默认封面图 URL：文章无特色图片且正文无图时用作草稿封面（可随时修改）
+  defaultCoverUrl String?
+  /// 默认封面已上传永久素材的 media_id 缓存（URL 未变时复用，免重复上传）
+  defaultCoverMediaId String?
+  enabled   Boolean @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
   /// 草稿发布记录（文章 → 该公众号的草稿历史）
-  publishes  WeChatPublish[]
+  publishes WeChatPublish[]
 }
 
 /// 公众号草稿发布记录：一篇文章可送进多个公众号的草稿箱（同一账号覆盖更新草稿）

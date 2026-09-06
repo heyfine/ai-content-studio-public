@@ -21,3 +21,14 @@ export const wechatDraftSchema = z.object({
 });
 
 export type WechatDraftValues = z.infer<typeof wechatDraftSchema>;
+
+/** 更新公众号默认封面（null 表示清空默认封面） */
+export const wechatCoverUpdateSchema = z.object({
+  defaultCoverUrl: z
+    .string()
+    .url("封面图 URL 格式不正确，需以 http(s):// 开头")
+    .transform((s) => s.replace(/\/+$/, ""))
+    .nullable(),
+});
+
+export type WechatCoverUpdateValues = z.infer<typeof wechatCoverUpdateSchema>;

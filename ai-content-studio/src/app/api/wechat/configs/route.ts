@@ -15,6 +15,7 @@ export async function GET() {
       id: c.id,
       name: c.name,
       appId: c.appId,
+      defaultCoverUrl: c.defaultCoverUrl,
       enabled: c.enabled,
       createdAt: c.createdAt,
       updatedAt: c.updatedAt,
