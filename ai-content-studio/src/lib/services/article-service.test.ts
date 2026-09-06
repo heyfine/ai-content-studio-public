@@ -1,15 +1,28 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { findMany, findUnique, create, update, del } = vi.hoisted(() => ({
-  findMany: vi.fn(),
-  findUnique: vi.fn(),
-  create: vi.fn(),
-  update: vi.fn(),
-  del: vi.fn(),
-}));
+const { findMany, findUnique, create, update, del, versionCreate, versionFindMany } = vi.hoisted(
+  () => ({
+    findMany: vi.fn(),
+    findUnique: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    del: vi.fn(),
+    versionCreate: vi.fn(),
+    versionFindMany: vi.fn(),
+  }),
+);
 
 vi.mock("@/lib/prisma", () => ({
-  prisma: { article: { findMany, findUnique, create, update, delete: del } },
+  prisma: {
+    article: { findMany, findUnique, create, update, delete: del },
+    articleVersion: { create: versionCreate, findMany: versionFindMany },
+  },
+}));
+
+// 版本快照走独立服务，这里只验证 updateArticle 行为，mock 掉避免 prisma.articleVersion 依赖
+vi.mock("@/lib/services/article-version-service", () => ({
+  snapshotBeforeOverwrite: vi.fn(),
+  VERSIONS_KEEP: 50,
 }));
 
 import {

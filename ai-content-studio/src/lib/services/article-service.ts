@@ -1,6 +1,10 @@
 import { Prisma } from "@prisma/client";
 import { type ArticleStatus, assertTransition } from "@/lib/article-status";
 import { prisma } from "@/lib/prisma";
+import {
+  snapshotBeforeOverwrite,
+  type VersionSource,
+} from "@/lib/services/article-version-service";
 
 export interface CreateArticleInput {
   title: string;
@@ -109,7 +113,11 @@ export async function createArticle(input: CreateArticleInput) {
   return prisma.article.create({ data: data as Prisma.ArticleCreateInput });
 }
 
-export async function updateArticle(id: string, input: UpdateArticleInput) {
+export async function updateArticle(
+  id: string,
+  input: UpdateArticleInput,
+  source: VersionSource = "save",
+) {
   const existing = await prisma.article.findUnique({ where: { id } });
   if (!existing) {
     throw new Error("文章不存在");
@@ -117,6 +125,8 @@ export async function updateArticle(id: string, input: UpdateArticleInput) {
   if (input.status && input.status !== existing.status) {
     assertTransition(existing.status as ArticleStatus, input.status);
   }
+  // 正文被覆盖前自动快照（WPS 式版本历史；恢复操作的 source=restore 同样入史，可再撤销）
+  await snapshotBeforeOverwrite(id, existing, input, source);
   const data: Record<string, unknown> = {};
   if (input.title !== undefined) data.title = input.title;
   if (input.slug !== undefined) data.slug = input.slug;

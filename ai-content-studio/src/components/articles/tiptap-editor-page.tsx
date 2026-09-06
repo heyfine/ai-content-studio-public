@@ -3,6 +3,7 @@
 import { type Editor, EditorContent } from "@tiptap/react";
 import {
   Check,
+  History as HistoryIcon,
   MessageCircle as MessageCircleIcon,
   Send as SendIcon,
   Sparkles,
@@ -40,6 +41,7 @@ import { toWechatHtml } from "@/lib/content/wechat-format";
 import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
 import { useStudioStore } from "@/stores/studio-store";
+import { VersionHistoryDialog } from "./version-history-dialog";
 
 export interface TiptapEditorPageProps {
   articleId: string | null;
@@ -193,6 +195,8 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [wechatPickerOpen, setWechatPickerOpen] = useState(false);
   const [wechatAccounts, setWechatAccounts] = useState<WechatOption[]>([]);
   const [wechatConfigId, setWechatConfigId] = useState("");
+  // 历史版本
+  const [versionsOpen, setVersionsOpen] = useState(false);
   // 实际文章 id：编辑模式即 initial.id；新建模式首次保存（POST）后获得，后续转 PUT 更新
   const [savedArticleId, setSavedArticleId] = useState(initial.id);
 
@@ -521,6 +525,17 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
             <MessageCircleIcon className="size-4" />
             {sendingWechat ? "发送中…" : "发送到微信公众号"}
           </Button>
+          {isEdit && (
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setVersionsOpen(true)}
+              data-testid="open-versions"
+            >
+              <HistoryIcon className="size-4" />
+              历史版本
+            </Button>
+          )}
           <Button variant="ghost" onClick={() => router.push("/articles")}>
             取消
           </Button>
@@ -885,6 +900,15 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* 历史版本：列表 / 预览 / 恢复 / 删除（仅编辑模式入口） */}
+      {versionsOpen && (
+        <VersionHistoryDialog
+          articleId={isEdit ? initial.id : savedArticleId}
+          onClose={() => setVersionsOpen(false)}
+          onRestored={() => window.location.reload()}
+        />
+      )}
     </div>
   );
 }

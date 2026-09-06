@@ -458,4 +458,36 @@ describe("TiptapEditorPage", () => {
     );
     expect(fetchMock).not.toHaveBeenCalledWith("/api/wechat/draft", expect.anything());
   });
+
+  it("历史版本：编辑模式显示按钮，点击打开弹窗", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (typeof url === "string" && url.startsWith("/api/articles/a1/versions"))
+        return { ok: true, json: async () => [] };
+      if (url === "/api/articles/a1")
+        return {
+          ok: true,
+          json: async () => ({
+            id: "a1",
+            title: "旧标题",
+            slug: "x",
+            content: "旧正文",
+            status: "DRAFT",
+            seoScore: null,
+            wpPostId: null,
+            promptId: null,
+          }),
+        };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toBeInTheDocument());
+    expect(screen.getByTestId("open-versions")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("open-versions"));
+    await waitFor(() => expect(screen.getByText(/每次正文被覆盖前自动存档/)).toBeInTheDocument());
+  });
+
+  it("历史版本：新建模式不显示入口", () => {
+    render(<TiptapEditorPage articleId={null} />);
+    expect(screen.queryByTestId("open-versions")).not.toBeInTheDocument();
+  });
 });

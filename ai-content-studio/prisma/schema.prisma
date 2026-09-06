@@ -148,8 +148,29 @@ model Article {
   seoReports    SeoReport[]
   publishes     ArticlePublish[]
   wechatPublishes WeChatPublish[]
+  versions      ArticleVersion[]
   /// 关联的 WordPress 站点配置
   siteConfig    WordPressConfig? @relation(fields: [siteConfigId], references: [id], onDelete: SetNull)
+}
+
+/// 文章历史版本快照：正文被覆盖前自动存档（保存/AI 刷新/同步/恢复均入史），每篇保留最近 50 版
+model ArticleVersion {
+  id          String   @id @default(uuid())
+  articleId   String
+  article     Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  /// 快照时的文章标题
+  title       String
+  content     String
+  contentJson Json?
+  contentHtml String?
+  contentMd   String?
+  /// 版本来源：save（编辑保存）/ refresh（AI 刷新）/ sync（博客同步）/ restore（恢复前存档）
+  source      String   @default("save")
+  /// 快照时正文字符数（列表展示大小用）
+  size        Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([articleId, createdAt])
 }
 
 /// 文章发布记录：一篇文章可发布到多个 WordPress 站点（同一站点覆盖更新）
