@@ -158,6 +158,17 @@ export const PasteImage = Extension.create({
               : "";
             const rtfImages = html && rtf ? extractImagesFromRtf(rtf) : [];
             const prepared = html ? preparePasteHtml(html, rtfImages) : null;
+            // 诊断日志：图文粘贴再出问题时，让用户在 Console 里贴这行即可定位
+            console.info(
+              "[paste-image] clipboard:",
+              JSON.stringify({
+                types: Array.from(clipboard.types ?? []),
+                files: files.length,
+                rtfLen: rtf.length,
+                rtfImages: rtfImages.length,
+                blocked: prepared?.blocked ?? 0,
+              }),
+            );
             // 纯文本（无位图无 HTML 图）：走 Tiptap 默认粘贴
             if (files.length === 0 && !prepared?.hasImage) return false;
             event.preventDefault();
