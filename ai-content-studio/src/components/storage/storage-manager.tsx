@@ -209,6 +209,12 @@ export function StorageManager() {
             <b className="text-foreground">AccessKeyId / SecretAccessKey</b>：对象存储控制台创建的
             API 密钥；SecretKey 加密保存、不再回显。
           </p>
+          <p>
+            <b className="text-foreground">缤纷云专用</b>：① Region 填
+            <b className="text-foreground">桶详情里的服务可用区</b>（一般 cn-east-1）； ② 创建 Key
+            后必须到「子账户」给该 Key<b className="text-foreground">授予桶读写权限</b>
+            ，否则报 AccessDenied；③ 公网基址形如 https://桶名.s3.bitiful.net（桶名要与配置一致）。
+          </p>
         </CardContent>
       </Card>
 
