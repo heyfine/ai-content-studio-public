@@ -80,8 +80,14 @@ AI Content Studio gml/
 
 ## 部署
 
-- 平台规划：Vercel（前端）+ 数据库（本地 PostgreSQL `acs`，与 ERP 共用本机 PG17 实例）+ Oracle 服务器（WordPress）
-- 详细步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
+- **Docker 自托管**（推荐，自带 PostgreSQL，一键起）：
+  ```bash
+  cd ai-content-studio
+  cp .env.docker.example .env.docker   # 填写 POSTGRES_PASSWORD/AUTH_SECRET/ENCRYPTION_KEY/管理员账号
+  docker compose --env-file .env.docker up -d --build   # db → migrate → app，http://localhost:3000
+  ```
+- 平台规划（替代方案）：Vercel（前端）+ 本地 PostgreSQL `acs`（与 ERP 共用本机 PG17 实例）+ Oracle 服务器（WordPress）
+- 详细步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)（含 Docker 章节）
 
 ## AI 接手指南
 
