@@ -12,8 +12,6 @@ import {
 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
@@ -22,6 +20,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 interface BackupDomain {
   key: string;
@@ -52,6 +52,16 @@ interface WebdavFile {
   filename: string;
   size: number;
   lastModified: string | null;
+}
+
+/** API 返回的备份文件结构（即 /api/backup/restore 的 body.backup） */
+interface BackupFilePayload {
+  format: string;
+  formatVersion: number;
+  exportedAt: string;
+  full: boolean;
+  domains: string[];
+  data: Record<string, unknown[]>;
 }
 
 interface TargetDraft extends WebdavTarget {
@@ -157,12 +167,12 @@ export function BackupManager() {
         body: JSON.stringify({ domains: [...checked] }),
       });
       const body = (await res.json()) as {
-        backup?: { backup: unknown; exportedAt: string };
+        backup?: BackupFilePayload;
         totalRows?: number;
         error?: string;
       };
       if (!res.ok || !body.backup) throw new Error(body.error ?? "备份失败");
-      const blob = new Blob([JSON.stringify(body.backup.backup, null, 2)], {
+      const blob = new Blob([JSON.stringify(body.backup, null, 2)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);
@@ -327,8 +337,8 @@ export function BackupManager() {
         <CardHeader>
           <CardTitle>还原</CardTitle>
           <CardDescription>
-            上传本系统的备份文件还原。合并覆盖 = 同名数据覆盖、其余保留；覆盖还原 = 先清空备份涉及的表再写入（结果
-            = 备份快照）。
+            上传本系统的备份文件还原。合并覆盖 = 同名数据覆盖、其余保留；覆盖还原 =
+            先清空备份涉及的表再写入（结果 = 备份快照）。
           </CardDescription>
         </CardHeader>
         <CardContent className="flex flex-wrap items-center gap-3">
@@ -354,7 +364,11 @@ export function BackupManager() {
               e.target.value = "";
             }}
           />
-          <Button variant="secondary" disabled={busy} onClick={() => restoreInputRef.current?.click()}>
+          <Button
+            variant="secondary"
+            disabled={busy}
+            onClick={() => restoreInputRef.current?.click()}
+          >
             <UploadIcon className="size-4" />
             选择备份文件还原
           </Button>
@@ -365,7 +379,8 @@ export function BackupManager() {
         <CardHeader>
           <CardTitle>自动备份（定时推送到 WebDAV）</CardTitle>
           <CardDescription>
-            服务器内置调度器每 5 分钟检查一次；每个目标独立间隔与保留份数，超出份数的旧备份自动清理。
+            服务器内置调度器每 5
+            分钟检查一次；每个目标独立间隔与保留份数，超出份数的旧备份自动清理。
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -394,7 +409,10 @@ export function BackupManager() {
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label>名称</Label>
-                  <Input value={t.name} onChange={(e) => updateTarget(idx, "name", e.target.value)} />
+                  <Input
+                    value={t.name}
+                    onChange={(e) => updateTarget(idx, "name", e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>WebDAV 地址（目录）</Label>
@@ -406,7 +424,10 @@ export function BackupManager() {
                 </div>
                 <div className="space-y-1">
                   <Label>用户名</Label>
-                  <Input value={t.username} onChange={(e) => updateTarget(idx, "username", e.target.value)} />
+                  <Input
+                    value={t.username}
+                    onChange={(e) => updateTarget(idx, "username", e.target.value)}
+                  />
                 </div>
                 <div className="space-y-1">
                   <Label>密码{t.hasPassword ? "（留空沿用已存）" : ""}</Label>
@@ -479,7 +500,9 @@ export function BackupManager() {
               </div>
               {filesTargetId === t.id && files.length > 0 && (
                 <div className="space-y-2 rounded-md border bg-muted/30 p-3">
-                  <p className="text-xs font-medium text-muted-foreground">云端备份文件（最新在前）</p>
+                  <p className="text-xs font-medium text-muted-foreground">
+                    云端备份文件（最新在前）
+                  </p>
                   {files.map((f) => (
                     <div key={f.filename} className="flex items-center gap-2 text-xs">
                       <span className="min-w-0 flex-1 truncate font-mono">{f.filename}</span>
@@ -490,7 +513,11 @@ export function BackupManager() {
                         size="sm"
                         disabled={busy}
                         onClick={() =>
-                          void handleAutoOp("restore", { targetId: t.id, filename: f.filename, mode: "merge" })
+                          void handleAutoOp("restore", {
+                            targetId: t.id,
+                            filename: f.filename,
+                            mode: "merge",
+                          })
                         }
                       >
                         <RotateCcwIcon className="size-3.5" />
