@@ -29,6 +29,15 @@ export default function SettingsPage() {
       </Card>
       <Card className="max-w-lg">
         <CardHeader>
+          <CardTitle>备份与还原</CardTitle>
+          <CardDescription>按域导出数据、还原备份、自动定时推送到 WebDAV。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button render={<Link href="/settings/backup" />}>前往备份</Button>
+        </CardContent>
+      </Card>
+      <Card className="max-w-lg">
+        <CardHeader>
           <CardTitle>任务路由</CardTitle>
           <CardDescription>为每种 AI 任务指定使用的模型。</CardDescription>
         </CardHeader>

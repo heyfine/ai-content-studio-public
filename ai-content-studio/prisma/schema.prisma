@@ -342,6 +342,13 @@ enum WorkflowRunStatus {
 }
 
 
+/// 系统级 KV 设置（自动备份开关/目标/状态等；不纳入数据备份自身）
+model SystemSetting {
+  key       String   @id
+  value     String
+  updatedAt DateTime @updatedAt
+}
+
 /// Source Crawler：外部来源（Phase 1 AI Research & Rewrite）。状态/类型用字符串字段便于后续扩展
 model Source {
   id               String   @id @default(uuid())
