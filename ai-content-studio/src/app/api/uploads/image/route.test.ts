@@ -3,14 +3,22 @@
 import { File as NodeFile } from "node:buffer";
 import { readdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock } = vi.hoisted(() => ({ authMock: vi.fn() }));
+const { authMock, storageMock } = vi.hoisted(() => ({
+  authMock: vi.fn(),
+  storageMock: { getEnabledStorageConfig: vi.fn() },
+}));
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/services/storage-service", () => storageMock);
 
 import { POST } from "./route";
 
 describe("POST /api/uploads/image", () => {
+  beforeEach(() => {
+    // 默认未启用对象存储：上传落本地 public/uploads
+    storageMock.getEnabledStorageConfig.mockResolvedValue(null);
+  });
   afterEach(() => {
     const dir = path.join(process.cwd(), "public", "uploads");
     try {
