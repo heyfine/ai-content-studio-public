@@ -5,14 +5,18 @@
 
 # ============ 依赖层：安装全部依赖（含 dev，供构建与迁移使用） ============
 FROM node:24-alpine AS deps
+# 统一时区：调度器/日志/时间戳走北京墙钟（数据库仍存 UTC，仅展示与 cron 语义为本地）
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 # pnpm 固定版本（与 package.json 的 packageManager 一致）
-RUN npm install -g pnpm@11.20.0
+RUN apk add --no-cache tzdata \
+    && npm install -g pnpm@11.20.0
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 
 # ============ 构建层：Prisma Client + Next standalone 构建 ============
 FROM node:24-alpine AS builder
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 # 构建期 auth() 需要 AUTH_SECRET 存在；占位值只存在于本阶段，
 # 不会进入 runner（运行时密钥由容器环境变量注入，优先级更高）
@@ -26,13 +30,15 @@ RUN pnpm exec prisma generate \
 
 # ============ 运行时层：瘦镜像，仅 standalone 输出 ============
 FROM node:24-alpine AS runner
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOSTNAME=0.0.0.0
 # openssl：Prisma query engine（library 模式）动态链接 libssl3
 # su-exec：entrypoint 以 root 起步 chown 上传卷后降权为 node 用户执行
-RUN apk add --no-cache openssl su-exec
+# tzdata：TZ=Asia/Shanghai 生效（北京墙钟）
+RUN apk add --no-cache openssl su-exec tzdata
 # Next standalone 输出：server.js + 裁剪后的 node_modules（只含运行时依赖）
 COPY --from=builder /app/.next/standalone ./
 COPY --from=builder /app/.next/static ./.next/static
@@ -49,6 +55,7 @@ CMD ["node", "server.js"]
 
 # ============ 迁移/种子层：一次性 db push + seed（compose 的 migrate 服务） ============
 FROM node:24-alpine AS migrator
+ENV TZ=Asia/Shanghai
 WORKDIR /app
 # 完整 node_modules（含 prisma CLI、已生成的 .prisma/client、bcryptjs）
 COPY --from=builder /app/node_modules ./node_modules

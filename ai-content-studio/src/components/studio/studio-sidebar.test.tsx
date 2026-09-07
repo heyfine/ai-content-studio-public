@@ -1,5 +1,5 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor, fireEvent } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 function sseResponse(events: unknown[]): Response {
   const encoder = new TextEncoder();
@@ -203,7 +203,7 @@ describe("StudioSidebar", () => {
       const g = useStudioStore.getState().generations;
       expect(g).toHaveLength(1);
       expect(g[0]).toMatchObject({ task: "article_generate", index: 1, content: "生成的正文" });
-      expect(g[0].createdAt).toMatch(/^\d{2}:\d{2}:\d{2}$/);
+      expect(g[0].createdAt).toMatch(/^\d{2}:\d{2}$/); // formatTime 统一北京墙钟 HH:mm
       expect(useStudioStore.getState().content).toBe("原文内容");
       expect(useStudioStore.getState().messages.some((m) => m.content === "生成的正文")).toBe(true);
     });

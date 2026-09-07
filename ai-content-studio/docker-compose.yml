@@ -13,6 +13,8 @@ services:
       POSTGRES_DB: acs
       POSTGRES_USER: acs_app
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?请在 .env.docker 中设置 POSTGRES_PASSWORD}
+      # 北京墙钟：pg 日志/now() 显示与调度语义一致（存储仍为 UTC timestamptz）
+      TZ: Asia/Shanghai
     volumes:
       - dbdata:/var/lib/postgresql/data
     healthcheck:
@@ -30,6 +32,7 @@ services:
     environment:
       # 容器网络内连接 db 服务（host 固定为 db）
       DATABASE_URL: postgresql://acs_app:${POSTGRES_PASSWORD}@db:5432/acs?schema=public
+      TZ: Asia/Shanghai
     depends_on:
       db:
         condition: service_healthy
@@ -47,6 +50,8 @@ services:
       # 容器内 host 非 localhost，Auth.js 需要显式信任
       AUTH_TRUST_HOST: "true"
       NODE_ENV: production
+      # 北京墙钟：调度器（自动备份 nextAt）/日志/时间戳与用户时区一致（存储仍为 UTC）
+      TZ: Asia/Shanghai
     volumes:
       # 运行期图片库持久化（编辑器粘贴上传/图片库/转存）
       - uploads:/app/public/uploads

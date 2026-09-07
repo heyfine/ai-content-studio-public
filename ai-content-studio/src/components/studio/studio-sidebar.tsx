@@ -1,15 +1,16 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Send as SendIcon, Sparkles as SparklesIcon } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { taskRouteDefinitions } from "@/config/task-routes";
-import { useStudioStore, nextId } from "@/stores/studio-store";
 import { streamGenerateRequest } from "@/lib/ai/stream-client";
+import { formatTime } from "@/lib/datetime";
+import { nextId, useStudioStore } from "@/stores/studio-store";
 import { ArticleActions } from "./article-actions";
 import { BlogPublishDialog } from "./blog-publish-dialog";
-import { TemplatePickerDialog, type PromptOption } from "./template-picker-dialog";
+import { type PromptOption, TemplatePickerDialog } from "./template-picker-dialog";
 
 export function StudioSidebar() {
   const {
@@ -61,7 +62,7 @@ export function StudioSidebar() {
       task,
       index: useStudioStore.getState().generations.length + 1,
       content: "",
-      createdAt: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+      createdAt: formatTime(new Date()),
     });
     try {
       for await (const ev of streamGenerateRequest({

@@ -1,12 +1,12 @@
 "use client";
 
-import { useState } from "react";
 import { Send as SendIcon } from "lucide-react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
-
-import { useStudioStore, nextId, type ChatMessage } from "@/stores/studio-store";
 import { taskRouteDefinitions } from "@/config/task-routes";
 import { streamGenerateRequest } from "@/lib/ai/stream-client";
+import { formatTime } from "@/lib/datetime";
+import { type ChatMessage, nextId, useStudioStore } from "@/stores/studio-store";
 
 function taskLabel(task: string): string {
   return taskRouteDefinitions.find((t) => t.value === task)?.label ?? task;
@@ -66,7 +66,7 @@ export function AIChatPanel() {
       task: selectedTask,
       index: useStudioStore.getState().generations.length + 1,
       content: "",
-      createdAt: new Date().toLocaleTimeString("zh-CN", { hour12: false }),
+      createdAt: formatTime(new Date()),
     });
     try {
       for await (const ev of streamGenerateRequest({

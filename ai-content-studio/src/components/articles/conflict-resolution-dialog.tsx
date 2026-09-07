@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
+import { formatDateTime } from "@/lib/datetime";
 import type { WpPost } from "@/lib/services/wordpress-service";
 
 interface ConflictResolutionDialogProps {
@@ -107,7 +108,7 @@ export function ConflictResolutionDialog({
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-primary">本地版本</span>
                   <span className="text-xs text-muted-foreground">
-                    最后更新: {new Date().toLocaleString()}
+                    最后更新: {formatDateTime(new Date())}
                   </span>
                 </div>
                 <Textarea value={localContent} readOnly rows={8} className="text-xs" />

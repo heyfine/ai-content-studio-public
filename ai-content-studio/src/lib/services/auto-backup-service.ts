@@ -5,8 +5,16 @@
  * 移植自 sales record 的 auto-backup.ts，适配 Prisma + PostgreSQL。
  */
 import type { PrismaClient } from ".prisma/client";
+import { beijingStamp } from "@/lib/datetime";
 import { prisma as defaultPrisma } from "@/lib/prisma";
-import { BackupError, createBackup, restoreBackup, type BackupFile, type BackupRestoreMode, type BackupRestoreResult } from "@/lib/services/backup-service";
+import {
+  BackupError,
+  type BackupFile,
+  type BackupRestoreMode,
+  type BackupRestoreResult,
+  createBackup,
+  restoreBackup,
+} from "@/lib/services/backup-service";
 import {
   getWebdav,
   listWebdav,
@@ -14,8 +22,8 @@ import {
   removeWebdav,
   testWebdav,
   type WebdavBackupFile,
-  type WebdavFetcher,
   WebdavError,
+  type WebdavFetcher,
 } from "@/lib/services/webdav";
 
 const K = {
@@ -113,13 +121,17 @@ function toPublicTarget(t: StoredTarget): WebdavTargetPublic {
   };
 }
 
-export async function getAutoBackupSettings(prisma: PrismaClient = defaultPrisma): Promise<AutoBackupSettings> {
+export async function getAutoBackupSettings(
+  prisma: PrismaClient = defaultPrisma,
+): Promise<AutoBackupSettings> {
   const enabled = (await readSetting(prisma, K.enabled)) === "1";
   const webdavTargets = parseTargets(await readSetting(prisma, K.targets)).map(toPublicTarget);
   return { enabled, webdavTargets };
 }
 
-export async function getAutoBackupStatus(prisma: PrismaClient = defaultPrisma): Promise<AutoBackupStatus> {
+export async function getAutoBackupStatus(
+  prisma: PrismaClient = defaultPrisma,
+): Promise<AutoBackupStatus> {
   const targets = parseTargets(await readSetting(prisma, K.targets)).filter((t) => t.enabled);
   const nextAtMs = targets.reduce(
     (min, t) => (t.nextAt > 0 && (min === 0 || t.nextAt < min) ? t.nextAt : min),
@@ -229,11 +241,17 @@ export interface AutoBackupDeps {
   force?: boolean;
 }
 
+/** 备份文件名时间戳：北京墙钟（容器 TZ=Asia/Shanghai，与用户看到的系统时间一致） */
 function stamp(ms: number): string {
-  return new Date(ms).toISOString().replace(/[:.]/g, "-");
+  return beijingStamp(ms);
 }
 
-async function recordStatus(prisma: PrismaClient, ms: number, status: "ok" | "error", message: string) {
+async function recordStatus(
+  prisma: PrismaClient,
+  ms: number,
+  status: "ok" | "error",
+  message: string,
+) {
   await writeSetting(prisma, K.lastAt, String(ms));
   await writeSetting(prisma, K.lastStatus, status);
   await writeSetting(prisma, K.lastMessage, message);
@@ -283,9 +301,13 @@ async function trimHistory(
 }
 
 /** 执行一次自动备份：推到所有到点的启用目标（各目标独立 nextAt/间隔）；force 忽略定时 */
-export async function runAutoBackup(
-  deps: AutoBackupDeps = {},
-): Promise<{ ran: boolean; reason?: string; message?: string; filename?: string; totalRows?: number }> {
+export async function runAutoBackup(deps: AutoBackupDeps = {}): Promise<{
+  ran: boolean;
+  reason?: string;
+  message?: string;
+  filename?: string;
+  totalRows?: number;
+}> {
   const prisma = deps.prisma ?? defaultPrisma;
   const nowMs = deps.now ?? Date.now();
   const fetchImpl = deps.fetchImpl ?? fetch;
@@ -396,7 +418,13 @@ export async function restoreFromWebdav(
   fetchImpl: WebdavFetcher = fetch,
 ): Promise<BackupRestoreResult> {
   const target = await findTarget(prisma, targetId);
-  const content = await getWebdav(target.url, target.username, target.password, filename, fetchImpl);
+  const content = await getWebdav(
+    target.url,
+    target.username,
+    target.password,
+    filename,
+    fetchImpl,
+  );
   let backup: unknown;
   try {
     backup = JSON.parse(content);

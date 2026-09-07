@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { formatDateTime } from "@/lib/datetime";
 
 interface BackupDomain {
   key: string;
@@ -388,9 +389,9 @@ export function BackupManager() {
             <div className="rounded-lg border px-3 py-2 text-xs text-muted-foreground">
               上次备份：
               {status.lastBackupAt
-                ? `${new Date(status.lastBackupAt).toLocaleString()}（${status.lastBackupStatus === "ok" ? "成功" : "失败"}：${status.lastBackupMessage ?? ""}）`
+                ? `${formatDateTime(status.lastBackupAt)}（${status.lastBackupStatus === "ok" ? "成功" : "失败"}：${status.lastBackupMessage ?? ""}）`
                 : "尚未执行"}
-              {status.nextBackupAt && ` · 下次：${new Date(status.nextBackupAt).toLocaleString()}`}
+              {status.nextBackupAt && ` · 下次：${formatDateTime(status.nextBackupAt)}`}
             </div>
           )}
           <div className="flex items-center gap-3">

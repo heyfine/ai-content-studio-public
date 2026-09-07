@@ -1,13 +1,13 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import {
-  Play as PlayIcon,
   CheckCircle2 as CheckIcon,
-  XCircle as XIcon,
-  MinusCircle as SkipIcon,
   ExternalLink as ExternalLinkIcon,
+  Play as PlayIcon,
+  MinusCircle as SkipIcon,
+  XCircle as XIcon,
 } from "lucide-react";
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -56,12 +56,14 @@ function statusIcon(status: string) {
 
 function formatDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleString("zh-CN", {
+    return new Intl.DateTimeFormat("zh-CN", {
+      timeZone: "Asia/Shanghai",
       month: "2-digit",
       day: "2-digit",
       hour: "2-digit",
       minute: "2-digit",
-    });
+      hour12: false,
+    }).format(new Date(iso));
   } catch {
     return iso;
   }

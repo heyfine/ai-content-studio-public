@@ -1,7 +1,7 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
 import { Plus as PlusIcon, Trash2 as Trash2Icon } from "lucide-react";
+import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
   Table,
@@ -11,10 +11,11 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { formatDateTime } from "@/lib/datetime";
 import { RelayApiCard } from "./relay-api-card";
 import { RelayKeyCell } from "./relay-key-cell";
-import { RelayKeyToggle } from "./relay-key-toggle";
 import { RelayKeyCreateDialog } from "./relay-key-create-dialog";
+import { RelayKeyToggle } from "./relay-key-toggle";
 
 interface RelayKeyRow {
   id: string;
@@ -103,7 +104,7 @@ export function RelayKeysClient() {
                     />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {new Date(r.createdAt).toLocaleString()}
+                    {formatDateTime(r.createdAt)}
                   </TableCell>
                   <TableCell>
                     <Button
