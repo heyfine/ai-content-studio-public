@@ -84,21 +84,49 @@ docker compose --env-file .env.docker ps        # app 状态 healthy
 | `ADMIN_EMAIL` / `ADMIN_PASSWORD` | migrate 服务幂等创建/更新的管理员账号（登录用，建议部署后到库里改密） |
 | `APP_PORT` | 应用对外端口（默认 3000） |
 
-### 数据持久化
+### 数据持久化与安全红线
 
-- `dbdata` 卷：PostgreSQL 数据（删除容器不丢）
-- `uploads` 卷：运行期图片库 `public/uploads/`（编辑器粘贴上传/图片库/外部图转存），挂载在 `/app/public/uploads`
-- 备份：`docker compose --env-file .env.docker exec db pg_dump -U acs_app acs > acs-backup.sql`；图片卷 `docker run --rm -v acs_uploads:/data -v $PWD:/backup alpine tar czf /backup/uploads.tgz -C /data .`
+**数据存放**：两个命名卷（named volume）——`dbdata`（PostgreSQL 数据）、`uploads`（运行期图片库 `public/uploads/`：编辑器粘贴上传/图片库/外部图转存，挂载 `/app/public/uploads`）。
+
+**✅ 更新镜像（`docker compose up -d --build`）不会清空数据**：卷独立于容器生命周期，重建的只是容器，卷原样保留。只要不删卷，任意次数更新、重启、重建，数据都在。
+
+**❌ 以下操作会清空数据（危险，除非确定要重置，否则勿执行）**：
+
+| 操作 | 后果 |
+| --- | --- |
+| `docker compose down -v` | **-v 参数会删除所有命名卷**，数据库与图片全没 |
+| `docker volume rm <卷名>` | 删除指定卷（`docker volume ls` 查看，本项目为 `acs_dbdata` / `acs_uploads`） |
+| `docker system prune --volumes` | 清理所有未被使用容器挂载的卷 |
+| 修改 compose 中 `volumes:` 定义（改名/改为 bind mount）后重建 | 旧卷变"孤儿"失联，新部署看似数据消失 |
+| 换服务器/换目录部署 | 卷不跟随，需要先备份再迁移 |
+
+**备份与恢复**：
+
+```bash
+# 备份数据库
+docker compose --env-file .env.docker exec db pg_dump -U acs_app acs > acs-backup.sql
+# 恢复数据库
+cat acs-backup.sql | docker compose --env-file .env.docker exec -T db psql -U acs_app acs
+# 备份图片卷
+docker run --rm -v acs_uploads:/data -v $PWD:/backup alpine tar czf /backup/uploads.tgz -C /data .
+# 恢复图片卷
+docker run --rm -v acs_uploads:/data -v $PWD:/backup alpine sh -c "rm -rf /data/* && tar xzf /backup/uploads.tgz -C /data"
+```
 
 ### 升级 / 重建
 
 ```bash
 git pull
-docker compose --env-file .env.docker up -d --build   # 重新构建镜像并滚动重建 app
+# ① 建议先备份（见上节，命令即拷即用）
+# ② 核对 .env.docker：AUTH_SECRET / ENCRYPTION_KEY 必须与首次部署时完全一致
+# ③ 重建（db → migrate → app 自动按序启动）
+docker compose --env-file .env.docker up -d --build
 ```
 
-- migrate 服务在每次 `up` 时都会重跑（db push 幂等、seed 幂等），schema 变更自动应用
-- 构建与运行期的 `AUTH_SECRET`/`ENCRYPTION_KEY` 必须沿用，否则登录态/存量密钥失效
+- **数据保留**：如上节，重建镜像/容器不清卷，数据库与图片都在
+- **migrate 自动重跑**：每次 `up` 都会执行 `prisma db push` + 幂等 seed（管理员/Prompt 模板 upsert），schema 有变更时自动对齐
+- **schema 变更安全机制**：db push **未带 `--accept-data-loss`**——若新版本代码删除了字段或表（destructive change），migrate 会**报错拒绝执行**而不是静默删数据。此时说明该版本确实需要破坏性变更，请人工评估：确认数据可弃后再决定是否加 `--accept-data-loss`，**不要盲目添加**
+- **密钥一致红线**：`AUTH_SECRET` 变了 → 所有已登录会话失效；`ENCRYPTION_KEY` 变了 → 已存的 AI Provider/公众号/中转密钥**无法解密**（数据还在但读不出来）。升级时这两个值一个字都不能改
 
 ### 反向代理（HTTPS，可选）
 
