@@ -4,7 +4,6 @@ import CharacterCount from "@tiptap/extension-character-count";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import StarterKit from "@tiptap/starter-kit";
 import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
@@ -14,16 +13,17 @@ import TaskList from "@tiptap/extension-task-list";
 import TextAlign from "@tiptap/extension-text-align";
 // text-style 包内含 TextStyle mark + Color + BackgroundColor（文字色/背景色命令）
 import { BackgroundColor, Color, TextStyle } from "@tiptap/extension-text-style";
-import { EditorContent, useEditor, type Editor } from "@tiptap/react";
-import { createLowlight, common } from "lowlight";
-import { type ReactNode } from "react";
-
+import { type Editor, EditorContent, useEditor } from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import { common, createLowlight } from "lowlight";
+import type { ReactNode } from "react";
+import { EditorToolbar } from "./components/editor-toolbar";
 import { Callout } from "./extensions/callout/callout";
 import { DragHandle } from "./extensions/drag-handle/drag-handle";
 import { Indent } from "./extensions/indent";
 import { Markdown } from "./extensions/markdown";
+import { PasteImage } from "./extensions/paste-image";
 import { SlashCommand } from "./extensions/slash-command/slash-command";
-import { EditorToolbar } from "./components/editor-toolbar";
 
 const lowlight = createLowlight(common);
 
@@ -71,6 +71,7 @@ const baseExtensions = (placeholder?: string) => [
   Markdown,
   SlashCommand,
   DragHandle,
+  PasteImage,
 ];
 
 /**

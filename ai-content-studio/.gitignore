@@ -46,3 +46,6 @@ AGENTS.md
 CLAUDE.md
 dev-server.log
 start-dev.ps1
+
+# 编辑器粘贴上传的图片（运行时产物）
+public/uploads/
