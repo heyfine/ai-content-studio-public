@@ -173,7 +173,8 @@ export function BackupManager() {
         error?: string;
       };
       if (!res.ok || !body.backup) throw new Error(body.error ?? "备份失败");
-      const blob = new Blob([JSON.stringify(body.backup, null, 2)], {
+      // 与 WebDAV 自动备份一致：紧凑 JSON（数据相同、体积最小、还原等价）
+      const blob = new Blob([JSON.stringify(body.backup)], {
         type: "application/json",
       });
       const url = URL.createObjectURL(blob);

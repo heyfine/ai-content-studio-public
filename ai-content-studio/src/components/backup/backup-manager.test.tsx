@@ -89,6 +89,8 @@ describe("BackupManager", () => {
     expect(parsed.format).toBe("acs-backup");
     expect(parsed.exportedAt).toBe("2026-09-07T10:00:00.000Z");
     expect(text).not.toBe("undefined");
+    // 与 WebDAV 自动备份一致：紧凑 JSON（无多余缩进空白）
+    expect(text).not.toContain("\n  ");
     expect(clicks[0].download).toBe("acs-backup-2026-09-07T10-00-00-000Z.json");
   });
 });
