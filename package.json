@@ -1,0 +1,8 @@
+{
+  "name": "ai-content-studio",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "sync": "node scripts/sync-repos.mjs"
+  }
+}
