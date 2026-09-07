@@ -23,13 +23,18 @@ export function Sidebar({ onNavigate }: SidebarProps) {
             onClick={onNavigate}
             aria-current={active ? "page" : undefined}
             className={cn(
-              "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+              "group flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-all",
               active
-                ? "bg-primary/10 text-primary"
-                : "text-muted-foreground hover:bg-accent hover:text-foreground",
+                ? "bg-gradient-to-r from-primary/15 to-primary/5 text-primary shadow-sm shadow-primary/10"
+                : "text-muted-foreground hover:bg-sidebar-accent hover:text-foreground",
             )}
           >
-            <Icon className="size-4 shrink-0" />
+            <Icon
+              className={cn(
+                "size-4 shrink-0 transition-transform group-hover:scale-110",
+                active && "text-primary",
+              )}
+            />
             <span>{item.title}</span>
           </Link>
         );

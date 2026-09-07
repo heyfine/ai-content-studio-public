@@ -6,7 +6,7 @@ import { UserNav } from "./user-nav";
 export async function Header() {
   const session = await auth();
   return (
-    <header className="flex h-14 shrink-0 items-center gap-3 border-b px-4">
+    <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-3 border-b bg-background/70 px-4 backdrop-blur-xl">
       <MobileSidebar />
       <BreadcrumbNav />
       <div className="ml-auto">
