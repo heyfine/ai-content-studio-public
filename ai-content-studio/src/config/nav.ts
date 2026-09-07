@@ -2,6 +2,7 @@ import {
   ChartColumn as ChartColumnIcon,
   Cpu as CpuIcon,
   FileText as FileTextIcon,
+  Image as ImageIcon,
   LayoutDashboard as LayoutDashboardIcon,
   Link as LinkIcon,
   type LucideIcon,
@@ -30,6 +31,12 @@ export const navItems: NavItem[] = [
   },
   { title: "AI Studio", href: "/studio", icon: PenLineIcon, description: "AI 辅助创作工作台" },
   { title: "文章管理", href: "/articles", icon: FileTextIcon, description: "草稿与已发布文章" },
+  {
+    title: "图片库",
+    href: "/images",
+    icon: ImageIcon,
+    description: "图片空间：文章图片与公网链接",
+  },
   { title: "AI 模型", href: "/providers", icon: CpuIcon, description: "供应商与模型管理" },
   {
     title: "API 中转",
