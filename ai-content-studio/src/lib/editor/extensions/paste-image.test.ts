@@ -1,9 +1,13 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
 import { Editor } from "@tiptap/core";
 import Image from "@tiptap/extension-image";
 import StarterKit from "@tiptap/starter-kit";
-import { normalizePastedImage, preparePasteHtml, uploadPastedImage } from "./paste-image";
-import { PasteImage } from "./paste-image";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import {
+  normalizePastedImage,
+  PasteImage,
+  preparePasteHtml,
+  uploadPastedImage,
+} from "./paste-image";
 
 describe("normalizePastedImage", () => {
   it("非 bmp 原样返回", async () => {
@@ -78,16 +82,14 @@ describe("preparePasteHtml", () => {
     expect(r.jobs).toEqual([{ kind: "blob", src: "blob:https://x/uuid" }]);
   });
 
-  it("file:// 磁盘引用：移除裂图并插入提示文字", () => {
-    const r = preparePasteHtml(
-      '<p>前文</p><img src="file:///C:/Users/x/image1.png"><p>后文</p>',
-    );
+  it("file:// 磁盘引用：移除裂图（不留提示，提示由 handlePaste 结合位图决定）", () => {
+    const r = preparePasteHtml('<p>前文</p><img src="file:///C:/Users/x/image1.png"><p>后文</p>');
     expect(r.hasImage).toBe(true);
     expect(r.jobs).toEqual([]);
     expect(r.blocked).toBe(1);
     expect(r.html).not.toContain("<img");
     expect(r.html).not.toContain("file://");
-    expect(r.html).toContain("无法从 Word 剪贴板读取");
+    expect(r.html).not.toContain("无法从 Word 剪贴板读取");
     expect(r.html).toContain("前文");
     expect(r.html).toContain("后文");
   });
@@ -123,23 +125,25 @@ describe("PasteImage 编辑器集成（真实 Editor + paste 事件）", () => {
     });
   }
 
-  function pasteHtml(editor: Editor, html: string): boolean | undefined {
+  function pasteHtml(editor: Editor, html: string, files: File[] = []): boolean | undefined {
     const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
     Object.defineProperty(event, "clipboardData", {
       value: {
-        items: [],
+        items: files.map((f) => ({
+          type: f.type,
+          getAsFile: () => f,
+        })),
         // 只有 text/html 有值；其他 type 返回空串，避免干扰 Tiptap 内部
         // 对 getData("text/plain") 结果做 JSON.parse 的插件（code-block）。
         getData: (type: string) => (type === "text/html" ? html : ""),
       },
     });
-    return editor.view.someProp(
-      "handlePaste",
-      (fn) => (fn as (view: Editor["view"], event: ClipboardEvent) => boolean)(editor.view, event),
+    return editor.view.someProp("handlePaste", (fn) =>
+      (fn as (view: Editor["view"], event: ClipboardEvent) => boolean)(editor.view, event),
     );
   }
 
-  it("file:// 图：被拦截处理（返回 true），提示文字入文且无裂图节点", async () => {
+  it("file:// 图且剪贴板无位图：被拦截处理（返回 true），提示文字入文且无裂图节点", async () => {
     const editor = makeEditor();
     const handled = pasteHtml(editor, '<p>前文</p><img src="file:///C:/a.png"><p>后文</p>');
     expect(handled).toBe(true);
@@ -151,6 +155,37 @@ describe("PasteImage 编辑器集成（真实 Editor + paste 事件）", () => {
     });
     const json = editor.getJSON() as { content?: Array<{ type: string }> };
     expect(json.content?.some((n) => n.type === "image")).toBe(false);
+    editor.destroy();
+  });
+
+  it("Word 图文混合：HTML 有 file:// 引用 + 剪贴板有位图文件 → 位图上传插入，不插提示", async () => {
+    const fetchMock = vi.fn(async () =>
+      Response.json({ url: "/uploads/bitmap.png" }, { status: 201 }),
+    );
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const editor = makeEditor();
+    const bitmap = new File(["bitmap-bytes"], "image.png", { type: "image/png" });
+    const handled = pasteHtml(
+      editor,
+      '<p>这是说明文字</p><img src="file:///C:/Users/x/photo.png">',
+      [bitmap],
+    );
+    expect(handled).toBe(true);
+    await vi.waitFor(() => {
+      const json = editor.getJSON() as {
+        content?: Array<{ type: string; attrs?: { src?: string } }>;
+      };
+      // 位图上传成功 → 插入 <img src=/uploads/bitmap.png>，且不出现提示
+      expect(
+        json.content?.some((n) => n.type === "image" && n.attrs?.src === "/uploads/bitmap.png"),
+      ).toBe(true);
+      expect(editor.getText()).toContain("这是说明文字");
+      expect(editor.getText()).not.toContain("无法从 Word 剪贴板读取");
+    });
+    expect(fetchMock).toHaveBeenCalledWith(
+      "/api/uploads/image",
+      expect.objectContaining({ method: "POST" }),
+    );
     editor.destroy();
   });
 
@@ -168,9 +203,9 @@ describe("PasteImage 编辑器集成（真实 Editor + paste 事件）", () => {
       const json = editor.getJSON() as {
         content?: Array<{ type: string; attrs?: { src?: string } }>;
       };
-      expect(json.content?.some((n) => n.type === "image" && n.attrs?.src === "/uploads/pasted.png")).toBe(
-        true,
-      );
+      expect(
+        json.content?.some((n) => n.type === "image" && n.attrs?.src === "/uploads/pasted.png"),
+      ).toBe(true);
     });
     expect(editor.getText()).toContain("说明");
     editor.destroy();

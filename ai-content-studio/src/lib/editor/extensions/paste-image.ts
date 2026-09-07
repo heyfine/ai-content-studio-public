@@ -1,11 +1,13 @@
 /**
- * 粘贴图片扩展 v2：Word 富文本粘贴的图片落盘与裂图防御。
+ * 粘贴图片扩展 v3：Word 富文本粘贴的图片落盘与裂图防御。
  *
- * 剪贴板里 Word 内容的三种形态与对策：
- * 1. image/* 位图文件项（Word 位图/截图）→ canvas 转 png 上传，插入 <img src="/uploads/...">
+ * 剪贴板里 Word 内容的形态与对策（关键：**位图文件项始终上传**，
+ * 即使 HTML 里有 file:// 引用——Word 图文混合复制时剪贴板也有位图兜底；
+ * 旧版因「HTML 有图就跳过位图」导致图文混合时图片丢失，属过度防御）：
+ * 1. image/* 位图文件项（Word 选区/截图渲染的位图）→ canvas 转 png 上传，插入 <img src="/uploads/...">
  * 2. text/html 里 data:/blob: 内联图 → fetch 成 File 转存上传，原位替换 src
- * 3. text/html 里 file:///C:/... 磁盘引用（图片数据不在剪贴板，浏览器无法读取）
- *    → 移除裂图，原位插入提示文字；其余文本照常保留
+ * 3. text/html 里 file:///C:/... 磁盘引用（数据不在剪贴板，浏览器无法读取）
+ *    → 移除裂图；仅当位图也没成功兜底时才插入提示文字
  *
  * 文字永远不丢：清理后的 HTML 经 ProseMirror DOMParser 按 schema 插入。
  */
@@ -24,7 +26,7 @@ export interface PasteImageJob {
 }
 
 export interface PreparedPaste {
-  /** 清理后的 HTML：不可达图已替换为提示，data:/blob: 图保留原 src 待转存替换 */
+  /** 清理后的 HTML：不可达图已移除、data:/blob: 图保留原 src 待转存替换（无内置提示） */
   html: string;
   /** 待转存任务（data:/blob: 内联图） */
   jobs: PasteImageJob[];
@@ -64,7 +66,7 @@ export async function uploadPastedImage(file: File): Promise<string> {
   return data.url;
 }
 
-/** 解析剪贴板 HTML：分类图片、移除不可达引用、收集转存任务 */
+/** 解析剪贴板 HTML：分类图片、移除不可达引用（不留提示）、收集转存任务 */
 export function preparePasteHtml(html: string): PreparedPaste {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const jobs: PasteImageJob[] = [];
@@ -80,11 +82,9 @@ export function preparePasteHtml(html: string): PreparedPaste {
     } else if (/^https?:\/\//i.test(src)) {
       // 外链图浏览器可加载，原样保留
     } else {
-      // file:///C:/... 等：数据不在剪贴板，插入必裂图 → 移除并留提示
+      // file:///C:/... 等：数据不在剪贴板，插入必裂图 → 直接移除（提示时机由 handlePaste 决定）
       blocked += 1;
-      const hint = doc.createElement("p");
-      hint.textContent = BLOCKED_IMAGE_HINT;
-      img.replaceWith(hint);
+      img.remove();
     }
   }
   return {
@@ -105,9 +105,13 @@ async function uploadInlineImages(jobs: PasteImageJob[]): Promise<Map<string, st
         const blob = await res.blob();
         const type = blob.type || "image/png";
         const ext = type === "image/jpeg" ? "jpg" : "png";
-        const file = new File([blob], `paste-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`, {
-          type,
-        });
+        const file = new File(
+          [blob],
+          `paste-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`,
+          {
+            type,
+          },
+        );
         urlBySrc.set(job.src, await uploadPastedImage(await normalizePastedImage(file)));
       } catch (e) {
         // 单图转存失败：保留原 src（data: 仍可显示），不阻塞其他图
@@ -134,7 +138,8 @@ export const PasteImage = Extension.create({
               .map((i) => i.getAsFile())
               .filter((f): f is File => f !== null)
               .slice(0, MAX_PASTE_IMAGES);
-            const html = typeof clipboard.getData === "function" ? clipboard.getData("text/html") : "";
+            const html =
+              typeof clipboard.getData === "function" ? clipboard.getData("text/html") : "";
             const prepared = html ? preparePasteHtml(html) : null;
             // 纯文本（无位图无 HTML 图）：走 Tiptap 默认粘贴
             if (files.length === 0 && !prepared?.hasImage) return false;
@@ -142,28 +147,31 @@ export const PasteImage = Extension.create({
 
             const insertAt = view.state.selection.from;
             void (async () => {
-              // 转存内联图与位图；单图失败不阻塞文字插入
-              const urlBySrc = prepared ? await uploadInlineImages(prepared.jobs) : new Map<string, string>();
+              // 转存内联图；位图文件项始终上传（Word 图文混合时有位图兜底，图片能显示）
+              const urlBySrc = prepared
+                ? await uploadInlineImages(prepared.jobs)
+                : new Map<string, string>();
               const fileUrls: string[] = [];
-              if (files.length > 0 && !prepared?.hasImage) {
-                for (const f of files) {
-                  try {
-                    fileUrls.push(await uploadPastedImage(await normalizePastedImage(f)));
-                  } catch (e) {
-                    console.error("粘贴图片上传失败:", e);
-                  }
+              for (const f of files) {
+                try {
+                  fileUrls.push(await uploadPastedImage(await normalizePastedImage(f)));
+                } catch (e) {
+                  console.error("粘贴图片上传失败:", e);
                 }
               }
-              // 组装并插入：清理后的 HTML（文字 + 已转存图 + 提示）在前，位图文件在后
+              // 组装并插入：清理后的 HTML（文字 + 已转存图 + 必要提示）在前，位图文件在后
               const tr = view.state.tr;
               let pos = insertAt;
-              const cleaned =
-                prepared
-                  ? Array.from(urlBySrc.entries()).reduce(
-                      (acc, [src, url]) => acc.split(src).join(url),
-                      prepared.html,
-                    )
-                  : "";
+              let cleaned = prepared
+                ? Array.from(urlBySrc.entries()).reduce(
+                    (acc, [src, url]) => acc.split(src).join(url),
+                    prepared.html,
+                  )
+                : "";
+              // HTML 里有被移除的 file:// 引用图，且位图也没成功兜底 → 提示并入 HTML 一起插入
+              if (prepared && prepared.blocked > 0 && fileUrls.length === 0) {
+                cleaned += `<p>${BLOCKED_IMAGE_HINT}</p>`;
+              }
               if (cleaned.trim()) {
                 const holder = document.createElement("div");
                 holder.innerHTML = cleaned;
