@@ -15,6 +15,7 @@ import { Extension } from "@tiptap/core";
 import { DOMParser as PMDOMParser } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
 import { extractImagesFromRtf, type RtfImage } from "./rtf-images";
+import { isWordHtml, normalizeWordHtml } from "./word-html";
 
 const UPLOAD_ENDPOINT = "/api/uploads/image";
 const MAX_PASTE_IMAGES = 9;
@@ -151,7 +152,9 @@ export const PasteImage = Extension.create({
               .map((i) => i.getAsFile())
               .filter((f): f is File => f !== null)
               .slice(0, MAX_PASTE_IMAGES);
-            const html = canRead ? clipboard.getData("text/html") : "";
+            const rawHtml = canRead ? clipboard.getData("text/html") : "";
+            // Word 粘贴 HTML 是内联样式（字号+粗体当标题），先规范化成语义标签
+            const html = rawHtml && isWordHtml(rawHtml) ? normalizeWordHtml(rawHtml) : rawHtml;
             // Word 图文混合：图片字节藏在 RTF 里（浏览器 clipboardData 无 image 文件项）
             const rtf = canRead
               ? clipboard.getData("text/rtf") || clipboard.getData("application/rtf")
