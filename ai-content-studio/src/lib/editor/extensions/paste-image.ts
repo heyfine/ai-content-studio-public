@@ -1,19 +1,20 @@
 /**
- * 粘贴图片扩展 v3：Word 富文本粘贴的图片落盘与裂图防御。
+ * 粘贴图片扩展 v4：Word 富文本粘贴的图片落盘与裂图防御。
  *
- * 剪贴板里 Word 内容的形态与对策（关键：**位图文件项始终上传**，
- * 即使 HTML 里有 file:// 引用——Word 图文混合复制时剪贴板也有位图兜底；
- * 旧版因「HTML 有图就跳过位图」导致图文混合时图片丢失，属过度防御）：
- * 1. image/* 位图文件项（Word 选区/截图渲染的位图）→ canvas 转 png 上传，插入 <img src="/uploads/...">
+ * 剪贴板里 Word 内容的形态与对策：
+ * 1. text/html 里 file:///C:/... 磁盘引用（图片数据不在 HTML，浏览器读不到）
+ *    → 从剪贴板 **text/rtf** 里按文档顺序提取内嵌的 \pngblip/\jpegblip 图片字节，
+ *      原位替换成 data: URL 再转存上传（CKEditor/Gutenberg 同款做法，图文混合也能带图）
  * 2. text/html 里 data:/blob: 内联图 → fetch 成 File 转存上传，原位替换 src
- * 3. text/html 里 file:///C:/... 磁盘引用（数据不在剪贴板，浏览器无法读取）
- *    → 移除裂图；仅当位图也没成功兜底时才插入提示文字
+ * 3. image/* 位图文件项（单独复制图片/截图）→ canvas 转 png 上传，插入 <img>
+ * 4. RTF 也没有对应图片（如 WMF/EMF 矢量图）→ 移除裂图并插入提示文字
  *
  * 文字永远不丢：清理后的 HTML 经 ProseMirror DOMParser 按 schema 插入。
  */
 import { Extension } from "@tiptap/core";
 import { DOMParser as PMDOMParser } from "@tiptap/pm/model";
 import { Plugin } from "@tiptap/pm/state";
+import { extractImagesFromRtf, type RtfImage } from "./rtf-images";
 
 const UPLOAD_ENDPOINT = "/api/uploads/image";
 const MAX_PASTE_IMAGES = 9;
@@ -26,11 +27,11 @@ export interface PasteImageJob {
 }
 
 export interface PreparedPaste {
-  /** 清理后的 HTML：不可达图已移除、data:/blob: 图保留原 src 待转存替换（无内置提示） */
+  /** 清理后的 HTML：RTF 命中的图已换成 data: 待转存、无对应图的不可达引用已移除（无内置提示） */
   html: string;
-  /** 待转存任务（data:/blob: 内联图） */
+  /** 待转存任务（data:/blob: 内联图，含 RTF 提取出的图） */
   jobs: PasteImageJob[];
-  /** 被移除的不可达图片数量 */
+  /** 被移除的、RTF 也无对应数据的不可达图片数量 */
   blocked: number;
   /** 原始 HTML 是否含任何图片 */
   hasImage: boolean;
@@ -50,7 +51,7 @@ export async function normalizePastedImage(file: File): Promise<File> {
     bitmap.close();
     const dataUrl = canvas.toDataURL("image/png");
     const blob = await (await fetch(dataUrl)).blob();
-    return new File([blob], file.name.replace(/\.bmp$/i, "") + ".png", { type: "image/png" });
+    return new File([blob], `${file.name.replace(/\.bmp$/i, "")}.png`, { type: "image/png" });
   } catch {
     return file;
   }
@@ -66,12 +67,17 @@ export async function uploadPastedImage(file: File): Promise<string> {
   return data.url;
 }
 
-/** 解析剪贴板 HTML：分类图片、移除不可达引用（不留提示）、收集转存任务 */
-export function preparePasteHtml(html: string): PreparedPaste {
+/**
+ * 解析剪贴板 HTML：分类图片、用 RTF 内嵌图回填 file:// 引用、收集转存任务。
+ * rtfImages 按文档顺序与 file:// <img> 一一对应；命中则原位换成 data: 并登记转存，
+ * 未命中（RTF 无此图/数量不足）才移除并计入 blocked。
+ */
+export function preparePasteHtml(html: string, rtfImages: RtfImage[] = []): PreparedPaste {
   const doc = new DOMParser().parseFromString(html, "text/html");
   const jobs: PasteImageJob[] = [];
   let blocked = 0;
   let hasImage = false;
+  let rtfIdx = 0;
   for (const img of Array.from(doc.querySelectorAll("img"))) {
     hasImage = true;
     const src = img.getAttribute("src") ?? "";
@@ -82,9 +88,15 @@ export function preparePasteHtml(html: string): PreparedPaste {
     } else if (/^https?:\/\//i.test(src)) {
       // 外链图浏览器可加载，原样保留
     } else {
-      // file:///C:/... 等：数据不在剪贴板，插入必裂图 → 直接移除（提示时机由 handlePaste 决定）
-      blocked += 1;
-      img.remove();
+      // file:///C:/... 等：优先用 RTF 内嵌图按顺序回填
+      const rtf = rtfImages[rtfIdx++];
+      if (rtf) {
+        img.setAttribute("src", rtf.dataUrl);
+        jobs.push({ kind: "data", src: rtf.dataUrl });
+      } else {
+        blocked += 1;
+        img.remove();
+      }
     }
   }
   return {
@@ -132,22 +144,27 @@ export const PasteImage = Extension.create({
           handlePaste(view, event) {
             const clipboard = event.clipboardData;
             if (!clipboard) return false;
+            const canRead = typeof clipboard.getData === "function";
             const items = Array.from(clipboard.items ?? []);
             const files = items
               .filter((i) => i.type.startsWith("image/"))
               .map((i) => i.getAsFile())
               .filter((f): f is File => f !== null)
               .slice(0, MAX_PASTE_IMAGES);
-            const html =
-              typeof clipboard.getData === "function" ? clipboard.getData("text/html") : "";
-            const prepared = html ? preparePasteHtml(html) : null;
+            const html = canRead ? clipboard.getData("text/html") : "";
+            // Word 图文混合：图片字节藏在 RTF 里（浏览器 clipboardData 无 image 文件项）
+            const rtf = canRead
+              ? clipboard.getData("text/rtf") || clipboard.getData("application/rtf")
+              : "";
+            const rtfImages = html && rtf ? extractImagesFromRtf(rtf) : [];
+            const prepared = html ? preparePasteHtml(html, rtfImages) : null;
             // 纯文本（无位图无 HTML 图）：走 Tiptap 默认粘贴
             if (files.length === 0 && !prepared?.hasImage) return false;
             event.preventDefault();
 
             const insertAt = view.state.selection.from;
             void (async () => {
-              // 转存内联图；位图文件项始终上传（Word 图文混合时有位图兜底，图片能显示）
+              // 转存内联图与 RTF 回填图；位图文件项也上传（单独复制图片/截图场景）
               const urlBySrc = prepared
                 ? await uploadInlineImages(prepared.jobs)
                 : new Map<string, string>();
@@ -168,7 +185,7 @@ export const PasteImage = Extension.create({
                     prepared.html,
                   )
                 : "";
-              // HTML 里有被移除的 file:// 引用图，且位图也没成功兜底 → 提示并入 HTML 一起插入
+              // 仍有 RTF 也无能为力的引用图（且无位图兜底）→ 提示并入 HTML 一起插入
               if (prepared && prepared.blocked > 0 && fileUrls.length === 0) {
                 cleaned += `<p>${BLOCKED_IMAGE_HINT}</p>`;
               }

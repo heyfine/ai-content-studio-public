@@ -94,6 +94,38 @@ describe("preparePasteHtml", () => {
     expect(r.html).toContain("后文");
   });
 
+  it("file:// 引用 + RTF 内嵌图：原位回填成 data: 并登记转存，不 blocked", () => {
+    const r = preparePasteHtml('<p>前文</p><img src="file:///C:/a.png"><p>后文</p>', [
+      { type: "image/png", dataUrl: "data:image/png;base64,iVBORw==" },
+    ]);
+    expect(r.blocked).toBe(0);
+    expect(r.jobs).toEqual([{ kind: "data", src: "data:image/png;base64,iVBORw==" }]);
+    expect(r.html).not.toContain("file://");
+    expect(r.html).toContain("data:image/png;base64,iVBORw==");
+    expect(r.html).toContain("前文");
+    expect(r.html).toContain("后文");
+  });
+
+  it("多张 file:// 图按顺序对应多张 RTF 图", () => {
+    const r = preparePasteHtml('<img src="file:///C:/a.png"><img src="file:///C:/b.png">', [
+      { type: "image/png", dataUrl: "data:image/png;base64,AAAA" },
+      { type: "image/jpeg", dataUrl: "data:image/jpeg;base64,BBBB" },
+    ]);
+    expect(r.blocked).toBe(0);
+    expect(r.jobs).toEqual([
+      { kind: "data", src: "data:image/png;base64,AAAA" },
+      { kind: "data", src: "data:image/jpeg;base64,BBBB" },
+    ]);
+  });
+
+  it("RTF 图数量不足：多出的 file:// 引用仍被移除并计入 blocked", () => {
+    const r = preparePasteHtml('<img src="file:///C:/a.png"><img src="file:///C:/b.png">', [
+      { type: "image/png", dataUrl: "data:image/png;base64,AAAA" },
+    ]);
+    expect(r.blocked).toBe(1);
+    expect(r.jobs).toEqual([{ kind: "data", src: "data:image/png;base64,AAAA" }]);
+  });
+
   it("混合场景：file: 移除 + data: 收任务 + 文字全保留", () => {
     const r = preparePasteHtml(
       '<p>标题</p><img src="file:///C:/a.bmp"><p>中间</p><img src="data:image/jpeg;base64,BBBB">',
@@ -125,7 +157,12 @@ describe("PasteImage 编辑器集成（真实 Editor + paste 事件）", () => {
     });
   }
 
-  function pasteHtml(editor: Editor, html: string, files: File[] = []): boolean | undefined {
+  function pasteHtml(
+    editor: Editor,
+    html: string,
+    files: File[] = [],
+    rtf = "",
+  ): boolean | undefined {
     const event = new Event("paste", { bubbles: true, cancelable: true }) as ClipboardEvent;
     Object.defineProperty(event, "clipboardData", {
       value: {
@@ -133,15 +170,47 @@ describe("PasteImage 编辑器集成（真实 Editor + paste 事件）", () => {
           type: f.type,
           getAsFile: () => f,
         })),
-        // 只有 text/html 有值；其他 type 返回空串，避免干扰 Tiptap 内部
+        // 只有 text/html 与 text/rtf 有值；其他 type 返回空串，避免干扰 Tiptap 内部
         // 对 getData("text/plain") 结果做 JSON.parse 的插件（code-block）。
-        getData: (type: string) => (type === "text/html" ? html : ""),
+        getData: (type: string) => (type === "text/html" ? html : type === "text/rtf" ? rtf : ""),
       },
     });
     return editor.view.someProp("handlePaste", (fn) =>
       (fn as (view: Editor["view"], event: ClipboardEvent) => boolean)(editor.view, event),
     );
   }
+
+  it("Word 图文混合靠 RTF 带图：HTML 有 file:// 引用 + RTF 有内嵌图（无位图文件）→ 图片上传插入，不插提示", async () => {
+    const fetchMock = vi.fn(async (url: unknown) => {
+      if (String(url).startsWith("data:")) {
+        return new Response(new Blob(["imgbytes"], { type: "image/png" }), { status: 200 });
+      }
+      return Response.json({ url: "/uploads/rtf.png" }, { status: 201 });
+    });
+    globalThis.fetch = fetchMock as unknown as typeof fetch;
+    const editor = makeEditor();
+    // PNG 签名 hex 89504e47 → base64 iVBORw==
+    const rtf = "{\\rtf1{\\pict\\picscalex100\\pngblip 89504e47}}";
+    const handled = pasteHtml(
+      editor,
+      '<p>这是说明文字</p><img src="file:///C:/Users/x/photo.png">',
+      [],
+      rtf,
+    );
+    expect(handled).toBe(true);
+    await vi.waitFor(() => {
+      const json = editor.getJSON() as {
+        content?: Array<{ type: string; attrs?: { src?: string } }>;
+      };
+      // RTF 内嵌图被提取、上传、以 /uploads/ URL 插入；文字保留；无提示
+      expect(
+        json.content?.some((n) => n.type === "image" && n.attrs?.src === "/uploads/rtf.png"),
+      ).toBe(true);
+      expect(editor.getText()).toContain("这是说明文字");
+      expect(editor.getText()).not.toContain("无法从 Word 剪贴板读取");
+    });
+    editor.destroy();
+  });
 
   it("file:// 图且剪贴板无位图：被拦截处理（返回 true），提示文字入文且无裂图节点", async () => {
     const editor = makeEditor();
