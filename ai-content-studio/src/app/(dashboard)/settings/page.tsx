@@ -20,6 +20,15 @@ export default function SettingsPage() {
       </Card>
       <Card className="max-w-lg">
         <CardHeader>
+          <CardTitle>对象存储</CardTitle>
+          <CardDescription>接入 S3 兼容对象存储，图片直传云桶公网直出。</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Button render={<Link href="/settings/storage" />}>前往配置</Button>
+        </CardContent>
+      </Card>
+      <Card className="max-w-lg">
+        <CardHeader>
           <CardTitle>任务路由</CardTitle>
           <CardDescription>为每种 AI 任务指定使用的模型。</CardDescription>
         </CardHeader>

@@ -291,6 +291,31 @@ model RelayApiKey {
   updatedAt DateTime @updatedAt
 }
 
+/// S3 兼容对象存储配置（数据胶囊/缤纷云/OSS/COS/R2/MinIO 等，单条生效）：
+/// 启用后新上传图片走对象存储，URL 直出公网；未配置时保持本地 public/uploads 落盘
+model StorageConfig {
+  id          String   @id @default(uuid())
+  name        String
+  /// 厂商预设 id（custom/data_capsule/bitiful/aliyun_oss/tencent_cos/cloudflare_r2），决定路径风格等
+  providerId  String   @default("custom")
+  /// S3 兼容端点，如 https://s3.cstcloud.cn（不含桶名）
+  endpoint    String
+  region      String   @default("us-east-1")
+  bucket      String
+  accessKeyId String
+  /// AES-256-GCM 加密后的 SecretAccessKey（base64），复用 crypto.ts
+  secretKey   String
+  /// 公网访问基址：桶公开读时 = https://<bucket>.<域> 或自定义 CDN 域；数据胶囊等无私有域厂商留空（走预签名 URL）
+  publicBase  String   @default("")
+  /// 上传对象统一前缀（如 "acs/"），便于桶内隔离
+  keyPrefix   String   @default("acs/")
+  /// 数据胶囊等按 User-Agent 校验的厂商：AccessKey 绑定的客户端应用 id（s3drive/rclone/...）
+  clientApp   String   @default("")
+  enabled     Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 /// Workflow 运行记录：一次「选题→大纲→写作→SEO→审核→发布」全流程的执行快照
 model WorkflowRun {
   id         String            @id @default(uuid())

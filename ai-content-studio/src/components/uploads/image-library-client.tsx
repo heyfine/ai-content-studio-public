@@ -17,6 +17,13 @@ export interface LocalImageEntry {
   mtime: string;
 }
 
+export interface RemoteImageEntry {
+  key: string;
+  url: string;
+  size: number;
+  mtime: string;
+}
+
 export interface ArticleImageGroup {
   articleId: string;
   title: string;
@@ -37,6 +44,9 @@ function absoluteUrl(path: string): string {
 export function ImageLibraryClient() {
   const [localImages, setLocalImages] = useState<LocalImageEntry[]>([]);
   const [articleGroups, setArticleGroups] = useState<ArticleImageGroup[]>([]);
+  const [remoteImages, setRemoteImages] = useState<RemoteImageEntry[]>([]);
+  const [remoteEnabled, setRemoteEnabled] = useState(false);
+  const [remoteName, setRemoteName] = useState("");
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
@@ -46,13 +56,29 @@ export function ImageLibraryClient() {
   async function refresh() {
     setLoading(true);
     try {
-      const [localRes, articleRes] = await Promise.all([
+      const [localRes, articleRes, remoteRes] = await Promise.all([
         fetch("/api/uploads"),
         fetch("/api/uploads/article-images"),
+        fetch("/api/storage/images"),
       ]);
       if (!localRes.ok || !articleRes.ok) throw new Error("加载图片库失败");
       setLocalImages((await localRes.json()) as LocalImageEntry[]);
       setArticleGroups((await articleRes.json()) as ArticleImageGroup[]);
+      // 云端区容错：对象存储接口失败只影响云端区，不拖垮图片库
+      try {
+        const remote = (await remoteRes.json()) as {
+          enabled?: boolean;
+          name?: string;
+          images?: RemoteImageEntry[];
+        };
+        setRemoteEnabled(remote.enabled ?? false);
+        setRemoteName(remote.name ?? "");
+        setRemoteImages(remote.images ?? []);
+      } catch {
+        setRemoteEnabled(false);
+        setRemoteName("");
+        setRemoteImages([]);
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
     } finally {
@@ -118,6 +144,20 @@ export function ImageLibraryClient() {
       await refresh();
     } catch (e) {
       setError(`转存失败：${e instanceof Error ? e.message : String(e)}`);
+    }
+  }
+
+  async function deleteRemote(img: RemoteImageEntry) {
+    if (!window.confirm(`确定删除云端图片 ${img.key} ？此操作不可恢复。`)) return;
+    setError(null);
+    try {
+      const res = await fetch(`/api/storage/images/${encodeURIComponent(img.key)}`, {
+        method: "DELETE",
+      });
+      if (!res.ok) throw new Error("删除失败");
+      await refresh();
+    } catch (e) {
+      setError(`删除失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }
 
@@ -223,6 +263,57 @@ export function ImageLibraryClient() {
           </div>
         )}
       </section>
+
+      {remoteEnabled && (
+        <section className="space-y-3" data-testid="remote-section">
+          <h3 className="text-base font-semibold">
+            云端图片（{remoteName}）
+            <span className="ml-2 text-sm font-normal text-muted-foreground">
+              （{remoteImages.length}）
+            </span>
+          </h3>
+          {remoteImages.length === 0 ? (
+            <p className="text-sm text-muted-foreground">对象存储中还没有图片。</p>
+          ) : (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4" data-testid="remote-grid">
+              {remoteImages.map((img) => (
+                <div key={img.key} className="space-y-1 rounded-md border p-2" data-testid="remote-image">
+                  {/* biome-ignore lint/performance/noImgElement: 图片库缩略图使用原生 img，next/image 需配置域名 */}
+                  <img
+                    src={img.url}
+                    alt={img.key}
+                    className="h-28 w-full rounded object-cover"
+                    loading="lazy"
+                  />
+                  <p className="truncate text-xs text-muted-foreground">
+                    {formatSize(img.size)} · {img.mtime.slice(0, 16).replace("T", " ")}
+                  </p>
+                  <div className="flex justify-end gap-1">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="复制云端链接"
+                      onClick={() => void copyUrl(img.url)}
+                      data-testid={`copy-remote-${img.key}`}
+                    >
+                      <CopyIcon className="size-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="删除云端图片"
+                      onClick={() => void deleteRemote(img)}
+                      data-testid={`delete-remote-${img.key}`}
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="space-y-3">
         <h3 className="text-base font-semibold">文章图片</h3>

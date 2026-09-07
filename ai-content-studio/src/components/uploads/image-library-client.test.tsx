@@ -6,6 +6,21 @@ globalThis.fetch = fetchMock as unknown as typeof fetch;
 
 import { ImageLibraryClient } from "./image-library-client";
 
+// 云端图片区默认未启用（对象存储配置为空）；云端区用例单独覆盖
+const storageImagesDisabled = { enabled: false, images: [] };
+
+function mockStorage(enabled = false) {
+  fetchMock.mockImplementation(async (url: string) => {
+    if (url === "/api/storage/images")
+      return { ok: true, json: async () => ({ enabled, name: "缤纷云", images: enabled ? remoteImages : [] }) };
+    return { ok: false, json: async () => ({ error: "未知请求" }) };
+  });
+}
+
+const remoteImages = [
+  { key: "acs/r.png", url: "https://cdn.example.com/acs/r.png", size: 4096, mtime: "2026-09-07T09:00:00.000Z" },
+];
+
 const localImages = [
   { name: "a.png", url: "/uploads/a.png", size: 2048, mtime: "2026-09-06T10:00:00.000Z" },
 ];
@@ -105,6 +120,8 @@ describe("ImageLibraryClient", () => {
       if (url === "/api/uploads") return { ok: true, json: async () => [] };
       if (url === "/api/uploads/article-images")
         return { ok: true, json: async () => articleGroups };
+      if (url === "/api/storage/images")
+        return { ok: true, json: async () => storageImagesDisabled };
       if (url === "/api/uploads/import" && init?.method === "POST")
         return { ok: true, json: async () => ({ url: "/uploads/imported.jpg" }) };
       return { ok: false, json: async () => ({ error: "未知请求" }) };
@@ -121,5 +138,29 @@ describe("ImageLibraryClient", () => {
     await waitFor(() =>
       expect(screen.getByTestId("copy-hint")).toHaveTextContent("已转存到本地图片库"),
     );
+  });
+
+  it("启用对象存储时渲染云端图片区", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/uploads") return { ok: true, json: async () => [] };
+      if (url === "/api/uploads/article-images") return { ok: true, json: async () => [] };
+      if (url === "/api/storage/images")
+        return { ok: true, json: async () => ({ enabled: true, name: "缤纷云", images: remoteImages }) };
+      return { ok: false, json: async () => ({ error: "未知请求" }) };
+    });
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getByText("云端图片（缤纷云）")).toBeInTheDocument());
+    expect(screen.getByTestId("remote-image")).toBeInTheDocument();
+  });
+
+  it("云端列表接口失败不拖垮本地图片区", async () => {
+    fetchMock.mockImplementation(async (url: string) => {
+      if (url === "/api/uploads") return { ok: true, json: async () => localImages };
+      if (url === "/api/uploads/article-images") return { ok: true, json: async () => [] };
+      return { ok: false, json: async () => ({ error: "boom" }) };
+    });
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
+    expect(screen.queryByTestId("remote-image")).not.toBeInTheDocument();
   });
 });

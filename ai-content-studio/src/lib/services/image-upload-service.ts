@@ -1,5 +1,6 @@
 /**
- * 本地图片库服务：public/uploads 下的图片空间（上传/转存/列表/删除）。
+ * 图片上传服务：双后端分流——启用 S3 兼容对象存储时新图直传云桶（URL 直出公网），
+ * 未配置或未启用时保持本地 public/uploads 落盘。调用方（上传/转存 API、粘贴扩展）零改动。
  * 落盘文件名 = randomUUID + 白名单扩展名；列表/删除均有类型与命名校验。
  */
 
@@ -7,6 +8,7 @@ import { randomUUID } from "node:crypto";
 import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { LOCAL_IMAGE_NAME_RE } from "@/lib/content/image-urls";
+import { getEnabledStorageConfig, putObject } from "@/lib/services/storage-service";
 
 export const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
 
@@ -26,13 +28,7 @@ export function imageTypeAllowed(type: string): string | null {
   return EXT_BY_TYPE[type] ?? null;
 }
 
-/** 保存图片字节到本地图片库，返回公网相对路径 /uploads/xxx.ext */
-export async function saveImageFile(type: string, bytes: Uint8Array): Promise<string> {
-  const ext = imageTypeAllowed(type);
-  if (!ext) throw new Error(`不支持的图片类型：${type || "未知"}`);
-  if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    throw new Error(`图片需小于 ${Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)}MB`);
-  }
+async function writeLocal(type: string, ext: string, bytes: Uint8Array): Promise<string> {
   const dir = uploadDir();
   await mkdir(dir, { recursive: true });
   const filename = `${randomUUID()}${ext}`;
@@ -40,7 +36,22 @@ export async function saveImageFile(type: string, bytes: Uint8Array): Promise<st
   return `/uploads/${filename}`;
 }
 
-/** 下载外部图片并转存到本地图片库（供文章外部图「转存到本地」） */
+/** 保存图片字节：启用对象存储则直传云桶返回公网 URL，否则本地落盘返回相对路径 */
+export async function saveImageFile(type: string, bytes: Uint8Array): Promise<string> {
+  const ext = imageTypeAllowed(type);
+  if (!ext) throw new Error(`不支持的图片类型：${type || "未知"}`);
+  if (bytes.byteLength > MAX_IMAGE_BYTES) {
+    throw new Error(`图片需小于 ${Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)}MB`);
+  }
+  const storage = await getEnabledStorageConfig();
+  if (storage) {
+    const filename = `${randomUUID()}${ext}`;
+    return putObject(storage, `${storage.keyPrefix}${filename}`, bytes, type);
+  }
+  return writeLocal(type, ext, bytes);
+}
+
+/** 下载外部图片并转存（供文章外部图「转存到本地」；启用对象存储时转存至云桶） */
 export async function importImageFromUrl(url: string): Promise<string> {
   if (!/^https?:\/\//.test(url)) throw new Error("仅支持 http(s) 图片 URL");
   const res = await fetch(url);
@@ -49,14 +60,7 @@ export async function importImageFromUrl(url: string): Promise<string> {
   const ext = imageTypeAllowed(contentType);
   if (!ext) throw new Error(`不支持的图片类型：${contentType || "未知"}`);
   const bytes = new Uint8Array(await res.arrayBuffer());
-  if (bytes.byteLength > MAX_IMAGE_BYTES) {
-    throw new Error(`图片需小于 ${Math.floor(MAX_IMAGE_BYTES / 1024 / 1024)}MB`);
-  }
-  const dir = uploadDir();
-  await mkdir(dir, { recursive: true });
-  const filename = `${randomUUID()}${ext}`;
-  await writeFile(path.join(dir, filename), bytes);
-  return `/uploads/${filename}`;
+  return saveImageFile(contentType, bytes);
 }
 
 export interface LocalImageEntry {
