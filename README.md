@@ -69,7 +69,7 @@ AI Content Studio gml/
 
 | 变量 | 用途 | 必填 |
 | --- | --- | --- |
-| `DATABASE_URL` | PostgreSQL 连接串（Supabase） | 是 |
+| `DATABASE_URL` | 本地 PostgreSQL 连接串（库 `acs`，账号 `acs_app`，见 PROJECT_MEMORY §2） | 是 |
 | `AUTH_SECRET` | Auth.js 加密密钥 | 是 |
 | `AUTH_TRUST_HOST` | 信任主机头 | 是 |
 | `ENCRYPTION_KEY` | API Key AES-256-GCM 加密密钥 | 是（AI 供应商功能） |
@@ -80,7 +80,7 @@ AI Content Studio gml/
 
 ## 部署
 
-- 平台规划：Vercel（前端）+ Supabase（PostgreSQL）+ Oracle 服务器（WordPress）
+- 平台规划：Vercel（前端）+ 数据库（本地 PostgreSQL `acs`，与 ERP 共用本机 PG17 实例）+ Oracle 服务器（WordPress）
 - 详细步骤见 [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)
 
 ## AI 接手指南
