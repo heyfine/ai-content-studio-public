@@ -113,6 +113,8 @@ describe("createBackup / restoreBackup", () => {
         }
       }
     }
+    // 每次备份都附带 SystemSetting KV，默认空列表
+    prismaMock.systemSetting.findMany.mockResolvedValue([]);
   });
 
   it("备份：按域导出各表并统计行数", async () => {
@@ -121,6 +123,7 @@ describe("createBackup / restoreBackup", () => {
     const r = await createBackup(prismaMock as never, { domains: ["prompts"] });
     expect(r.totalRows).toBe(1);
     expect(r.backup.data.Prompt).toEqual([{ id: "p1", content: "hi" }]);
+    expect(r.backup.data.SystemSetting).toEqual([]);
     expect(r.backup.format).toBe("acs-backup");
   });
 
@@ -216,25 +219,34 @@ describe("createBackup / restoreBackup", () => {
     expect(r.totalRows).toBe(2);
   });
 
-  it("整站备份附带 SystemSetting KV；merge 按 key upsert；非整站不附带", async () => {
-    // 整站备份遍历全部模型 delegate，默认空结果
-    for (const d of Object.values(prismaMock)) {
-      if (d && typeof d === "object" && "findMany" in (d as object)) {
-        (d as { findMany: { mockResolvedValue: (v: unknown) => void } }).findMany.mockResolvedValue(
-          [],
-        );
-      }
-    }
+  it("备份始终附带 SystemSetting KV（WebDAV 目标等，不作为勾选域）；勾选域数据照常导出", async () => {
     prismaMock.systemSetting.findMany.mockResolvedValue([
       { key: "auto_backup_enabled", value: "1" },
       { key: "auto_backup_targets", value: "[{...}]" },
     ]);
+    prismaMock.prompt.findMany.mockResolvedValue([{ id: "p1" }]);
+    // full 备份遍历全部模型 delegate，默认空结果
+    for (const d of Object.values(prismaMock)) {
+      if (d && typeof d === "object" && "findMany" in (d as object)) {
+        const m = (
+          d as {
+            findMany: {
+              getMockImplementation: () => unknown;
+              mockResolvedValue: (v: unknown) => void;
+            };
+          }
+        ).findMany;
+        if (!m.getMockImplementation()) m.mockResolvedValue([]);
+      }
+    }
+
+    // 部分域备份也带 SystemSetting（用户漏勾不影响还原后自动备份可用）
+    const partial = await createBackup(prismaMock as never, { domains: ["prompts"] });
+    expect(partial.backup.data.SystemSetting).toHaveLength(2);
+    expect(partial.backup.data.Prompt).toHaveLength(1);
+
     const full = await createBackup(prismaMock as never, { full: true });
     expect(full.backup.data.SystemSetting).toHaveLength(2);
-    expect(full.totalRows).toBeGreaterThanOrEqual(2);
-
-    const partial = await createBackup(prismaMock as never, { domains: ["prompts"] });
-    expect(partial.backup.data.SystemSetting).toBeUndefined();
   });
 
   it("还原 SystemSetting：merge 按 key upsert 回 KV", async () => {

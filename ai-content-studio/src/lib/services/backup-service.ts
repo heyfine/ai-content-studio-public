@@ -257,7 +257,8 @@ export async function exportSystemSetting(
 }
 
 /** 备份：对所选域的每张表全量导出（DateTime 序列化为 ISO 字符串）；
- * 整站备份额外附带 SystemSetting KV（WebDAV 备份目标等）。 */
+ * 始终附带 SystemSetting KV（自动备份开关/WebDAV 目标等）——它们是还原后系统可用的必需配置，
+ * 不作为勾选域暴露（避免用户漏勾导致还原后自动备份失效）。 */
 export async function createBackup(
   prisma: PrismaClient,
   input: { full?: boolean; domains?: string[] },
@@ -273,12 +274,10 @@ export async function createBackup(
     tableCounts[model] = rows.length;
     totalRows += rows.length;
   }
-  if (full) {
-    const rows = await exportSystemSetting(prisma);
-    data.SystemSetting = rows;
-    tableCounts.SystemSetting = rows.length;
-    totalRows += rows.length;
-  }
+  const systemRows = await exportSystemSetting(prisma);
+  data.SystemSetting = systemRows;
+  tableCounts.SystemSetting = systemRows.length;
+  totalRows += systemRows.length;
   const backup: BackupFile = {
     format: "acs-backup",
     formatVersion: 2,
