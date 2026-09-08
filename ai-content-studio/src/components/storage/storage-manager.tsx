@@ -129,7 +129,10 @@ export function StorageManager() {
         error?: string;
       } | null;
       if (!res.ok || typeof data?.secret !== "string") {
-        setRevealError(data?.error ?? "查看密钥失败");
+        setRevealError(
+          data?.error ??
+            `查看密钥失败（HTTP ${res.status}）${res.status === 404 ? "：服务器尚未部署该功能，请更新部署后重试" : ""}`,
+        );
         return;
       }
       setForm((prev) => ({ ...prev, secretKey: data.secret! }));
