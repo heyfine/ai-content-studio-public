@@ -1,14 +1,22 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, listMock, delMock, importMock } = vi.hoisted(() => ({
+const { authMock, listMock, delMock, importMock, trashMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   listMock: vi.fn(),
   delMock: vi.fn(),
   importMock: vi.fn(),
+  trashMock: {
+    listLocalTrash: vi.fn(),
+    trashLocalImage: vi.fn(),
+    restoreLocalImage: vi.fn(),
+    purgeLocalImage: vi.fn(),
+    purgeExpiredImages: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
+vi.mock("@/lib/services/image-trash-service", () => trashMock);
 vi.mock("@/lib/services/image-upload-service", () => ({
   listLocalImages: listMock,
   deleteLocalImage: delMock,
@@ -37,14 +45,14 @@ describe("图片库 API", () => {
     expect((await res.json())[0].url).toBe("/uploads/x.png");
   });
 
-  it("DELETE /api/uploads/[name]：未登录 401；不存在 404；成功 ok", async () => {
+  it("DELETE /api/uploads/[name]：未登录 401；不存在 404；成功进回收站", async () => {
     const params = { params: Promise.resolve({ name: "abc.png" }) };
     authMock.mockResolvedValue(null);
     expect((await DELETE(new Request("https://x"), params)).status).toBe(401);
     authMock.mockResolvedValue({ user: { email: "a@b.com" } });
-    delMock.mockResolvedValueOnce(false);
+    trashMock.trashLocalImage.mockResolvedValueOnce(false);
     expect((await DELETE(new Request("https://x"), params)).status).toBe(404);
-    delMock.mockResolvedValueOnce(true);
+    trashMock.trashLocalImage.mockResolvedValueOnce(true);
     expect((await DELETE(new Request("https://x"), params)).status).toBe(200);
   });
 

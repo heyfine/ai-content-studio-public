@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { authMock, storageMock } = vi.hoisted(() => ({
+const { authMock, storageMock, trashRemoteMock } = vi.hoisted(() => ({
   authMock: vi.fn(),
   storageMock: {
     testStorageConnection: vi.fn(),
@@ -10,10 +10,17 @@ const { authMock, storageMock } = vi.hoisted(() => ({
     deleteRemoteObject: vi.fn(),
     describeStorageError: vi.fn((e: unknown) => (e instanceof Error ? e.message : String(e))),
   },
+  trashRemoteMock: {
+    listRemoteTrash: vi.fn(),
+    trashRemoteImage: vi.fn(),
+    restoreRemoteImage: vi.fn(),
+    purgeRemoteImage: vi.fn(),
+  },
 }));
 
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/services/storage-service", () => storageMock);
+vi.mock("@/lib/services/image-trash-service", () => trashRemoteMock);
 
 import { DELETE as imageDelete } from "./images/[key]/route";
 import { GET as imagesGet } from "./images/route";
@@ -102,18 +109,19 @@ describe("/api/storage/images", () => {
     expect(body.images[0].url).toContain("/acs/a.png");
   });
 
-  it("DELETE：仅允许本应用前缀下对象；前缀外 403", async () => {
+  it("DELETE：移入回收站前缀；前缀外 403", async () => {
     authMock.mockResolvedValue(session);
     storageMock.getEnabledStorageConfig.mockResolvedValue(row);
     const params = (key: string) => ({ params: Promise.resolve({ key }) });
 
-    storageMock.deleteRemoteObject.mockResolvedValue(undefined);
     const okRes = await imageDelete(new Request("https://x"), params("acs%2Fa.png"));
     expect(okRes.status).toBe(200);
-    expect(storageMock.deleteRemoteObject).toHaveBeenCalledWith(row, "acs/a.png");
+    expect(trashRemoteMock.trashRemoteImage).toHaveBeenCalledWith(row, "acs/a.png");
 
+    trashRemoteMock.trashRemoteImage.mockRejectedValueOnce(
+      new Error("仅允许移入本应用前缀下的对象：other/b.png"),
+    );
     const outsideRes = await imageDelete(new Request("https://x"), params("other%2Fb.png"));
     expect(outsideRes.status).toBe(403);
-    expect(storageMock.deleteRemoteObject).toHaveBeenCalledTimes(1);
   });
 });

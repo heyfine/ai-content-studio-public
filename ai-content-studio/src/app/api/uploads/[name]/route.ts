@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
-import { deleteLocalImage } from "@/lib/services/image-upload-service";
+import { trashLocalImage } from "@/lib/services/image-trash-service";
 
-/** 删除本地图片库中的一张图片 */
+/** 删除本地图片库中的一张图片（移入回收站，14 天后自动清理） */
 export async function DELETE(_request: Request, ctx: { params: Promise<{ name: string }> }) {
   try {
     const session = await auth();
@@ -10,7 +10,7 @@ export async function DELETE(_request: Request, ctx: { params: Promise<{ name: s
       return NextResponse.json({ error: "未授权" }, { status: 401 });
     }
     const { name } = await ctx.params;
-    const ok = await deleteLocalImage(name);
+    const ok = await trashLocalImage(name);
     if (!ok) {
       return NextResponse.json({ error: "图片不存在或文件名不合法" }, { status: 404 });
     }
