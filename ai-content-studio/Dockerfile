@@ -22,10 +22,16 @@ WORKDIR /app
 # 不会进入 runner（运行时密钥由容器环境变量注入，优先级更高）
 ENV AUTH_SECRET=build-time-placeholder
 ENV AUTH_TRUST_HOST=true
+# 全局 pnpm 安装在 deps 层的 /usr/local，不随 node_modules 复制，需在此单独安装
+RUN npm install -g pnpm@11.20.0
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 # 生成 Prisma Client（linux-musl engine，与 runner 平台一致）+ Next standalone 构建
+# 注意：pnpm 安装时 @prisma/client postinstall 会在 .pnpm/@prisma+client*/node_modules/.prisma
+# 生成占位 stub，而 prisma generate 把真实 client 写到根 node_modules/.prisma/client；
+# stub 会就近遮蔽真实 client 导致 next build 类型检查全挂，必须删除让解析落回根目录
 RUN pnpm exec prisma generate \
+    && rm -rf node_modules/.pnpm/@prisma+client*/node_modules/.prisma \
     && pnpm build
 
 # ============ 运行时层：瘦镜像，仅 standalone 输出 ============
