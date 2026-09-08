@@ -32,6 +32,9 @@ const { prismaMock } = vi.hoisted(() => {
       storageConfig: makeDelegate(),
       systemSetting: {
         findUnique: vi.fn(),
+        findMany: vi.fn(),
+        deleteMany: vi.fn(),
+        createMany: vi.fn(),
         upsert: vi.fn(),
       },
       $transaction: vi.fn(),
@@ -40,6 +43,9 @@ const { prismaMock } = vi.hoisted(() => {
 });
 
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
+
+// 加密自检用：crypto.ts 的 decrypt 需要 ENCRYPTION_KEY
+process.env.ENCRYPTION_KEY = "MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY";
 
 import {
   BACKUP_DOMAINS,
@@ -208,5 +214,100 @@ describe("createBackup / restoreBackup", () => {
     };
     const r = await restoreBackup(prismaMock as never, backup, "merge");
     expect(r.totalRows).toBe(2);
+  });
+
+  it("整站备份附带 SystemSetting KV；merge 按 key upsert；非整站不附带", async () => {
+    // 整站备份遍历全部模型 delegate，默认空结果
+    for (const d of Object.values(prismaMock)) {
+      if (d && typeof d === "object" && "findMany" in (d as object)) {
+        (d as { findMany: { mockResolvedValue: (v: unknown) => void } }).findMany.mockResolvedValue(
+          [],
+        );
+      }
+    }
+    prismaMock.systemSetting.findMany.mockResolvedValue([
+      { key: "auto_backup_enabled", value: "1" },
+      { key: "auto_backup_targets", value: "[{...}]" },
+    ]);
+    const full = await createBackup(prismaMock as never, { full: true });
+    expect(full.backup.data.SystemSetting).toHaveLength(2);
+    expect(full.totalRows).toBeGreaterThanOrEqual(2);
+
+    const partial = await createBackup(prismaMock as never, { domains: ["prompts"] });
+    expect(partial.backup.data.SystemSetting).toBeUndefined();
+  });
+
+  it("还原 SystemSetting：merge 按 key upsert 回 KV", async () => {
+    prismaMock.systemSetting.upsert.mockResolvedValue({});
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: true,
+      domains: BACKUP_DOMAINS.map((d) => d.key),
+      data: {
+        SystemSetting: [{ key: "auto_backup_targets", value: "[...]" }],
+      },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.totalRows).toBe(1);
+    expect(prismaMock.systemSetting.upsert).toHaveBeenCalledWith({
+      where: { key: "auto_backup_targets" },
+      update: { key: "auto_backup_targets", value: "[...]" },
+      create: { key: "auto_backup_targets", value: "[...]" },
+    });
+  });
+
+  it("overwrite 还原 SystemSetting：先清空再逐行 upsert（结果=快照）", async () => {
+    prismaMock.$transaction.mockImplementation(
+      async (fn: (tx: unknown) => Promise<void>) => await fn(prismaMock),
+    );
+    prismaMock.systemSetting.upsert.mockResolvedValue({});
+    prismaMock.systemSetting.deleteMany.mockResolvedValue({});
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: true,
+      domains: BACKUP_DOMAINS.map((d) => d.key),
+      data: {
+        SystemSetting: [{ key: "auto_backup_enabled", value: "1" }],
+      },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "overwrite");
+    expect(r.totalRows).toBe(1);
+    expect(prismaMock.systemSetting.deleteMany).toHaveBeenCalled();
+    expect(prismaMock.systemSetting.upsert).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { key: "auto_backup_enabled" } }),
+    );
+  });
+
+  it("加密自检：备份里的密文用当前 ENCRYPTION_KEY 解不开 → 返回 warnings 提示重填密钥", async () => {
+    prismaMock.systemSetting.upsert.mockResolvedValue({});
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: false,
+      domains: ["storage"],
+      // 任意非法密文（不是本环境 ENCRYPTION_KEY 加密的结果）
+      data: { StorageConfig: [{ id: "s1", secretKey: "bm90LXZhbGlkLWNpcGhlcg==" }] },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.warnings?.[0]).toMatch(/ENCRYPTION_KEY/);
+  });
+
+  it("加密自检：无密文行或解密成功 → 无 warnings", async () => {
+    prismaMock.prompt.upsert.mockResolvedValue({});
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: false,
+      domains: ["prompts"],
+      data: { Prompt: [{ id: "p1", content: "hi" }] },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.warnings ?? []).toEqual([]);
   });
 });

@@ -1,6 +1,11 @@
 "use client";
 
-import { PlugZap as PlugZapIcon, Trash as TrashIcon } from "lucide-react";
+import {
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
+  PlugZap as PlugZapIcon,
+  Trash as TrashIcon,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import {
@@ -69,6 +74,9 @@ export function StorageManager() {
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** SecretAccessKey 明文显示状态（编辑时点眼睛从后端取回） */
+  const [showSecret, setShowSecret] = useState(false);
+  const [revealError, setRevealError] = useState<string | null>(null);
 
   const refresh = useCallback(async () => {
     const res = await fetch("/api/storage/config");
@@ -99,8 +107,36 @@ export function StorageManager() {
       clientApp: config.clientApp,
       enabled: config.enabled,
     });
+    setShowSecret(false);
+    setRevealError(null);
     setMessage(null);
     setError(null);
+  }
+
+  /** 眼睛图标：编辑时首次点击取回已保存的 SecretAccessKey，之后切换明文/掩码显示 */
+  async function toggleReveal() {
+    setRevealError(null);
+    if (form.secretKey) {
+      setShowSecret((v) => !v);
+      return;
+    }
+    if (!editingId) return;
+    setBusy(true);
+    try {
+      const res = await fetch(`/api/storage/config/${editingId}/reveal`);
+      const data = (await res.json().catch(() => null)) as {
+        secret?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || typeof data?.secret !== "string") {
+        setRevealError(data?.error ?? "查看密钥失败");
+        return;
+      }
+      setForm((prev) => ({ ...prev, secretKey: data.secret! }));
+      setShowSecret(true);
+    } finally {
+      setBusy(false);
+    }
   }
 
   /** 切换厂商预设：预填端点/Region；数据胶囊强制选客户端应用 */
@@ -118,6 +154,8 @@ export function StorageManager() {
   function resetForm() {
     setEditingId(null);
     setForm(EMPTY_FORM);
+    setShowSecret(false);
+    setRevealError(null);
     setMessage(null);
     setError(null);
   }
@@ -207,7 +245,7 @@ export function StorageManager() {
           </p>
           <p>
             <b className="text-foreground">AccessKeyId / SecretAccessKey</b>：对象存储控制台创建的
-            API 密钥；SecretKey 加密保存、不再回显。
+            API 密钥；SecretKey 加密保存，编辑配置时点眼睛图标可查看。
           </p>
           <p>
             <b className="text-foreground">缤纷云专用</b>：① Region 填
@@ -307,14 +345,47 @@ export function StorageManager() {
                 />
               </div>
               <div className="space-y-2">
-                <Label htmlFor="st-sk">SecretAccessKey{editingId ? "（留空沿用已存）" : ""}</Label>
-                <Input
-                  id="st-sk"
-                  type="password"
-                  value={form.secretKey}
-                  autoComplete="new-password"
-                  onChange={(e) => update("secretKey", e.target.value)}
-                />
+                <Label htmlFor="st-sk">
+                  SecretAccessKey{editingId ? "（留空沿用已存，点眼睛查看）" : ""}
+                </Label>
+                <div className="flex gap-2">
+                  <Input
+                    id="st-sk"
+                    type={showSecret && form.secretKey ? "text" : "password"}
+                    value={form.secretKey}
+                    autoComplete="new-password"
+                    placeholder={editingId && !form.secretKey ? "已保存（点眼睛图标查看）" : ""}
+                    onChange={(e) => update("secretKey", e.target.value)}
+                  />
+                  {editingId && (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="icon"
+                      className="size-9 shrink-0"
+                      aria-label={showSecret ? "隐藏密钥" : "显示密钥"}
+                      aria-pressed={showSecret}
+                      data-testid="storage-reveal"
+                      disabled={busy}
+                      onClick={() => void toggleReveal()}
+                    >
+                      {showSecret && form.secretKey ? (
+                        <EyeOffIcon className="size-4" />
+                      ) : (
+                        <EyeIcon className="size-4" />
+                      )}
+                    </Button>
+                  )}
+                </div>
+                {revealError && (
+                  <p
+                    role="alert"
+                    className="text-xs text-destructive"
+                    data-testid="storage-reveal-error"
+                  >
+                    {revealError}
+                  </p>
+                )}
               </div>
               <div className="space-y-2">
                 <Label htmlFor="st-base">公网访问基址（可选）</Label>

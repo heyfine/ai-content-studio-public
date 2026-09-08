@@ -6,6 +6,7 @@ import {
   getAutoBackupStatus,
   listBackupFiles,
   restoreFromWebdav,
+  revealWebdavPassword,
   runAutoBackup,
   saveAutoBackupSettings,
   testWebdavTarget,
@@ -72,6 +73,12 @@ export async function POST(request: Request) {
     }
     if (body.op === "test") {
       return NextResponse.json(await testWebdavTarget(body.targetId ?? ""));
+    }
+    if (body.op === "reveal") {
+      return NextResponse.json({
+        targetId: body.targetId ?? "",
+        password: await revealWebdavPassword(body.targetId ?? ""),
+      });
     }
     if (body.op === "files") {
       return NextResponse.json({ files: await listBackupFiles(body.targetId ?? "") });

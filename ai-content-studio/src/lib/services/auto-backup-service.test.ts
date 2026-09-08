@@ -32,6 +32,8 @@ const { prismaMock } = vi.hoisted(() => {
       storageConfig: makeDelegate(),
       systemSetting: {
         findUnique: vi.fn(),
+        findMany: vi.fn().mockResolvedValue([]),
+        deleteMany: vi.fn(),
         upsert: vi.fn(),
       },
     },
@@ -51,13 +53,22 @@ import {
 const KV: Record<string, string> = {};
 beforeEach(() => {
   for (const k of Object.keys(KV)) delete KV[k];
-  prismaMock.systemSetting.findUnique.mockImplementation(async ({ where }: { where: { key: string } }) =>
-    where.key in KV ? { key: where.key, value: KV[where.key] } : null,
+  prismaMock.systemSetting.findUnique.mockImplementation(
+    async ({ where }: { where: { key: string } }) =>
+      where.key in KV ? { key: where.key, value: KV[where.key] } : null,
   );
-  prismaMock.systemSetting.upsert.mockImplementation(async ({ where, create }: { where: { key: string }; create: { key: string; value: string } }) => {
-    KV[where.key] = create.value;
-    return create;
-  });
+  prismaMock.systemSetting.upsert.mockImplementation(
+    async ({
+      where,
+      create,
+    }: {
+      where: { key: string };
+      create: { key: string; value: string };
+    }) => {
+      KV[where.key] = create.value;
+      return create;
+    },
+  );
   prismaMock.prompt.findMany.mockResolvedValue([{ id: "p1" }]);
 });
 
@@ -68,10 +79,16 @@ function kvGet(key: string): string | null {
 describe("自动备份设置", () => {
   it("校验：URL 格式/用户名/间隔范围/至少一个启用目标", () => {
     expect(() =>
-      validateAutoBackupSettings({ enabled: true, targets: [{ url: "ftp://x", username: "u", enabled: true }] }),
+      validateAutoBackupSettings({
+        enabled: true,
+        targets: [{ url: "ftp://x", username: "u", enabled: true }],
+      }),
     ).toThrow(/http/);
     expect(() =>
-      validateAutoBackupSettings({ enabled: true, targets: [{ url: "https://x", username: "", enabled: true }] }),
+      validateAutoBackupSettings({
+        enabled: true,
+        targets: [{ url: "https://x", username: "", enabled: true }],
+      }),
     ).toThrow(/用户名/);
     expect(() =>
       validateAutoBackupSettings({
@@ -80,14 +97,27 @@ describe("自动备份设置", () => {
       }),
     ).toThrow(/1~720/);
     expect(() =>
-      validateAutoBackupSettings({ enabled: true, targets: [{ url: "https://x", username: "u", enabled: false }] }),
+      validateAutoBackupSettings({
+        enabled: true,
+        targets: [{ url: "https://x", username: "u", enabled: false }],
+      }),
     ).toThrow(/至少启用/);
   });
 
   it("保存：密码留空沿用已存；间隔变更重置 nextAt", async () => {
     await saveAutoBackupSettings(prismaMock as never, {
       enabled: true,
-      targets: [{ name: "t1", url: "https://dav.example.com/b", username: "u", password: "p", enabled: true, intervalHours: 2, keep: 3 }],
+      targets: [
+        {
+          name: "t1",
+          url: "https://dav.example.com/b",
+          username: "u",
+          password: "p",
+          enabled: true,
+          intervalHours: 2,
+          keep: 3,
+        },
+      ],
     });
     const targetsRaw = kvGet("auto_backup_targets") ?? "{}";
     expect(targetsRaw).toContain('"p"');
@@ -95,9 +125,23 @@ describe("自动备份设置", () => {
 
     await saveAutoBackupSettings(prismaMock as never, {
       enabled: true,
-      targets: [{ id: first.id, name: "t1", url: "https://dav.example.com/b", username: "u", enabled: true, intervalHours: 5, keep: 3 }],
+      targets: [
+        {
+          id: first.id,
+          name: "t1",
+          url: "https://dav.example.com/b",
+          username: "u",
+          enabled: true,
+          intervalHours: 5,
+          keep: 3,
+        },
+      ],
     });
-    const second = JSON.parse(kvGet("auto_backup_targets") ?? "[]")[0] as { nextAt: number; intervalHours: number; password: string };
+    const second = JSON.parse(kvGet("auto_backup_targets") ?? "[]")[0] as {
+      nextAt: number;
+      intervalHours: number;
+      password: string;
+    };
     expect(second.password).toBe("p"); // 沿用
     expect(second.intervalHours).toBe(5);
     expect(second.nextAt).toBeGreaterThan(first.nextAt); // 间隔变更重置
@@ -106,7 +150,15 @@ describe("自动备份设置", () => {
   it("getAutoBackupSettings 对外不回显密码（hasPassword）", async () => {
     await saveAutoBackupSettings(prismaMock as never, {
       enabled: false,
-      targets: [{ name: "t1", url: "https://dav.example.com/b", username: "u", password: "secret", enabled: false }],
+      targets: [
+        {
+          name: "t1",
+          url: "https://dav.example.com/b",
+          username: "u",
+          password: "secret",
+          enabled: false,
+        },
+      ],
     });
     const s = await getAutoBackupSettings(prismaMock as never);
     expect(s.enabled).toBe(false);
@@ -117,7 +169,16 @@ describe("自动备份设置", () => {
   it("状态：next/last 正确序列化", async () => {
     await saveAutoBackupSettings(prismaMock as never, {
       enabled: true,
-      targets: [{ name: "t1", url: "https://dav.example.com/b", username: "u", password: "p", enabled: true, intervalHours: 12 }],
+      targets: [
+        {
+          name: "t1",
+          url: "https://dav.example.com/b",
+          username: "u",
+          password: "p",
+          enabled: true,
+          intervalHours: 12,
+        },
+      ],
     });
     const status = await getAutoBackupStatus(prismaMock as never);
     expect(status.nextBackupAt).toBeTruthy();
@@ -144,7 +205,17 @@ describe("runAutoBackup", () => {
     prismaMock.prompt.findMany.mockResolvedValue([{ id: "p1" }]);
     await saveAutoBackupSettings(prismaMock as never, {
       enabled: true,
-      targets: [{ name: "dav1", url: "https://dav.example.com/b", username: "u", password: "p", enabled: true, intervalHours: 1, keep: 1 }],
+      targets: [
+        {
+          name: "dav1",
+          url: "https://dav.example.com/b",
+          username: "u",
+          password: "p",
+          enabled: true,
+          intervalHours: 1,
+          keep: 1,
+        },
+      ],
     });
     const puts: string[] = [];
     const deletes: string[] = [];
@@ -153,7 +224,7 @@ describe("runAutoBackup", () => {
       const method = init?.method ?? "GET";
       if (method === "PUT") {
         puts.push(url);
-        expect((init?.body as string)).toContain("acs-backup");
+        expect(init?.body as string).toContain("acs-backup");
         return new Response(null, { status: 201 });
       }
       if (method === "MKCOL") return new Response(null, { status: 201 });

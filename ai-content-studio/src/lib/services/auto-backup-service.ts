@@ -385,6 +385,15 @@ export async function testWebdavTarget(
   return testWebdav(target.url, target.username, target.password);
 }
 
+/** 查看某个 WebDAV 目标已保存的密码（登录态经 reveal API 调用） */
+export async function revealWebdavPassword(
+  targetId: string,
+  prisma: PrismaClient = defaultPrisma,
+): Promise<string> {
+  const target = await findTarget(prisma, targetId);
+  return target.password;
+}
+
 /** 列出某 WebDAV 目标目录下的备份文件（按修改时间倒序） */
 export async function listBackupFiles(
   targetId: string,

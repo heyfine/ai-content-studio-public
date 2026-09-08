@@ -3,6 +3,8 @@
 import {
   CloudDownload as CloudDownloadIcon,
   Download as DownloadIcon,
+  Eye as EyeIcon,
+  EyeOff as EyeOffIcon,
   Play as PlayIcon,
   PlugZap as PlugZapIcon,
   RotateCcw as RotateCcwIcon,
@@ -101,6 +103,9 @@ export function BackupManager() {
   const [status, setStatus] = useState<AutoStatus | null>(null);
   const [files, setFiles] = useState<WebdavFile[]>([]);
   const [filesTargetId, setFilesTargetId] = useState("");
+  /** WebDAV 密码明文显示状态：targetId → 已取回明文（点眼睛取回后与输入框联动切换显示） */
+  const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({});
+  const [shownTargets, setShownTargets] = useState<Record<string, boolean>>({});
 
   const loadAuto = useCallback(async () => {
     const res = await fetch("/api/backup/auto");
@@ -211,9 +216,17 @@ export function BackupManager() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ backup, mode }),
       });
-      const body = (await res.json()) as { totalRows?: number; error?: string };
+      const body = (await res.json()) as {
+        totalRows?: number;
+        warnings?: string[];
+        error?: string;
+      };
       if (!res.ok) throw new Error(body.error ?? "还原失败");
-      flash(`还原成功，共 ${body.totalRows} 行`);
+      flash(
+        body.warnings && body.warnings.length > 0
+          ? `还原成功，共 ${body.totalRows} 行。⚠ ${body.warnings.join(" ")}`
+          : `还原成功，共 ${body.totalRows} 行`,
+      );
     } catch (e) {
       fail(e);
     } finally {
@@ -223,6 +236,34 @@ export function BackupManager() {
 
   function updateTarget<K extends keyof TargetDraft>(idx: number, key: K, value: TargetDraft[K]) {
     setTargets((prev) => prev.map((t, i) => (i === idx ? { ...t, [key]: value } : t)));
+  }
+
+  /** 眼睛图标：首次点击取回已存 WebDAV 密码并回填输入框，之后切换明文/掩码显示 */
+  async function toggleRevealPassword(t: TargetDraft, idx: number) {
+    const tid = t.id;
+    if (!tid) return;
+    setShownTargets((prev) => ({ ...prev, [tid]: !prev[tid] }));
+    if (revealedPasswords[tid] !== undefined) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/backup/auto", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ op: "reveal", targetId: tid }),
+      });
+      const data = (await res.json().catch(() => null)) as {
+        password?: string;
+        error?: string;
+      } | null;
+      if (!res.ok || typeof data?.password !== "string") {
+        setError(data?.error ?? "查看密码失败");
+        return;
+      }
+      setRevealedPasswords((prev) => ({ ...prev, [tid]: data.password! }));
+      updateTarget(idx, "password", data.password!);
+    } finally {
+      setBusy(false);
+    }
   }
 
   async function handleSaveAuto() {
@@ -280,7 +321,13 @@ export function BackupManager() {
         setFiles((body.files as WebdavFile[]) ?? []);
         setFilesTargetId(String(extra.targetId ?? ""));
       } else if (op === "restore") {
-        flash(`从 WebDAV 还原成功，共 ${String(body.totalRows ?? 0)} 行`);
+        const warnings = Array.isArray(body.warnings) ? (body.warnings as string[]) : [];
+        flash(
+          warnings.length > 0
+            ? `从 WebDAV 还原成功，共 ${String(body.totalRows ?? 0)} 行。⚠ ${warnings.join(" ")}`
+            : `从 WebDAV 还原成功，共 ${String(body.totalRows ?? 0)} 行`,
+        );
+        await loadAuto();
       }
     } catch (e) {
       fail(e);
@@ -432,13 +479,34 @@ export function BackupManager() {
                   />
                 </div>
                 <div className="space-y-1">
-                  <Label>密码{t.hasPassword ? "（留空沿用已存）" : ""}</Label>
-                  <Input
-                    type="password"
-                    value={t.password}
-                    autoComplete="new-password"
-                    onChange={(e) => updateTarget(idx, "password", e.target.value)}
-                  />
+                  <Label>密码{t.hasPassword ? "（留空沿用已存，点眼睛查看）" : ""}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      type={shownTargets[t.id] && t.password ? "text" : "password"}
+                      value={t.password}
+                      autoComplete="new-password"
+                      placeholder={t.hasPassword && !t.password ? "已保存（点眼睛图标查看）" : ""}
+                      onChange={(e) => updateTarget(idx, "password", e.target.value)}
+                    />
+                    {t.id && t.hasPassword && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="icon"
+                        className="size-9 shrink-0"
+                        aria-label={shownTargets[t.id] ? "隐藏密码" : "显示密码"}
+                        aria-pressed={!!shownTargets[t.id]}
+                        data-testid={`webdav-reveal-${t.id}`}
+                        onClick={() => void toggleRevealPassword(t, idx)}
+                      >
+                        {shownTargets[t.id] && t.password ? (
+                          <EyeOffIcon className="size-4" />
+                        ) : (
+                          <EyeIcon className="size-4" />
+                        )}
+                      </Button>
+                    )}
+                  </div>
                 </div>
                 <div className="space-y-1">
                   <Label>间隔（小时，1~720）</Label>

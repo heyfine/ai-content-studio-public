@@ -7,6 +7,7 @@
  * - 表名单一律来自后端白名单注册表，不做任何前端拼接。
  * - 注意：备份含密钥类字段（AES-256-GCM 密文/密码哈希），还原库必须与备份库共用同一 ENCRYPTION_KEY。
  */
+import { decrypt } from "@/lib/crypto";
 import type { PrismaClient } from ".prisma/client";
 
 /** 模型名 → Prisma delegate 属性名（AI 前缀为 aIXxx、WordPress/WeChat 首词小写） */
@@ -29,6 +30,7 @@ const DELEGATES = {
   Source: "source",
   SourceVersion: "sourceVersion",
   StorageConfig: "storageConfig",
+  SystemSetting: "systemSetting",
 } as const;
 
 export type BackupModel = keyof typeof DELEGATES;
@@ -40,7 +42,9 @@ interface DomainMeta {
   models: BackupModel[];
 }
 
-/** 备份域：按业务分组勾选；整站备份 = 全部域 */
+/** 备份域：按业务分组勾选；整站备份 = 全部域。
+ * system（SystemSetting KV：WebDAV 备份目标等）默认不进任何业务域，
+ * 仅整站备份自动附带——WebDAV 目标含密文密码，勾选导出需用户知情。 */
 export const BACKUP_DOMAINS: DomainMeta[] = [
   {
     key: "articles",
@@ -98,13 +102,17 @@ export const BACKUP_DOMAINS: DomainMeta[] = [
   },
 ];
 
-const ALL_MODELS = new Set<string>(BACKUP_DOMAINS.flatMap((d) => d.models));
+/** 整站备份额外附带的表（不属于任何勾选域）：系统 KV 设置。
+ * 还原时原样 upsert 回 SystemSetting（含 WebDAV 备份目标的密文密码）。 */
+const SYSTEM_MODEL = "SystemSetting" as const;
+
+const ALL_MODELS = new Set<string>([...BACKUP_DOMAINS.flatMap((d) => d.models), SYSTEM_MODEL]);
 
 /** 还原顺序：父表在前、子表在后（满足外键依赖）。
  * 关键外键：Article.siteConfigId → WordPressConfig、ArticlePublish.configId → WordPressConfig、
  * WeChatPublish.configId → WeChatConfig、ArticleVersion/SeoReport → Article。
  * WordPressConfig/WeChatConfig 必须先于 Article 还原（真实事故：文章带 siteConfigId 还原时外键违规）。
- * overwrite 模式的删除顺序 = 本数组反排，同样成立。 */
+ * overwrite 模式的删除顺序 = 本数组反排，同样成立。SystemSetting 是无外键 KV，放最后。 */
 export const RESTORE_ORDER: BackupModel[] = [
   "User",
   "AIProvider",
@@ -124,6 +132,7 @@ export const RESTORE_ORDER: BackupModel[] = [
   "Source",
   "SourceVersion",
   "StorageConfig",
+  "SystemSetting",
 ];
 
 /** 跨域外键预检：子表行引用的父表不在备份中时，提前给出可操作的中文提示，
@@ -229,7 +238,22 @@ async function exportModel(
   return rows;
 }
 
-/** 备份：对所选域的每张表全量导出（DateTime 序列化为 ISO 字符串） */
+/** 导出时附带 SystemSetting KV（自动备份开关/目标等）——无 FK 依赖，仅随系统表进出 */
+export async function exportSystemSetting(
+  prisma: PrismaClient,
+): Promise<Array<Record<string, unknown>>> {
+  const rows = (await (
+    prisma as unknown as {
+      systemSetting: {
+        findMany: (a?: unknown) => Promise<unknown[]>;
+      };
+    }
+  ).systemSetting.findMany()) as Array<Record<string, unknown>>;
+  return rows;
+}
+
+/** 备份：对所选域的每张表全量导出（DateTime 序列化为 ISO 字符串）；
+ * 整站备份额外附带 SystemSetting KV（WebDAV 备份目标等）。 */
 export async function createBackup(
   prisma: PrismaClient,
   input: { full?: boolean; domains?: string[] },
@@ -243,6 +267,12 @@ export async function createBackup(
     const rows = await exportModel(prisma, model);
     data[model] = rows;
     tableCounts[model] = rows.length;
+    totalRows += rows.length;
+  }
+  if (full) {
+    const rows = await exportSystemSetting(prisma);
+    data.SystemSetting = rows;
+    tableCounts.SystemSetting = rows.length;
     totalRows += rows.length;
   }
   const backup: BackupFile = {
@@ -298,6 +328,8 @@ export interface BackupRestoreResult {
   mode: BackupRestoreMode;
   tables: BackupRestoreTableResult[];
   totalRows: number;
+  /** 非致命警告：如密文字段在当前 ENCRYPTION_KEY 下无法解密（配置将不可用需重填） */
+  warnings?: string[];
 }
 
 function delegateFor(prisma: PrismaClient, model: BackupModel) {
@@ -318,7 +350,76 @@ function delegateFor(prisma: PrismaClient, model: BackupModel) {
   return delegate;
 }
 
-/** 还原：merge 按主键合并覆盖（逐行 upsert，可重跑）；overwrite 事务内清空后写入快照 */
+function systemSettingDelegateFor(prisma: PrismaClient) {
+  const delegate = (prisma as unknown as Record<string, unknown>).systemSetting as
+    | {
+        findMany: () => Promise<unknown[]>;
+        deleteMany: () => Promise<unknown>;
+        upsert: (a: {
+          where: { key: string };
+          update: Record<string, unknown>;
+          create: Record<string, unknown>;
+        }) => Promise<unknown>;
+      }
+    | undefined;
+  if (!delegate) throw new BackupError("内部错误：SystemSetting 缺少 Prisma delegate");
+  return delegate;
+}
+
+/** 还原 SystemSetting KV：merge 按 key upsert（同名覆盖、其余保留）；
+ * overwrite 由调用方先 deleteMany 后逐行 upsert（结果=备份快照，KV 行数有限）。 */
+async function restoreSystemSetting(
+  prisma: PrismaClient,
+  rows: Array<Record<string, unknown>>,
+  mode: BackupRestoreMode,
+): Promise<number> {
+  const delegate = systemSettingDelegateFor(prisma);
+  if (mode === "overwrite") {
+    await delegate.deleteMany();
+  }
+  let count = 0;
+  for (const row of rows) {
+    const key = row.key;
+    if (typeof key !== "string" || key.length === 0) {
+      throw new BackupError("SystemSetting 存在缺少 key 的行");
+    }
+    await delegate.upsert({ where: { key }, update: row, create: row });
+    count += 1;
+  }
+  return count;
+}
+
+/** 还原后密文解密自检：抽验备份中的密文字段能否在当前环境解密。
+ * 不能解密几乎总是 ENCRYPTION_KEY 与备份来源不一致——S3 SecretKey/AI Key 等
+ * 会全部失效（现象：测试连接 AccessDenied、AI 调用失败），提前明确告知。 */
+function encryptionSanityWarnings(backup: BackupFile): string[] {
+  const candidates: Array<{ model: BackupModel; field: string; label: string }> = [
+    { model: "StorageConfig", field: "secretKey", label: "对象存储 SecretKey" },
+    { model: "AIProvider", field: "apiKey", label: "AI 供应商 API Key" },
+    { model: "WeChatConfig", field: "appSecret", label: "公众号 AppSecret" },
+  ];
+  for (const { model, field, label } of candidates) {
+    const rows = backup.data[model];
+    if (!Array.isArray(rows)) continue;
+    const cipher = rows.find(
+      (r) => r !== null && typeof r === "object" && typeof r[field] === "string" && r[field] !== "",
+    )?.[field] as string | undefined;
+    if (!cipher) continue;
+    try {
+      decrypt(cipher);
+      return [];
+    } catch {
+      return [
+        `备份中的加密字段（${label} 等）无法在当前环境解密：当前 ENCRYPTION_KEY 与备份来源不一致。` +
+          `对象存储/AI 供应商等密文配置将不可用，请到对应设置页重新填写密钥`,
+      ];
+    }
+  }
+  return [];
+}
+
+/** 还原：merge 按主键合并覆盖（逐行 upsert，可重跑）；overwrite 事务内清空后写入快照。
+ * SystemSetting KV（自动备份/WebDAV 目标等）随整站备份进出：merge 按 key upsert，overwrite 清后重写。 */
 export async function restoreBackup(
   prisma: PrismaClient,
   backup: unknown,
@@ -326,9 +427,13 @@ export async function restoreBackup(
 ): Promise<BackupRestoreResult> {
   validateBackup(backup);
   precheckForeignRefs(backup);
+  const warnings = encryptionSanityWarnings(backup);
   const tablesInBackup = Object.keys(backup.data).filter(
     (t) => Array.isArray(backup.data[t]) && t in DELEGATES,
   ) as BackupModel[];
+  const systemRows = Array.isArray(backup.data.SystemSetting)
+    ? (backup.data.SystemSetting as Array<Record<string, unknown>>)
+    : [];
 
   const tablesResult: BackupRestoreTableResult[] = [];
   let totalRows = 0;
@@ -346,6 +451,12 @@ export async function restoreBackup(
         for (const model of RESTORE_ORDER) {
           const rows = backup.data[model];
           if (!Array.isArray(rows) || rows.length === 0) continue;
+          if (model === "SystemSetting") {
+            const n = await restoreSystemSetting(tx as unknown as PrismaClient, rows, "overwrite");
+            tablesResult.push({ model, rows: n });
+            totalRows += n;
+            continue;
+          }
           const delegate = delegateFor(tx as unknown as PrismaClient, model);
           await delegate.createMany({ data: rows });
           tablesResult.push({ model, rows: rows.length });
@@ -357,7 +468,7 @@ export async function restoreBackup(
         `覆盖还原失败：${e instanceof Error ? e.message : String(e)}。建议整站备份后覆盖还原，或改用合并覆盖`,
       );
     }
-    return { restored: true, mode, tables: tablesResult, totalRows };
+    return { restored: true, mode, tables: tablesResult, totalRows, warnings };
   }
 
   // merge：逐行按主键 upsert（同名覆盖、其余保留、可重复还原）
@@ -365,6 +476,12 @@ export async function restoreBackup(
     for (const model of RESTORE_ORDER) {
       const rows = backup.data[model];
       if (!Array.isArray(rows) || rows.length === 0) continue;
+      if (model === "SystemSetting") {
+        const n = await restoreSystemSetting(prisma, rows, "merge");
+        tablesResult.push({ model, rows: n });
+        totalRows += n;
+        continue;
+      }
       const delegate = delegateFor(prisma, model);
       let count = 0;
       for (const row of rows) {
@@ -386,5 +503,5 @@ export async function restoreBackup(
     }
     throw new BackupError(`合并还原失败：${message.slice(0, 200)}`);
   }
-  return { restored: true, mode, tables: tablesResult, totalRows };
+  return { restored: true, mode, tables: tablesResult, totalRows, warnings };
 }

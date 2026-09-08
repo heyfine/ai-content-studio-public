@@ -138,6 +138,13 @@ export async function deleteStorageConfig(id: string): Promise<void> {
   await prisma.storageConfig.delete({ where: { id } });
 }
 
+/** 解密查看已保存的 SecretAccessKey（登录后经 reveal API 调用） */
+export async function revealStorageSecret(id: string): Promise<string> {
+  const row = await prisma.storageConfig.findUnique({ where: { id }, select: { secretKey: true } });
+  if (!row) throw new Error("存储配置不存在");
+  return decrypt(row.secretKey);
+}
+
 function buildClient(row: StorageConfigRow): S3Client {
   const preset = getPreset(row.providerId);
   const userAgent = resolveUserAgent(row.clientApp);
