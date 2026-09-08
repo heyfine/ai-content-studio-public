@@ -11,8 +11,8 @@ import { TableRow } from "@tiptap/extension-table-row";
 import TaskItem from "@tiptap/extension-task-item";
 import TaskList from "@tiptap/extension-task-list";
 import TextAlign from "@tiptap/extension-text-align";
-// text-style 包内含 TextStyle mark + Color + BackgroundColor（文字色/背景色命令）
-import { BackgroundColor, Color, TextStyle } from "@tiptap/extension-text-style";
+// text-style 包内含 Color + BackgroundColor（文字色/背景色命令）
+import { BackgroundColor, Color } from "@tiptap/extension-text-style";
 import { type Editor, EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
@@ -22,6 +22,11 @@ import { Callout } from "./extensions/callout/callout";
 import { DragHandle } from "./extensions/drag-handle/drag-handle";
 import { Indent } from "./extensions/indent";
 import { Markdown } from "./extensions/markdown";
+import {
+  HeadingMarkdown,
+  ParagraphMarkdown,
+  TextStyleMarkdown,
+} from "./extensions/markdown-style-bridge";
 import { PasteImage } from "./extensions/paste-image";
 import { SlashCommand } from "./extensions/slash-command/slash-command";
 
@@ -43,16 +48,21 @@ export interface MarkdownEditorProps {
  * 默认扩展集：StarterKit + Callout + Placeholder + CharacterCount + Markdown 互转
  * + SlashCommand（/ 插入）+ DragHandle（块拖拽）+ Image/Table/TaskList/CodeBlockLowlight。
  *
- * 子任务 4 范围：slash 命令、拖拽手柄、表格/图片/任务列表/代码块低亮全部接入。
+ * heading/paragraph/TextStyle 用 markdown-style-bridge 桥接版替代：颜色/对齐序列化为
+ * Markdown 内嵌 HTML，保证预览与 WordPress/公众号发布后格式不丢（见该文件头注释）。
  */
 const baseExtensions = (placeholder?: string) => [
   StarterKit.configure({
-    // 代码块低亮替代默认 codeBlock
+    // 代码块低亮替代默认 codeBlock；heading/paragraph 由桥接版替代
     codeBlock: false,
+    heading: false,
+    paragraph: false,
   }),
-  TextStyle,
+  TextStyleMarkdown,
   Color,
   BackgroundColor,
+  HeadingMarkdown,
+  ParagraphMarkdown,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Indent,
   Callout,
