@@ -12,6 +12,7 @@
  */
 import {
   DeleteObjectCommand,
+  GetObjectCommand,
   HeadBucketCommand,
   ListObjectsV2Command,
   PutObjectCommand,
@@ -269,6 +270,36 @@ export async function deleteRemoteObject(row: StorageConfigRow, key: string): Pr
   const client = buildClient(row);
   try {
     await client.send(new DeleteObjectCommand({ Bucket: row.bucket, Key: key }));
+  } finally {
+    client.destroy();
+  }
+}
+
+export interface StorageObjectData {
+  bytes: Uint8Array<ArrayBuffer>;
+  contentType: string;
+}
+
+/**
+ * 服务端直读对象字节（带 keyPrefix 与目录穿越校验，与代理路由同规则）。
+ * 供服务端取图场景使用（如微信发布）：/api/storage/object/ 代理路由需要登录态，
+ * 服务端 fetch 自调用拿不到 cookie 会 401，因此必须走 SDK 直读而非 HTTP。
+ */
+export async function readStorageObject(key: string): Promise<StorageObjectData> {
+  const row = await getEnabledStorageConfig();
+  if (!row) throw new Error("未启用对象存储，无法读取站内对象图片");
+  if (!key.startsWith(row.keyPrefix) || key.includes("..")) {
+    throw new Error(`对象不在本应用存储前缀内，已拒绝读取：${key}`);
+  }
+  const client = buildClient(row);
+  try {
+    const res = await client.send(new GetObjectCommand({ Bucket: row.bucket, Key: key }));
+    if (!res.Body) throw new Error("对象内容为空");
+    const bytes = new Uint8Array(await res.Body.transformToByteArray());
+    return { bytes, contentType: res.ContentType ?? "application/octet-stream" };
+  } catch (e) {
+    if (e instanceof Error && e.message.startsWith("对象")) throw e;
+    throw new Error(`站内对象图片读取失败（${key}）：${describeStorageError(e)}`);
   } finally {
     client.destroy();
   }

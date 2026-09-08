@@ -13,6 +13,9 @@ import type { WeChatConfig } from "@prisma/client";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
 import type { WechatConfigValues } from "@/lib/schemas/wechat";
+import { isLocalImageUrl } from "@/lib/content/image-urls";
+import { readLocalImage } from "@/lib/services/image-upload-service";
+import { readStorageObject } from "@/lib/services/storage-service";
 
 const WX_API_BASE = "https://api.weixin.qq.com/cgi-bin";
 const TOKEN_TTL_MS = 7200 * 1000;
@@ -97,6 +100,20 @@ export async function getAccessToken(
 async function fetchImageBlob(
   imageUrl: string,
 ): Promise<{ blob: Blob; size: number; contentType: string }> {
+  // 站内相对路径不能交给 fetch：Node 端 fetch 只接受绝对 URL（"Failed to parse URL"），
+  // 且 /api/storage/object/ 代理路由要求登录态，服务端自调用拿不到 cookie 必 401。
+  if (imageUrl.startsWith("/api/storage/object/")) {
+    const key = decodeURIComponent(imageUrl.slice("/api/storage/object/".length));
+    const { bytes, contentType } = await readStorageObject(key);
+    return { blob: new Blob([bytes], { type: contentType }), size: bytes.byteLength, contentType };
+  }
+  if (isLocalImageUrl(imageUrl)) {
+    const { bytes, contentType } = await readLocalImage(imageUrl.slice("/uploads/".length));
+    return { blob: new Blob([bytes], { type: contentType }), size: bytes.byteLength, contentType };
+  }
+  if (!/^https?:\/\//i.test(imageUrl)) {
+    throw new Error(`图片地址无法读取（${imageUrl}）：请改用图片库图片或 http(s) 外链`);
+  }
   const res = await fetch(imageUrl);
   if (!res.ok) throw new Error(`图片下载失败：${imageUrl}（HTTP ${res.status}）`);
   const contentType = (res.headers.get("content-type") ?? "").split(";")[0].trim();

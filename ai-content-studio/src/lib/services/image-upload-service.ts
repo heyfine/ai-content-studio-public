@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto";
-import { mkdir, readdir, stat, unlink, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { LOCAL_IMAGE_NAME_RE } from "@/lib/content/image-urls";
 import { getEnabledStorageConfig, putObject } from "@/lib/services/storage-service";
@@ -107,5 +107,29 @@ export async function deleteLocalImage(name: string): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+const CONTENT_TYPE_BY_EXT: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+};
+
+/** 服务端读取本地图片库图片（文件名白名单校验），供服务端取图场景使用（如微信发布） */
+export async function readLocalImage(
+  name: string,
+): Promise<{ bytes: Uint8Array<ArrayBuffer>; contentType: string }> {
+  if (!LOCAL_IMAGE_NAME_RE.test(name)) throw new Error(`非法图片文件名：${name}`);
+  try {
+    const buf = await readFile(path.join(uploadDir(), name));
+    const ext = path.extname(name).toLowerCase();
+    return {
+      bytes: new Uint8Array(buf),
+      contentType: CONTENT_TYPE_BY_EXT[ext] ?? "application/octet-stream",
+    };
+  } catch {
+    throw new Error(`本地图库图片不存在或已被删除：/uploads/${name}`);
   }
 }

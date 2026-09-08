@@ -8,6 +8,8 @@ const mocks = vi.hoisted(() => ({
   weChatConfigFindMany: vi.fn(),
   weChatConfigDelete: vi.fn(),
   weChatConfigUpdate: vi.fn(),
+  readStorageObject: vi.fn(),
+  readLocalImage: vi.fn(),
   encrypt: vi.fn((s: string) => `enc:${s}`),
   decrypt: vi.fn((s: string) => `sec-of-${s}`),
 }));
@@ -26,6 +28,8 @@ vi.mock("@/lib/prisma", () => ({
   },
 }));
 vi.mock("@/lib/crypto", () => ({ encrypt: mocks.encrypt, decrypt: mocks.decrypt }));
+vi.mock("@/lib/services/storage-service", () => ({ readStorageObject: mocks.readStorageObject }));
+vi.mock("@/lib/services/image-upload-service", () => ({ readLocalImage: mocks.readLocalImage }));
 
 const originalFetch = globalThis.fetch;
 
@@ -229,6 +233,57 @@ describe("replaceContentImages", () => {
   });
 });
 
+describe("replaceContentImages（站内相对路径图）", () => {
+  afterEach(() => {
+    globalThis.fetch = originalFetch;
+    clearTokenCache();
+    vi.clearAllMocks();
+  });
+
+  it("/api/storage/object/ 站内对象图：SDK 直读转存（key 已解码），不对相对路径发起 HTTP fetch", async () => {
+    mocks.readStorageObject.mockResolvedValue({
+      bytes: new Uint8Array(1024),
+      contentType: "image/png",
+    });
+    mockWechatFetch({ upload: { errcode: 0, url: "https://mmbiz.qpic.cn/acs" } });
+    const out = await replaceContentImages('<img src="/api/storage/object/acs%2Fx.png">', "AT");
+    expect(out).toBe('<img src="https://mmbiz.qpic.cn/acs">');
+    expect(mocks.readStorageObject).toHaveBeenCalledWith("acs/x.png");
+    // 全部 fetch 调用都应指向微信 API（修复点：相对路径不再交给 fetch）
+    for (const call of (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(String(call[0])).toContain("api.weixin.qq.com");
+    }
+  });
+
+  it("/uploads/ 本地图：直读文件转存", async () => {
+    mocks.readLocalImage.mockResolvedValue({
+      bytes: new Uint8Array(1024),
+      contentType: "image/png",
+    });
+    mockWechatFetch({ upload: { errcode: 0, url: "https://mmbiz.qpic.cn/local" } });
+    const out = await replaceContentImages('<img src="/uploads/uuid.png">', "AT");
+    expect(out).toBe('<img src="https://mmbiz.qpic.cn/local">');
+    expect(mocks.readLocalImage).toHaveBeenCalledWith("uuid.png");
+  });
+
+  it("站内图读取失败报中文错误（防微信静默过滤整体失败）", async () => {
+    mocks.readStorageObject.mockRejectedValue(
+      new Error("站内对象图片读取失败（acs/x.png）：服务端拒绝了签名（HTTP 401/403）"),
+    );
+    mockWechatFetch();
+    await expect(
+      replaceContentImages('<img src="/api/storage/object/acs%2Fx.png">', "AT"),
+    ).rejects.toThrow(/站内对象图片读取失败/);
+  });
+
+  it("未知相对路径直接报错且不发起 fetch", async () => {
+    mockWechatFetch();
+    await expect(replaceContentImages('<img src="/relative/foo.png">', "AT")).rejects.toThrow(
+      /图片地址无法读取/,
+    );
+  });
+});
+
 describe("草稿编排", () => {
   afterEach(() => {
     globalThis.fetch = originalFetch;
@@ -304,6 +359,31 @@ describe("草稿编排", () => {
     await expect(sendArticleToWechatDraft("wc1", "a1", "<p>纯文字</p>")).rejects.toThrow(
       /默认封面/,
     );
+  });
+
+  it("封面为站内对象相对路径（/api/storage/object/）时 SDK 直读上传，不再报 Failed to parse URL", async () => {
+    mocks.weChatConfigFindUnique.mockResolvedValue(config);
+    mocks.articleFindUnique.mockResolvedValue({
+      id: "a1",
+      title: "T标题",
+      featuredImage: "/api/storage/object/acs%2Fcover.png",
+    });
+    mocks.weChatPublishUpsert.mockResolvedValue({});
+    mocks.readStorageObject.mockResolvedValue({
+      bytes: new Uint8Array(1024),
+      contentType: "image/png",
+    });
+    mockWechatFetch({
+      material: { errcode: 0, media_id: "THUMB" },
+      draft: { errcode: 0, media_id: "DRAFT_MID" },
+    });
+    expect(await sendArticleToWechatDraft("wc1", "a1", "<p>纯文字正文</p>")).toEqual({
+      mediaId: "DRAFT_MID",
+    });
+    expect(mocks.readStorageObject).toHaveBeenCalledWith("acs/cover.png");
+    for (const call of (globalThis.fetch as ReturnType<typeof vi.fn>).mock.calls) {
+      expect(String(call[0])).toContain("api.weixin.qq.com");
+    }
   });
 
   it("无图文章用默认封面：首次上传并回写 media_id 缓存，再次发送复用不再上传", async () => {
