@@ -44,10 +44,21 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 import {
   BACKUP_DOMAINS,
   createBackup,
+  FK_PRECHECK,
+  RESTORE_ORDER,
   resolveDomains,
   restoreBackup,
   validateBackup,
 } from "./backup-service";
+
+describe("RESTORE_ORDER 与外键依赖", () => {
+  it("每条跨域外键的父表都必须排在子表之前（还原顺序回归）", () => {
+    for (const { child, parent } of FK_PRECHECK) {
+      // 失败时 diff 显示两个下标，对照 FK_PRECHECK 定位违规的依赖对
+      expect(RESTORE_ORDER.indexOf(parent)).toBeLessThan(RESTORE_ORDER.indexOf(child));
+    }
+  });
+});
 
 describe("resolveDomains", () => {
   it("full=true 展开为全部域", () => {
@@ -145,7 +156,9 @@ describe("createBackup / restoreBackup", () => {
     const r = await restoreBackup(prismaMock as never, backup, "overwrite");
     expect(r.totalRows).toBe(1);
     expect(prismaMock.prompt.deleteMany).toHaveBeenCalled();
-    expect(prismaMock.prompt.createMany).toHaveBeenCalledWith({ data: [{ id: "p1", content: "hi" }] });
+    expect(prismaMock.prompt.createMany).toHaveBeenCalledWith({
+      data: [{ id: "p1", content: "hi" }],
+    });
   });
 
   it("merge 缺 id 的行给出中文错误", async () => {
@@ -158,5 +171,42 @@ describe("createBackup / restoreBackup", () => {
       data: { Prompt: [{ content: "no-id" }] },
     };
     await expect(restoreBackup(prismaMock as never, backup, "merge")).rejects.toThrow(/缺少 id/);
+  });
+
+  it("预检：文章引用的 WordPressConfig 不在备份中 → 中文报错且不触发写入", async () => {
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: false,
+      domains: ["articles"],
+      data: { Article: [{ id: "a1", siteConfigId: "w1" }] },
+    };
+    await expect(restoreBackup(prismaMock as never, backup, "merge")).rejects.toThrow(
+      /备份不完整.*发布配置/,
+    );
+    expect(prismaMock.article.upsert).not.toHaveBeenCalled();
+    // overwrite 模式同样先预检，不清空任何表
+    prismaMock.$transaction.mockImplementation(
+      async (fn: (tx: unknown) => Promise<void>) => await fn(prismaMock),
+    );
+    await expect(restoreBackup(prismaMock as never, backup, "overwrite")).rejects.toThrow(
+      /备份不完整/,
+    );
+    expect(prismaMock.article.deleteMany).not.toHaveBeenCalled();
+  });
+
+  it("预检：子表行无该字段或字段为空 → 不拦截（可空外键合法）", async () => {
+    prismaMock.article.upsert.mockResolvedValue({});
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: false,
+      domains: ["articles"],
+      data: { Article: [{ id: "a1", siteConfigId: null }, { id: "a2" }] },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.totalRows).toBe(2);
   });
 });

@@ -100,20 +100,24 @@ export const BACKUP_DOMAINS: DomainMeta[] = [
 
 const ALL_MODELS = new Set<string>(BACKUP_DOMAINS.flatMap((d) => d.models));
 
-/** 还原顺序：父表在前、子表在后（满足外键依赖） */
+/** 还原顺序：父表在前、子表在后（满足外键依赖）。
+ * 关键外键：Article.siteConfigId → WordPressConfig、ArticlePublish.configId → WordPressConfig、
+ * WeChatPublish.configId → WeChatConfig、ArticleVersion/SeoReport → Article。
+ * WordPressConfig/WeChatConfig 必须先于 Article 还原（真实事故：文章带 siteConfigId 还原时外键违规）。
+ * overwrite 模式的删除顺序 = 本数组反排，同样成立。 */
 export const RESTORE_ORDER: BackupModel[] = [
   "User",
   "AIProvider",
   "AIModel",
   "AITaskRoute",
-  "AIGeneration",
   "Prompt",
+  "WordPressConfig",
+  "WeChatConfig",
   "Article",
+  "AIGeneration",
   "ArticleVersion",
   "ArticlePublish",
   "SeoReport",
-  "WordPressConfig",
-  "WeChatConfig",
   "WeChatPublish",
   "RelayApiKey",
   "WorkflowRun",
@@ -121,6 +125,59 @@ export const RESTORE_ORDER: BackupModel[] = [
   "SourceVersion",
   "StorageConfig",
 ];
+
+/** 跨域外键预检：子表行引用的父表不在备份中时，提前给出可操作的中文提示，
+ * 避免直接暴露数据库级外键报错（如只备份「文章」域而未勾「发布配置」域）。
+ * 同时被 RESTORE_ORDER 顺序回归测试消费：parent 必须排在 child 之前。 */
+export const FK_PRECHECK: Array<{
+  child: BackupModel;
+  parent: BackupModel;
+  field: string;
+  hint: string;
+}> = [
+  {
+    child: "Article",
+    parent: "WordPressConfig",
+    field: "siteConfigId",
+    hint: "文章关联的 WordPress 站点配置",
+  },
+  {
+    child: "ArticlePublish",
+    parent: "WordPressConfig",
+    field: "configId",
+    hint: "发布记录关联的 WordPress 站点配置",
+  },
+  {
+    child: "WeChatPublish",
+    parent: "WeChatConfig",
+    field: "configId",
+    hint: "公众号草稿记录关联的公众号账号",
+  },
+  { child: "ArticleVersion", parent: "Article", field: "articleId", hint: "历史版本关联的文章" },
+  { child: "SeoReport", parent: "Article", field: "articleId", hint: "SEO 报告关联的文章" },
+];
+
+/** 预检：备份中子表行引用了未包含在备份里的父表数据 → 中文报错（不触发任何写入） */
+export function precheckForeignRefs(backup: BackupFile): void {
+  for (const { child, parent, field, hint } of FK_PRECHECK) {
+    const childRows = backup.data[child];
+    if (!Array.isArray(childRows) || childRows.length === 0) continue;
+    const hasRef = childRows.some(
+      (row) =>
+        row !== null &&
+        typeof row === "object" &&
+        typeof row[field] === "string" &&
+        row[field] !== "",
+    );
+    if (!hasRef) continue;
+    if (!(parent in backup.data)) {
+      throw new BackupError(
+        `备份不完整：${hint}（${child}.${field}）不在备份中。` +
+          `请用包含对应域的备份重新还原：文章/发布记录类请勾选「文章」+「发布配置」域，或直接整站备份`,
+      );
+    }
+  }
+}
 
 export interface BackupFile {
   format: "acs-backup";
@@ -268,6 +325,7 @@ export async function restoreBackup(
   mode: BackupRestoreMode = "merge",
 ): Promise<BackupRestoreResult> {
   validateBackup(backup);
+  precheckForeignRefs(backup);
   const tablesInBackup = Object.keys(backup.data).filter(
     (t) => Array.isArray(backup.data[t]) && t in DELEGATES,
   ) as BackupModel[];
