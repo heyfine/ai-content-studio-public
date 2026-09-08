@@ -7,9 +7,11 @@ import { restoreBackup } from "@/lib/services/backup-service";
 const restoreSchema = z.object({
   backup: z.unknown(),
   mode: z.enum(["merge", "overwrite"]).default("merge"),
+  /** 旧版本备份（文件内无来源密钥）跨环境还原时手动提供，用于解密并重加密密文字段 */
+  sourceEncryptionKey: z.string().optional(),
 });
 
-/** POST /api/backup/restore — 还原备份（校验 + merge/overwrite 写入） */
+/** POST /api/backup/restore — 还原备份（校验 + merge/overwrite 写入 + 密文跨环境重加密） */
 export async function POST(request: Request) {
   try {
     const session = await auth();
@@ -24,7 +26,9 @@ export async function POST(request: Request) {
         { status: 400 },
       );
     }
-    const result = await restoreBackup(prisma, parsed.data.backup, parsed.data.mode);
+    const result = await restoreBackup(prisma, parsed.data.backup, parsed.data.mode, {
+      sourceEncryptionKey: parsed.data.sourceEncryptionKey,
+    });
     return NextResponse.json(result);
   } catch (e) {
     const message = e instanceof Error ? e.message : String(e);

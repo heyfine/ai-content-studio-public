@@ -310,4 +310,62 @@ describe("createBackup / restoreBackup", () => {
     const r = await restoreBackup(prismaMock as never, backup, "merge");
     expect(r.warnings ?? []).toEqual([]);
   });
+
+  it("跨环境还原：备份自带来源密钥 → 密文解密后用当前密钥重加密（密码完整恢复）", async () => {
+    prismaMock.storageConfig.upsert.mockResolvedValue({});
+    const { encryptWithKey } = await import("@/lib/crypto");
+    const otherKey = Buffer.from("0123456789abcdef0123456789abcde0", "utf8");
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 2,
+      exportedAt: "x",
+      full: false,
+      domains: ["storage"],
+      data: {
+        StorageConfig: [{ id: "s1", name: "n", secretKey: encryptWithKey("plain-key", otherKey) }],
+      },
+      // 来源环境的 ENCRYPTION_KEY（与当前不同）
+      encryptionKey: otherKey.toString("base64"),
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.reEncrypted).toBe(1);
+    expect(r.warnings ?? []).toEqual([]);
+    // upsert 收到的 secretKey 应能用当前环境密钥解出原文
+    const saved = prismaMock.storageConfig.upsert.mock.calls[0][0].create.secretKey;
+    expect(saved).not.toBe(backup.data.StorageConfig[0].secretKey);
+    expect(decrypt(saved)).toBe("plain-key");
+  });
+
+  it("跨环境还原：来源密钥与当前一致 → 跳过重加密（reEncrypted=0）", async () => {
+    prismaMock.storageConfig.upsert.mockResolvedValue({});
+    const cipher = (await import("@/lib/crypto")).encrypt("plain-key");
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 2,
+      exportedAt: "x",
+      full: false,
+      domains: ["storage"],
+      data: { StorageConfig: [{ id: "s1", name: "n", secretKey: cipher }] },
+      encryptionKey: process.env.ENCRYPTION_KEY,
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.reEncrypted).toBe(0);
+    const saved = prismaMock.storageConfig.upsert.mock.calls[0][0].create.secretKey;
+    expect(saved).toBe(cipher);
+  });
+
+  it("旧备份无来源密钥且密文解不开 → 警告提示填写来源密钥", async () => {
+    const backup = {
+      format: "acs-backup",
+      formatVersion: 1,
+      exportedAt: "x",
+      full: false,
+      domains: ["storage"],
+      data: { StorageConfig: [{ id: "s1", name: "n", secretKey: "bm90LXZhbGlkLWNpcGhlcg==" }] },
+    };
+    const r = await restoreBackup(prismaMock as never, backup, "merge");
+    expect(r.warnings?.[0]).toMatch(/备份来源 ENCRYPTION_KEY/);
+  });
 });
+
+import { decrypt } from "@/lib/crypto";

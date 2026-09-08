@@ -7,7 +7,8 @@
  * - 表名单一律来自后端白名单注册表，不做任何前端拼接。
  * - 注意：备份含密钥类字段（AES-256-GCM 密文/密码哈希），还原库必须与备份库共用同一 ENCRYPTION_KEY。
  */
-import { decrypt } from "@/lib/crypto";
+import { createDecipheriv, createCipheriv } from "node:crypto";
+import { decrypt, decryptWithKey, encrypt, encryptWithKey } from "@/lib/crypto";
 import type { PrismaClient } from ".prisma/client";
 
 /** 模型名 → Prisma delegate 属性名（AI 前缀为 aIXxx、WordPress/WeChat 首词小写） */
@@ -196,6 +197,9 @@ export interface BackupFile {
   domains: string[];
   /** 模型名 → 记录数组（Prisma 字段名，DateTime 为 ISO 字符串） */
   data: Record<string, Array<Record<string, unknown>>>;
+  /** formatVersion 2 起携带：备份来源的 ENCRYPTION_KEY（base64）。
+   * 密文字段用它解密、再用还原环境当前密钥重加密，实现跨环境全量还原（含密码）。 */
+  encryptionKey?: string;
 }
 
 export interface BackupResult {
@@ -277,11 +281,13 @@ export async function createBackup(
   }
   const backup: BackupFile = {
     format: "acs-backup",
-    formatVersion: 1,
+    formatVersion: 2,
     exportedAt: new Date().toISOString(),
     full,
     domains,
     data,
+    // 携带来源 ENCRYPTION_KEY：还原端用它解密旧密文并重加密，跨环境也能全量还原（含密码）
+    encryptionKey: process.env.ENCRYPTION_KEY,
   };
   return { backup, tableCounts, totalRows };
 }
@@ -328,8 +334,10 @@ export interface BackupRestoreResult {
   mode: BackupRestoreMode;
   tables: BackupRestoreTableResult[];
   totalRows: number;
-  /** 非致命警告：如密文字段在当前 ENCRYPTION_KEY 下无法解密（配置将不可用需重填） */
+  /** 非致命警告：如旧备份未提供来源密钥且密文无法解密（配置将不可用需重填） */
   warnings?: string[];
+  /** 跨环境还原时用来源密钥解密并重加密的密文字段数（密码等随之完整恢复） */
+  reEncrypted?: number;
 }
 
 function delegateFor(prisma: PrismaClient, model: BackupModel) {
@@ -389,50 +397,115 @@ async function restoreSystemSetting(
   return count;
 }
 
-/** 还原后密文解密自检：抽验备份中的密文字段能否在当前环境解密。
- * 不能解密几乎总是 ENCRYPTION_KEY 与备份来源不一致——S3 SecretKey/AI Key 等
- * 会全部失效（现象：测试连接 AccessDenied、AI 调用失败），提前明确告知。 */
-function encryptionSanityWarnings(backup: BackupFile): string[] {
-  const candidates: Array<{ model: BackupModel; field: string; label: string }> = [
-    { model: "StorageConfig", field: "secretKey", label: "对象存储 SecretKey" },
-    { model: "AIProvider", field: "apiKey", label: "AI 供应商 API Key" },
-    { model: "WeChatConfig", field: "appSecret", label: "公众号 AppSecret" },
-  ];
-  for (const { model, field, label } of candidates) {
-    const rows = backup.data[model];
-    if (!Array.isArray(rows)) continue;
-    const cipher = rows.find(
-      (r) => r !== null && typeof r === "object" && typeof r[field] === "string" && r[field] !== "",
-    )?.[field] as string | undefined;
-    if (!cipher) continue;
-    try {
-      decrypt(cipher);
-      return [];
-    } catch {
-      return [
-        `备份中的加密字段（${label} 等）无法在当前环境解密：当前 ENCRYPTION_KEY 与备份来源不一致。` +
-          `对象存储/AI 供应商等密文配置将不可用，请到对应设置页重新填写密钥`,
-      ];
-    }
+/** 备份中的 AES 密文字段清单（ENCRYPTION_KEY 加密，跨环境还原时需要重加密） */
+const ENCRYPTED_FIELDS: Array<{ model: BackupModel; field: string }> = [
+  { model: "StorageConfig", field: "secretKey" },
+  { model: "AIProvider", field: "apiKey" },
+  { model: "WeChatConfig", field: "appSecret" },
+  { model: "WordPressConfig", field: "appPassword" },
+  { model: "RelayApiKey", field: "key" },
+];
+
+function currentEncryptionKey(): Buffer {
+  const raw = process.env.ENCRYPTION_KEY;
+  if (!raw) throw new BackupError("当前环境缺少 ENCRYPTION_KEY，无法还原加密字段");
+  const key = Buffer.from(raw, "base64");
+  if (key.length !== 32) throw new BackupError("当前 ENCRYPTION_KEY 非法（需 32 字节 base64）");
+  return key;
+}
+
+/**
+ * 跨环境密文迁移：备份来源的 ENCRYPTION_KEY 与当前环境不一致时，
+ * 用来源密钥解密全部密文字段、再用当前密钥重加密，实现"密码等全部还原"。
+ * 返回处理后的 data（深拷贝）与重加密的字段数；无来源密钥则返回 null 由调用方给警告。
+ */
+function reEncryptBackupData(
+  backup: BackupFile,
+  sourceKeyRaw: string,
+): { data: BackupFile["data"]; reEncrypted: number } | null {
+  const current = currentEncryptionKey();
+  let source: Buffer;
+  try {
+    source = Buffer.from(sourceKeyRaw, "base64");
+    if (source.length !== 32) throw new Error("need 32 bytes");
+  } catch {
+    throw new BackupError("提供的备份来源 ENCRYPTION_KEY 非法（需 32 字节 base64）");
   }
-  return [];
+  if (source.equals(current)) return null;
+
+  let reEncrypted = 0;
+  const data: BackupFile["data"] = {};
+  for (const [model, rows] of Object.entries(backup.data)) {
+    if (!Array.isArray(rows)) continue;
+    const field = ENCRYPTED_FIELDS.find((f) => f.model === model)?.field;
+    data[model] = rows.map((row) => {
+      if (row === null || typeof row !== "object" || !field) return row;
+      const cipher = (row as Record<string, unknown>)[field];
+      if (typeof cipher !== "string" || cipher === "") return row;
+      try {
+        const plain = decryptWithKey(cipher, source);
+        reEncrypted += 1;
+        return { ...row, [field]: encryptWithKey(plain, current) };
+      } catch {
+        // 该行密文用来源密钥也解不开（损坏/手工改过）：原样保留，由 sanity check 提示
+        return row;
+      }
+    });
+  }
+  return { data, reEncrypted };
 }
 
 /** 还原：merge 按主键合并覆盖（逐行 upsert，可重跑）；overwrite 事务内清空后写入快照。
- * SystemSetting KV（自动备份/WebDAV 目标等）随整站备份进出：merge 按 key upsert，overwrite 清后重写。 */
+ * SystemSetting KV（自动备份/WebDAV 目标等）随整站备份进出：merge 按 key upsert，overwrite 清后重写。
+ * 密文跨环境：formatVersion 2 的备份自带来源 ENCRYPTION_KEY，自动解密+重加密；旧备份可经 opts.sourceEncryptionKey 手动提供。 */
 export async function restoreBackup(
   prisma: PrismaClient,
   backup: unknown,
   mode: BackupRestoreMode = "merge",
+  opts: { sourceEncryptionKey?: string } = {},
 ): Promise<BackupRestoreResult> {
   validateBackup(backup);
   precheckForeignRefs(backup);
-  const warnings = encryptionSanityWarnings(backup);
-  const tablesInBackup = Object.keys(backup.data).filter(
-    (t) => Array.isArray(backup.data[t]) && t in DELEGATES,
+
+  // 密文跨环境重加密：新备份自带来源密钥；旧备份由调用方可选提供
+  const sourceKeyRaw = (backup as BackupFile).encryptionKey || opts.sourceEncryptionKey;
+  let effectiveData = backup.data;
+  const warnings: string[] = [];
+  let reEncrypted = 0;
+  if (sourceKeyRaw) {
+    const result = reEncryptBackupData(backup as BackupFile, sourceKeyRaw);
+    if (result) {
+      effectiveData = result.data;
+      reEncrypted = result.reEncrypted;
+    }
+  } else {
+    // 无来源密钥：抽验密文能否解密，不能则明确警告（密文配置将不可用需重填）
+    for (const { model, field } of ENCRYPTED_FIELDS) {
+      const rows = backup.data[model];
+      if (!Array.isArray(rows)) continue;
+      const cipher = rows.find(
+        (r) =>
+          r !== null && typeof r === "object" && typeof r[field] === "string" && r[field] !== "",
+      )?.[field] as string | undefined;
+      if (!cipher) continue;
+      try {
+        decrypt(cipher);
+      } catch {
+        warnings.push(
+          `备份中的加密字段无法在当前环境解密：当前 ENCRYPTION_KEY 与备份来源不一致。` +
+            `对象存储/AI 供应商等密文配置将不可用——请在还原时填写「备份来源 ENCRYPTION_KEY」以完整恢复密码，或到对应设置页重新填写`,
+        );
+      }
+      break;
+    }
+  }
+
+  const backupData = { ...backup, data: effectiveData } as BackupFile;
+  const tablesInBackup = Object.keys(backupData.data).filter(
+    (t) => Array.isArray(backupData.data[t]) && t in DELEGATES,
   ) as BackupModel[];
-  const systemRows = Array.isArray(backup.data.SystemSetting)
-    ? (backup.data.SystemSetting as Array<Record<string, unknown>>)
+  const systemRows = Array.isArray(backupData.data.SystemSetting)
+    ? (backupData.data.SystemSetting as Array<Record<string, unknown>>)
     : [];
 
   const tablesResult: BackupRestoreTableResult[] = [];
@@ -449,7 +522,7 @@ export async function restoreBackup(
           await delegate.deleteMany();
         }
         for (const model of RESTORE_ORDER) {
-          const rows = backup.data[model];
+          const rows = backupData.data[model];
           if (!Array.isArray(rows) || rows.length === 0) continue;
           if (model === "SystemSetting") {
             const n = await restoreSystemSetting(tx as unknown as PrismaClient, rows, "overwrite");
@@ -468,13 +541,13 @@ export async function restoreBackup(
         `覆盖还原失败：${e instanceof Error ? e.message : String(e)}。建议整站备份后覆盖还原，或改用合并覆盖`,
       );
     }
-    return { restored: true, mode, tables: tablesResult, totalRows, warnings };
+    return { restored: true, mode, tables: tablesResult, totalRows, warnings, reEncrypted };
   }
 
   // merge：逐行按主键 upsert（同名覆盖、其余保留、可重复还原）
   try {
     for (const model of RESTORE_ORDER) {
-      const rows = backup.data[model];
+      const rows = backupData.data[model];
       if (!Array.isArray(rows) || rows.length === 0) continue;
       if (model === "SystemSetting") {
         const n = await restoreSystemSetting(prisma, rows, "merge");
@@ -503,5 +576,5 @@ export async function restoreBackup(
     }
     throw new BackupError(`合并还原失败：${message.slice(0, 200)}`);
   }
-  return { restored: true, mode, tables: tablesResult, totalRows, warnings };
+  return { restored: true, mode, tables: tablesResult, totalRows, warnings, reEncrypted };
 }

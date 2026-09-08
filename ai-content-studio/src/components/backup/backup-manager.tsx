@@ -106,6 +106,8 @@ export function BackupManager() {
   /** WebDAV 密码明文显示状态：targetId → 已取回明文（点眼睛取回后与输入框联动切换显示） */
   const [revealedPasswords, setRevealedPasswords] = useState<Record<string, string>>({});
   const [shownTargets, setShownTargets] = useState<Record<string, boolean>>({});
+  /** 旧版备份跨环境还原时手动提供的来源 ENCRYPTION_KEY */
+  const [sourceKeyInput, setSourceKeyInput] = useState("");
 
   const loadAuto = useCallback(async () => {
     const res = await fetch("/api/backup/auto");
@@ -214,19 +216,29 @@ export function BackupManager() {
       const res = await fetch("/api/backup/restore", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ backup, mode }),
+        body: JSON.stringify({
+          backup,
+          mode,
+          // 旧版本备份（文件内无来源密钥）跨环境还原时手动提供
+          sourceEncryptionKey: sourceKeyInput.trim() || undefined,
+        }),
       });
       const body = (await res.json()) as {
         totalRows?: number;
         warnings?: string[];
+        reEncrypted?: number;
         error?: string;
       };
       if (!res.ok) throw new Error(body.error ?? "还原失败");
-      flash(
-        body.warnings && body.warnings.length > 0
-          ? `还原成功，共 ${body.totalRows} 行。⚠ ${body.warnings.join(" ")}`
-          : `还原成功，共 ${body.totalRows} 行`,
-      );
+      if (body.reEncrypted) {
+        flash(
+          `还原成功，共 ${body.totalRows} 行。✓ 已用备份密钥解密并以当前密钥重新加密 ${body.reEncrypted} 个密文字段，S3/AI/公众号等密码已完整恢复`,
+        );
+      } else if (body.warnings && body.warnings.length > 0) {
+        flash(`还原成功，共 ${body.totalRows} 行。⚠ ${body.warnings.join(" ")}`);
+      } else {
+        flash(`还原成功，共 ${body.totalRows} 行`);
+      }
     } catch (e) {
       fail(e);
     } finally {
@@ -421,6 +433,19 @@ export function BackupManager() {
             <UploadIcon className="size-4" />
             选择备份文件还原
           </Button>
+          <div className="w-full space-y-1">
+            <Label htmlFor="restore-source-key">
+              备份来源 ENCRYPTION_KEY（仅旧版备份跨环境还原时填写；新版备份已自带，无需填写）
+            </Label>
+            <Input
+              id="restore-source-key"
+              type="password"
+              autoComplete="off"
+              placeholder="旧备份在另一台环境加密时的 ENCRYPTION_KEY（32 字节 base64）"
+              value={sourceKeyInput}
+              onChange={(e) => setSourceKeyInput(e.target.value)}
+            />
+          </div>
         </CardContent>
       </Card>
 
