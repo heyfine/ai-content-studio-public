@@ -218,6 +218,71 @@ export async function purgeExpiredRemote(
   return purged;
 }
 
+// ---------- 批量操作（多选） ----------
+
+export interface BatchItemResult {
+  id: string;
+  ok: boolean;
+  /** 失败原因（ok=false 时存在） */
+  error?: string;
+}
+
+/** 收敛批量逐条执行的通用模式：逐条 await，失败记录原因不中断 */
+async function runBatch(
+  ids: string[],
+  exec: (id: string) => Promise<boolean | void>,
+): Promise<BatchItemResult[]> {
+  const results: BatchItemResult[] = [];
+  for (const id of ids) {
+    try {
+      const ok = await exec(id);
+      results.push({ id, ok: ok !== false });
+    } catch (e) {
+      results.push({ id, ok: false, error: e instanceof Error ? e.message : String(e) });
+    }
+  }
+  return results;
+}
+
+/** 批量把本地图片移入回收站 */
+export function trashLocalImages(names: string[]): Promise<BatchItemResult[]> {
+  return runBatch(names, (name) => trashLocalImage(name));
+}
+
+/** 批量恢复本地回收站图片 */
+export function restoreLocalImages(names: string[]): Promise<BatchItemResult[]> {
+  return runBatch(names, (name) => restoreLocalImage(name));
+}
+
+/** 批量彻底删除本地回收站图片 */
+export function purgeLocalImages(names: string[]): Promise<BatchItemResult[]> {
+  return runBatch(names, (name) => purgeLocalImage(name));
+}
+
+/** 批量把云端图片移入回收站 */
+export function trashRemoteImages(
+  row: StorageConfigRow,
+  keys: string[],
+): Promise<BatchItemResult[]> {
+  return runBatch(keys, (key) => trashRemoteImage(row, key));
+}
+
+/** 批量恢复云端回收站对象 */
+export function restoreRemoteImages(
+  row: StorageConfigRow,
+  keys: string[],
+): Promise<BatchItemResult[]> {
+  return runBatch(keys, (key) => restoreRemoteImage(row, key));
+}
+
+/** 批量彻底删除云端回收站对象 */
+export function purgeRemoteImages(
+  row: StorageConfigRow,
+  keys: string[],
+): Promise<BatchItemResult[]> {
+  return runBatch(keys, (key) => purgeRemoteImage(row, key));
+}
+
 // ---------- 调度入口 ----------
 
 export interface PurgeExpiredResult {

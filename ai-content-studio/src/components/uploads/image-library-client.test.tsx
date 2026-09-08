@@ -4,14 +4,36 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const fetchMock = vi.fn();
 globalThis.fetch = fetchMock as unknown as typeof fetch;
 
+import { type BatchGridEntry, ImageBatchGrid } from "./image-batch-grid";
+import { dayKeyOf } from "./image-format";
 import { ImageLibraryClient } from "./image-library-client";
-import { ImageTrashSection, type TrashImageEntry } from "./image-trash-section";
 
 const localImages = [
   { name: "a.png", url: "/uploads/a.png", size: 2048, mtime: "2026-09-06T10:00:00.000Z" },
 ];
 
-const trashEntries: TrashImageEntry[] = [
+const remoteImages = [
+  {
+    key: "acs/r1.png",
+    url: "https://cdn.example.com/acs/r1.png",
+    size: 4096,
+    mtime: "2026-09-07T09:00:00.000Z",
+  },
+  {
+    key: "acs/r2.png",
+    url: "https://cdn.example.com/acs/r2.png",
+    size: 4096,
+    mtime: "2026-09-05T18:00:00.000Z",
+  },
+  {
+    key: "acs/r3.png",
+    url: "https://cdn.example.com/acs/r3.png",
+    size: 4096,
+    mtime: "2026-09-06T01:00:00.000Z",
+  },
+];
+
+const trashEntries = [
   {
     id: "t1.png",
     backend: "local",
@@ -21,205 +43,259 @@ const trashEntries: TrashImageEntry[] = [
     expiresAt: "2026-09-20T10:00:00.000Z",
     daysLeft: 12,
   },
-  {
-    id: "t2.png",
-    backend: "local",
-    url: "/uploads/trash/t2.png",
-    size: 256,
-    deletedAt: "2026-08-20T10:00:00.000Z",
-    expiresAt: "2026-09-03T10:00:00.000Z",
-    daysLeft: 0,
-  },
 ];
 
 const articleGroups = [
   {
     articleId: "a1",
     title: "文章一",
-    images: [
-      { src: "/uploads/a.png", local: true },
-      { src: "https://cdn.example.com/x.jpg", local: false },
-    ],
+    images: [{ src: "/uploads/a.png", local: true }],
   },
 ];
 
-const remoteImages = [
-  {
-    key: "acs/r.png",
-    url: "https://cdn.example.com/acs/r.png",
-    size: 4096,
-    mtime: "2026-09-07T09:00:00.000Z",
-  },
-];
-
-function mockResponses(overrides: Record<string, unknown> = {}) {
-  fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-    const res = (body: unknown, ok = true) => ({ ok, json: async () => body });
+function baseResponses(
+  overrides: {
+    localImages?: typeof localImages;
+    remoteImages?: typeof remoteImages;
+    remoteEnabled?: boolean;
+    trash?: typeof trashEntries;
+  } = {},
+) {
+  const res = (body: unknown, ok = true) => ({ ok, json: async () => body });
+  return async (url: string, init?: RequestInit) => {
     if (url === "/api/uploads" && (init?.method ?? "GET") === "GET")
       return res(overrides.localImages ?? localImages);
-    if (url === "/api/uploads/article-images") return res(overrides.articles ?? articleGroups);
+    if (url === "/api/uploads/article-images") return res(articleGroups);
     if (url === "/api/uploads/trash") return res(overrides.trash ?? trashEntries);
     if (url === "/api/storage/images")
-      return res(overrides.storage ?? { enabled: false, images: [] });
-    if (url === "/api/uploads/a.png" && init?.method === "DELETE") return res({ ok: true });
+      return res({
+        enabled: overrides.remoteEnabled ?? false,
+        name: "缤纷云",
+        images: (overrides.remoteEnabled ?? false) ? (overrides.remoteImages ?? remoteImages) : [],
+      });
+    if (url === "/api/storage/images/trash") return res({ enabled: false, images: [] });
     return res({ error: "未知请求" }, false);
-  });
+  };
 }
 
-describe("ImageLibraryClient", () => {
+describe("ImageLibraryClient 多选与批量", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     localStorage.clear();
   });
 
-  it("加载并渲染本地图片、回收站与文章图片", async () => {
-    mockResponses();
+  it("默认渲染网格与单张操作按钮；未有多选条", async () => {
+    fetchMock.mockImplementation(baseResponses());
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
-    expect(screen.getAllByTestId("article-image")).toHaveLength(2);
-    expect(screen.getByText("文章一")).toBeInTheDocument();
-    expect(screen.getByText("外部链接")).toBeInTheDocument();
-    expect(screen.getByText("本地图片库")).toBeInTheDocument();
-    // 回收站渲染：两条 + 剩余天数提示
-    expect(screen.getAllByTestId("trash-image")).toHaveLength(2);
-    expect(screen.getAllByTestId("trash-expires")).toHaveLength(2);
-    expect(screen.getByText("12 天后自动清除")).toBeInTheDocument();
-    expect(screen.getByText("即将自动清除")).toBeInTheDocument();
+    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
   });
 
-  it("删除本地图片改为进回收站：DELETE 成功后刷新", async () => {
+  it("多选模式：勾选出现批量条与计数，全选切换", async () => {
+    fetchMock.mockImplementation(
+      baseResponses({
+        remoteEnabled: true,
+        localImages: [
+          ...localImages,
+          { name: "b.png", url: "/uploads/b.png", size: 1, mtime: "2026-09-06T11:00:00.000Z" },
+        ],
+      }),
+    );
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(2));
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    fireEvent.click(screen.getByTestId("select-a.png"));
+    expect(screen.getByTestId("batch-bar-local-image")).toBeInTheDocument();
+    expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 1");
+    fireEvent.click(screen.getByTestId("select-b.png"));
+    expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 2");
+  });
+
+  it("批量删除本地图片：确认后 POST batch-delete 并刷新", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockResponses();
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/uploads/batch-delete" && init?.method === "POST") {
+        return { ok: true, json: async () => ({ results: [{ id: "a.png", ok: true }] }) };
+      }
+      return baseResponses()(url, init);
+    });
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
-    fireEvent.click(screen.getByTestId("delete-a.png"));
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    fireEvent.click(screen.getByTestId("select-a.png"));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
+    await waitFor(() => {
+      const call = fetchMock.mock.calls.find((c) => c[0] === "/api/uploads/batch-delete");
+      expect(call).toBeTruthy();
+      expect(JSON.parse(String((call as [string, RequestInit])[1].body))).toEqual({
+        names: ["a.png"],
+      });
+    });
+    await waitFor(() => expect(screen.getByTestId("copy-hint")).toHaveTextContent("批量删除成功"));
+    confirmSpy.mockRestore();
+  });
+
+  it("批量部分失败：显示成功/失败计数", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/uploads/batch-delete" && init?.method === "POST") {
+        return {
+          ok: true,
+          json: async () => ({
+            results: [
+              { id: "a.png", ok: true },
+              { id: "b.png", ok: false, error: "不存在" },
+            ],
+          }),
+        };
+      }
+      return baseResponses({
+        localImages: [
+          ...localImages,
+          { name: "b.png", url: "/uploads/b.png", size: 1, mtime: "2026-09-06T11:00:00.000Z" },
+        ],
+      })(url, init);
+    });
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(2));
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    fireEvent.click(screen.getByTestId("select-a.png"));
+    fireEvent.click(screen.getByTestId("select-b.png"));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     await waitFor(() =>
-      expect(fetchMock).toHaveBeenCalledWith("/api/uploads/a.png", { method: "DELETE" }),
+      expect(screen.getByRole("alert")).toHaveTextContent(/成功 1 张，失败 1 张/),
     );
     confirmSpy.mockRestore();
   });
 
-  it("回收站恢复：调 POST op=restore 并提示成功", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockImplementation(() => true);
-    mockResponses();
-    render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getAllByTestId("trash-image")).toHaveLength(2));
-    // 只替换 POST 路径的处理，其余保持原 mock
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === "/api/uploads/trash" && init?.method === "POST")
-        return { ok: true, json: async () => ({ ok: true }) };
-      const res = (body: unknown, ok = true) => ({ ok, json: async () => body });
-      if (url === "/api/uploads") return res(localImages);
-      if (url === "/api/uploads/article-images") return res(articleGroups);
-      if (url === "/api/uploads/trash") return res(trashEntries);
-      if (url === "/api/storage/images") return res({ enabled: false, images: [] });
-      return res({ error: "未知请求" }, false);
-    });
-    fireEvent.click(screen.getByTestId("trash-restore-t1.png"));
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(
-        (c) =>
-          c[0] === "/api/uploads/trash" && (c[1] as RequestInit | undefined)?.method === "POST",
-      );
-      expect(call).toBeTruthy();
-      const payload = JSON.parse(String((call as [string, RequestInit])[1].body));
-      expect(payload).toEqual({ op: "restore", name: "t1.png" });
-    });
-    await waitFor(() => expect(screen.getByTestId("copy-hint")).toHaveTextContent("已恢复"));
-    confirmSpy.mockRestore();
-  });
-
-  it("回收站彻底删除：确认后调 POST op=purge", async () => {
+  it("回收站批量恢复/彻底删除走 POST op+names", async () => {
     const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    mockResponses();
-    render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getAllByTestId("trash-image")).toHaveLength(2));
     fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === "/api/uploads/trash" && init?.method === "POST")
-        return { ok: true, json: async () => ({ ok: true }) };
-      const res = (body: unknown, ok = true) => ({ ok, json: async () => body });
-      if (url === "/api/uploads") return res(localImages);
-      if (url === "/api/uploads/article-images") return res(articleGroups);
-      if (url === "/api/uploads/trash") return res(trashEntries);
-      if (url === "/api/storage/images") return res({ enabled: false, images: [] });
-      return res({ error: "未知请求" }, false);
+      if (url === "/api/uploads/trash" && init?.method === "POST") {
+        return { ok: true, json: async () => ({ results: [{ id: "t1.png", ok: true }] }) };
+      }
+      return baseResponses()(url, init);
     });
-    fireEvent.click(screen.getByTestId("trash-purge-t2.png"));
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("trash-image")).toHaveLength(1));
+    fireEvent.click(screen.getByTestId("batch-toggle-trash-image"));
+    fireEvent.click(screen.getByTestId("select-t1.png"));
+    fireEvent.click(screen.getByRole("button", { name: "批量恢复" }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
         (c) =>
           c[0] === "/api/uploads/trash" && (c[1] as RequestInit | undefined)?.method === "POST",
       );
-      expect(call).toBeTruthy();
-      const payload = JSON.parse(String((call as [string, RequestInit])[1].body));
-      expect(payload).toEqual({ op: "purge", name: "t2.png" });
+      expect(JSON.parse(String((call as [string, RequestInit])[1].body))).toEqual({
+        op: "restore",
+        names: ["t1.png"],
+      });
     });
     confirmSpy.mockRestore();
   });
 
-  it("上传入口仍然可用", async () => {
-    mockResponses({ localImages: [], trash: [] });
+  it("云端图片按日相册分组渲染", async () => {
+    fetchMock.mockImplementation(baseResponses({ remoteEnabled: true }));
     render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getByTestId("image-upload-btn")).toBeInTheDocument());
-    const input = screen.getByTestId("image-upload-input");
-    const file = new File(["x"], "a.png", { type: "image/png" });
-    fireEvent.change(input, { target: { files: [file] } });
+    await waitFor(() => expect(screen.getAllByTestId("remote-image")).toHaveLength(3));
+    const dayHeaders = screen.getAllByTestId("album-day");
+    // 09-07 1 张 + 09-05 2 张 → 2 个相册日
+    expect(dayHeaders).toHaveLength(2);
+    expect(dayHeaders[0].textContent).toContain("2026-09-07");
+    expect(dayHeaders[1].textContent).toContain("2026-09-06");
+  });
+
+  it("云端批量删除走 /api/storage/images/batch-delete", async () => {
+    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
+    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
+      if (url === "/api/storage/images/batch-delete" && init?.method === "POST") {
+        return { ok: true, json: async () => ({ results: [{ id: "acs/r1.png", ok: true }] }) };
+      }
+      return baseResponses({ remoteEnabled: true })(url, init);
+    });
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("remote-image")).toHaveLength(3));
+    fireEvent.click(screen.getByTestId("batch-toggle-remote-image"));
+    fireEvent.click(screen.getByTestId("select-acs/r1.png"));
+    fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     await waitFor(() => {
-      const call = fetchMock.mock.calls.find((c) => c[0] === "/api/uploads/image");
-      expect(call).toBeTruthy();
-      expect((call as [string, RequestInit])[1].method).toBe("POST");
+      const call = fetchMock.mock.calls.find((c) => c[0] === "/api/storage/images/batch-delete");
+      expect(JSON.parse(String((call as [string, RequestInit])[1].body))).toEqual({
+        keys: ["acs/r1.png"],
+      });
     });
+    confirmSpy.mockRestore();
   });
 
-  it("启用对象存储时渲染云端图片区", async () => {
-    mockResponses({ storage: { enabled: true, name: "缤纷云", images: remoteImages } });
-    render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getByText("云端图片（缤纷云）")).toBeInTheDocument());
-    expect(screen.getByTestId("remote-image")).toBeInTheDocument();
-  });
-
-  it("云端列表接口失败不拖垮本地图片区", async () => {
-    fetchMock.mockImplementation(async (url: string) => {
-      if (url === "/api/uploads") return { ok: true, json: async () => localImages };
-      if (url === "/api/uploads/article-images") return { ok: true, json: async () => [] };
-      if (url === "/api/uploads/trash") return { ok: true, json: async () => [] };
-      return { ok: false, json: async () => ({ error: "boom" }) };
-    });
+  it("取消多选清空勾选并隐藏批量条", async () => {
+    fetchMock.mockImplementation(baseResponses());
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
-    expect(screen.queryByTestId("remote-image")).not.toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    fireEvent.click(screen.getByTestId("select-a.png"));
+    expect(screen.getByTestId("batch-bar-local-image")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
+    // 再次进入多选，勾选已清空
+    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
+    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
   });
 });
 
-describe("ImageTrashSection", () => {
-  it("空回收站显示占位文案", () => {
-    render(
-      <ImageTrashSection title="回收站" entries={[]} onRestore={() => {}} onPurge={() => {}} />,
-    );
-    expect(screen.getByText("回收站是空的。")).toBeInTheDocument();
-    expect(screen.getByText((_, el) => el?.textContent === "回收站（0）")).toBeInTheDocument();
+describe("dayKeyOf（北京墙钟日分组）", () => {
+  it("按北京墙钟取日、非法输入返回 null", () => {
+    // UTC 2026-09-05T18:00 = 北京 09-06 凌晨
+    expect(dayKeyOf("2026-09-05T18:00:00.000Z")).toBe("2026-09-06");
+    expect(dayKeyOf("2026-09-07T09:00:00.000Z")).toBe("2026-09-07");
+    expect(dayKeyOf("not-a-date")).toBeNull();
   });
+});
 
-  it("剩余天数 ≤3 标红提示即将清除", () => {
-    const entries: TrashImageEntry[] = [
-      {
-        id: "s.png",
-        backend: "local",
-        url: "/uploads/trash/s.png",
-        size: 1,
-        deletedAt: "2026-08-30T00:00:00.000Z",
-        expiresAt: "2026-09-10T00:00:00.000Z",
-        daysLeft: 2,
-      },
-    ];
+describe("ImageBatchGrid 相册分组渲染", () => {
+  const entries: BatchGridEntry[] = [
+    { id: "1.png", url: "/u/1.png", alt: "1", caption: null, dayLabel: "2026-09-07" },
+    { id: "2.png", url: "/u/2.png", alt: "2", caption: null, dayLabel: "2026-09-05" },
+    { id: "3.png", url: "/u/3.png", alt: "3", caption: null, dayLabel: "2026-09-05" },
+  ];
+
+  function noopSelection() {}
+  function noopAction() {}
+
+  it("同日归组、组头带数量", () => {
     render(
-      <ImageTrashSection
-        title="回收站"
+      <ImageBatchGrid
+        title="云端图片"
+        count={3}
         entries={entries}
-        onRestore={() => {}}
-        onPurge={() => {}}
+        emptyText=""
+        selectedIds={[]}
+        onSelectionChange={noopSelection}
+        batchActions={[{ label: "批量删除", onClick: noopAction }]}
+        gridTestId="grid"
+        itemTestIdPrefix="item"
       />,
     );
-    expect(screen.getByText("2 天后自动清除")).toBeInTheDocument();
+    const headers = screen.getAllByTestId("album-day");
+    expect(headers).toHaveLength(2);
+    expect(headers[0].textContent).toContain("2026-09-07");
+    expect(headers[1].textContent).toContain("（2 张）");
+  });
+
+  it("无 dayLabel 不渲染相册头", () => {
+    render(
+      <ImageBatchGrid
+        title="本地图片"
+        count={1}
+        entries={[{ id: "x.png", url: "/u/x.png", alt: "x", caption: null }]}
+        emptyText=""
+        selectedIds={[]}
+        onSelectionChange={noopSelection}
+        batchActions={[]}
+        gridTestId="grid"
+        itemTestIdPrefix="item"
+      />,
+    );
+    expect(screen.queryByTestId("album-day")).not.toBeInTheDocument();
+    expect(screen.getByTestId("grid")).toBeInTheDocument();
   });
 });

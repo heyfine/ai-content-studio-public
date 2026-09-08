@@ -59,13 +59,12 @@ export async function GET(_request: Request, ctx: { params: Promise<{ key: strin
         { status: 502 },
       );
     }
+    const contentLength = upstream.headers.get("content-length");
     return new NextResponse(upstream.body, {
       status: 200,
       headers: {
         "Content-Type": upstream.headers.get("content-type") ?? "application/octet-stream",
-        ...(upstream.headers.get("content-length")
-          ? { "Content-Length": upstream.headers.get("content-length")! }
-          : {}),
+        ...(contentLength ? { "Content-Length": contentLength } : {}),
         "Cache-Control": "private, max-age=86400",
       },
     });

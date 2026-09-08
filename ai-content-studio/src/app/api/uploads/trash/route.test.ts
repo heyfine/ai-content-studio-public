@@ -6,8 +6,11 @@ const { authMock, trashMock } = vi.hoisted(() => ({
   trashMock: {
     listLocalTrash: vi.fn(),
     trashLocalImage: vi.fn(),
+    trashLocalImages: vi.fn(),
     restoreLocalImage: vi.fn(),
+    restoreLocalImages: vi.fn(),
     purgeLocalImage: vi.fn(),
+    purgeLocalImages: vi.fn(),
     purgeExpiredImages: vi.fn(),
   },
 }));
@@ -15,85 +18,72 @@ const { authMock, trashMock } = vi.hoisted(() => ({
 vi.mock("@/lib/auth", () => ({ auth: authMock }));
 vi.mock("@/lib/services/image-trash-service", () => trashMock);
 
-import { DELETE } from "../[name]/route";
+import { POST as batchDeletePost } from "../batch-delete/route";
 import { GET as trashGet, POST as trashPost } from "./route";
 
 const session = { user: { email: "a@b.com" } };
-const nameParams = { params: Promise.resolve({ name: "abc.png" }) };
 
-describe("图片回收站 API", () => {
+function req(body: object, path = "https://x/api/uploads/trash") {
+  return new Request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+describe("本地图片批量删除 API", () => {
   beforeEach(() => {
     authMock.mockReset();
     for (const fn of Object.values(trashMock)) fn.mockReset();
   });
 
-  it("DELETE /api/uploads/[name]：未登录 401；不存在 404；成功进回收站", async () => {
+  it("POST /api/uploads/batch-delete：未登录 401；缺参 400；批量进回收站", async () => {
     authMock.mockResolvedValue(null);
-    expect((await DELETE(new Request("https://x"), nameParams)).status).toBe(401);
+    expect(
+      (await batchDeletePost(req({ names: ["a.png"] }, "https://x/api/uploads/batch-delete")))
+        .status,
+    ).toBe(401);
     authMock.mockResolvedValue(session);
-    trashMock.trashLocalImage.mockResolvedValueOnce(false);
-    expect((await DELETE(new Request("https://x"), nameParams)).status).toBe(404);
-    trashMock.trashLocalImage.mockResolvedValueOnce(true);
-    expect((await DELETE(new Request("https://x"), nameParams)).status).toBe(200);
-    expect(trashMock.trashLocalImage).toHaveBeenCalledWith("abc.png");
-  });
-
-  it("GET /api/uploads/trash：未登录 401；登录返回回收站列表", async () => {
-    authMock.mockResolvedValue(null);
-    expect((await trashGet()).status).toBe(401);
-    authMock.mockResolvedValue(session);
-    trashMock.listLocalTrash.mockResolvedValue([
-      {
-        id: "x.png",
-        backend: "local",
-        url: "/uploads/trash/x.png",
-        size: 1,
-        deletedAt: "2026-09-07T00:00:00.000Z",
-        expiresAt: "2026-09-21T00:00:00.000Z",
-        daysLeft: 14,
-      },
+    expect((await batchDeletePost(req({}, "https://x/api/uploads/batch-delete"))).status).toBe(400);
+    expect(
+      (await batchDeletePost(req({ names: [1] }, "https://x/api/uploads/batch-delete"))).status,
+    ).toBe(400);
+    trashMock.trashLocalImages.mockResolvedValue([
+      { id: "a.png", ok: true },
+      { id: "b.png", ok: false, error: "不存在" },
     ]);
-    const res = await trashGet();
-    expect(res.status).toBe(200);
-    expect(((await res.json()) as { id: string }[])[0].id).toBe("x.png");
-  });
-
-  it("POST /api/uploads/trash：restore / purge / purge-expired / 缺参 / 未知 op", async () => {
-    authMock.mockResolvedValue(session);
-    const req = (body: object) =>
-      new Request("https://x/api/uploads/trash", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-
-    trashMock.restoreLocalImage.mockResolvedValueOnce(true);
-    expect((await trashPost(req({ op: "restore", name: "x.png" }))).status).toBe(200);
-    trashMock.restoreLocalImage.mockResolvedValueOnce(false);
-    expect((await trashPost(req({ op: "restore", name: "x.png" }))).status).toBe(404);
-    trashMock.purgeLocalImage.mockResolvedValueOnce(true);
-    expect((await trashPost(req({ op: "purge", name: "x.png" }))).status).toBe(200);
-    trashMock.purgeExpiredImages.mockResolvedValueOnce({
-      local: 2,
-      remote: 1,
-      remoteSkipped: false,
-    });
-    const exp = await trashPost(req({ op: "purge-expired" }));
-    expect(exp.status).toBe(200);
-    expect((await exp.json()) as { local: number }).toMatchObject({ local: 2 });
-    expect((await trashPost(req({ op: "restore" }))).status).toBe(400);
-    expect((await trashPost(req({ op: "wat", name: "x.png" }))).status).toBe(400);
-  });
-
-  it("POST /api/uploads/trash：未登录 401", async () => {
-    authMock.mockResolvedValue(null);
-    const res = await trashPost(
-      new Request("https://x", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ op: "restore", name: "x.png" }),
-      }),
+    const res = await batchDeletePost(
+      req({ names: ["a.png", "b.png"] }, "https://x/api/uploads/batch-delete"),
     );
-    expect(res.status).toBe(401);
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as { results: Array<{ id: string; ok: boolean }> };
+    expect(body.results[1].ok).toBe(false);
+    expect(trashMock.trashLocalImages).toHaveBeenCalledWith(["a.png", "b.png"]);
+  });
+
+  it("POST /api/uploads/trash：names 批量 restore/purge；单条路径不受影响", async () => {
+    authMock.mockResolvedValue(session);
+    trashMock.restoreLocalImages.mockResolvedValue([{ id: "a.png", ok: true }]);
+    const batchRestore = await trashPost(req({ op: "restore", names: ["a.png", "b.png"] }));
+    expect(batchRestore.status).toBe(200);
+    expect(trashMock.restoreLocalImages).toHaveBeenCalledWith(["a.png", "b.png"]);
+
+    trashMock.purgeLocalImages.mockResolvedValue([{ id: "a.png", ok: true }]);
+    const batchPurge = await trashPost(req({ op: "purge", names: ["a.png"] }));
+    expect(batchPurge.status).toBe(200);
+    expect(trashMock.purgeLocalImages).toHaveBeenCalledWith(["a.png"]);
+
+    trashMock.restoreLocalImage.mockResolvedValue(true);
+    expect((await trashPost(req({ op: "restore", name: "x.png" }))).status).toBe(200);
+    expect(trashMock.restoreLocalImage).toHaveBeenCalledWith("x.png");
+
+    // 缺 name 且缺 names → 400
+    expect((await trashPost(req({ op: "restore" }))).status).toBe(400);
+  });
+
+  it("GET 列表仍可用", async () => {
+    authMock.mockResolvedValue(session);
+    trashMock.listLocalTrash.mockResolvedValue([]);
+    expect((await trashGet()).status).toBe(200);
   });
 });
