@@ -34,7 +34,7 @@ export function LoginForm() {
       redirect: false,
     });
     if (!res || res.error) {
-      setAuthError("邮箱或密码错误");
+      setAuthError("账号或密码错误");
       return;
     }
     router.push(callbackUrl);
@@ -66,12 +66,12 @@ export function LoginForm() {
           </p>
         )}
         <div className="space-y-2">
-          <Label htmlFor="email">邮箱</Label>
+          <Label htmlFor="email">账号</Label>
           <Input
             id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@example.com"
+            type="text"
+            autoComplete="username"
+            placeholder="账号或邮箱"
             className="h-10 bg-background/60"
             {...register("email")}
           />

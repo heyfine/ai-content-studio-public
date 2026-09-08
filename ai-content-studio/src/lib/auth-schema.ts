@@ -1,7 +1,11 @@
 import { z } from "zod";
 
+/**
+ * 登录账号：自定义账号或邮箱均可（存 User.email 唯一字段）。
+ * 仅要求非空白与长度上限；邮箱格式不再是硬性要求。
+ */
 export const loginSchema = z.object({
-  email: z.string().min(1, "请输入邮箱").email("请输入有效邮箱"),
+  email: z.string().trim().min(1, "请输入账号").max(120, "账号最长 120 字符"),
   password: z.string().min(1, "请输入密码"),
 });
 

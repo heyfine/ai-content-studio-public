@@ -23,7 +23,7 @@ import {
 } from "@/lib/auth-schema";
 
 export interface ProfileFormProps {
-  /** 登录邮箱（只读展示，登录凭证不可在此修改） */
+  /** 登录账号（只读展示，登录凭证不可在此修改） */
   email: string;
   initialName: string;
 }
@@ -35,8 +35,8 @@ export function ProfileForm({ email, initialName }: ProfileFormProps) {
       <PasswordCard />
       <Card>
         <CardHeader>
-          <CardTitle>登录邮箱</CardTitle>
-          <CardDescription>邮箱为登录凭证，如需变更请联系管理员操作数据库。</CardDescription>
+          <CardTitle>登录账号</CardTitle>
+          <CardDescription>账号为登录凭证，如需变更请联系管理员操作数据库。</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-sm text-muted-foreground">{email}</p>
@@ -80,7 +80,7 @@ function NameCard({ initialName }: { initialName: string }) {
     <Card>
       <CardHeader>
         <CardTitle>用户名</CardTitle>
-        <CardDescription>显示在顶栏右上角，留空则显示邮箱。</CardDescription>
+        <CardDescription>显示在顶栏右上角，留空则显示账号。</CardDescription>
       </CardHeader>
       <form onSubmit={handleSubmit(onSubmit)}>
         <CardContent className="space-y-4">

@@ -7,13 +7,29 @@ describe("loginSchema", () => {
     expect(r.success).toBe(true);
   });
 
-  it("拒绝空邮箱", () => {
+  it("接受自定义账号（不强制邮箱格式）", () => {
+    const r = loginSchema.safeParse({ email: "xiaowang", password: "123" });
+    expect(r.success).toBe(true);
+  });
+
+  it("账号首尾空白被 trim", () => {
+    const r = loginSchema.safeParse({ email: "  xiaowang  ", password: "123" });
+    expect(r.success).toBe(true);
+    if (r.success) expect(r.data.email).toBe("xiaowang");
+  });
+
+  it("拒绝空账号", () => {
     const r = loginSchema.safeParse({ email: "", password: "123" });
     expect(r.success).toBe(false);
   });
 
-  it("拒绝非法邮箱", () => {
-    const r = loginSchema.safeParse({ email: "not-email", password: "123" });
+  it("拒绝纯空白账号", () => {
+    const r = loginSchema.safeParse({ email: "   ", password: "123" });
+    expect(r.success).toBe(false);
+  });
+
+  it("拒绝超长账号", () => {
+    const r = loginSchema.safeParse({ email: "a".repeat(121), password: "123" });
     expect(r.success).toBe(false);
   });
 
