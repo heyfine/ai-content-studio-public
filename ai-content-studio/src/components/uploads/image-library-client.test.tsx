@@ -8,6 +8,11 @@ import { type BatchGridEntry, ImageBatchGrid } from "./image-batch-grid";
 import { dayKeyOf } from "./image-format";
 import { ImageLibraryClient } from "./image-library-client";
 
+/** 取勾选框所在卡片容器（点击即切换选中） */
+function cardOf(testId: string): HTMLElement {
+  return screen.getByTestId(testId).closest("div") as HTMLElement;
+}
+
 const localImages = [
   { name: "a.png", url: "/uploads/a.png", size: 2048, mtime: "2026-09-06T10:00:00.000Z" },
 ];
@@ -84,17 +89,16 @@ describe("ImageLibraryClient 多选与批量", () => {
     localStorage.clear();
   });
 
-  it("默认渲染网格与单张操作按钮；未有多选条", async () => {
+  it("默认渲染网格与单张操作按钮；未选中时无批量条", async () => {
     fetchMock.mockImplementation(baseResponses());
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
     expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
   });
 
-  it("多选模式：勾选出现批量条与计数，全选切换", async () => {
+  it("点击图片直接选中，无需进入多选模式；连续点选多张累积，再点取消", async () => {
     fetchMock.mockImplementation(
       baseResponses({
-        remoteEnabled: true,
         localImages: [
           ...localImages,
           { name: "b.png", url: "/uploads/b.png", size: 1, mtime: "2026-09-06T11:00:00.000Z" },
@@ -103,12 +107,33 @@ describe("ImageLibraryClient 多选与批量", () => {
     );
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(2));
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    fireEvent.click(screen.getByTestId("select-a.png"));
+    // 点击卡片本体即选中（勾选框所在卡片容器）
+    fireEvent.click(cardOf("select-a.png"));
     expect(screen.getByTestId("batch-bar-local-image")).toBeInTheDocument();
     expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 1");
-    fireEvent.click(screen.getByTestId("select-b.png"));
+    fireEvent.click(cardOf("select-b.png"));
     expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 2");
+    // 再点已选中的卡片 → 取消选中
+    fireEvent.click(cardOf("select-a.png"));
+    expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 1");
+  });
+
+  it("卡片上的操作按钮不触发卡片选中切换", async () => {
+    fetchMock.mockImplementation(baseResponses());
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
+    fireEvent.click(screen.getByTestId("copy-a.png"));
+    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
+  });
+
+  it("批量条有「取消选择」一键清空", async () => {
+    fetchMock.mockImplementation(baseResponses());
+    render(<ImageLibraryClient />);
+    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
+    fireEvent.click(cardOf("select-a.png"));
+    expect(screen.getByTestId("batch-bar-local-image")).toBeInTheDocument();
+    fireEvent.click(screen.getByTestId("batch-clear-local-image"));
+    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
   });
 
   it("批量删除本地图片：确认后 POST batch-delete 并刷新", async () => {
@@ -121,8 +146,7 @@ describe("ImageLibraryClient 多选与批量", () => {
     });
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    fireEvent.click(screen.getByTestId("select-a.png"));
+    fireEvent.click(cardOf("select-a.png"));
     fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find((c) => c[0] === "/api/uploads/batch-delete");
@@ -158,9 +182,8 @@ describe("ImageLibraryClient 多选与批量", () => {
     });
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(2));
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    fireEvent.click(screen.getByTestId("select-a.png"));
-    fireEvent.click(screen.getByTestId("select-b.png"));
+    fireEvent.click(cardOf("select-a.png"));
+    fireEvent.click(cardOf("select-b.png"));
     fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     await waitFor(() =>
       expect(screen.getByRole("alert")).toHaveTextContent(/成功 1 张，失败 1 张/),
@@ -178,8 +201,7 @@ describe("ImageLibraryClient 多选与批量", () => {
     });
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("trash-image")).toHaveLength(1));
-    fireEvent.click(screen.getByTestId("batch-toggle-trash-image"));
-    fireEvent.click(screen.getByTestId("select-t1.png"));
+    fireEvent.click(cardOf("select-t1.png"));
     fireEvent.click(screen.getByRole("button", { name: "批量恢复" }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find(
@@ -215,8 +237,7 @@ describe("ImageLibraryClient 多选与批量", () => {
     });
     render(<ImageLibraryClient />);
     await waitFor(() => expect(screen.getAllByTestId("remote-image")).toHaveLength(3));
-    fireEvent.click(screen.getByTestId("batch-toggle-remote-image"));
-    fireEvent.click(screen.getByTestId("select-acs/r1.png"));
+    fireEvent.click(cardOf("select-acs/r1.png"));
     fireEvent.click(screen.getByRole("button", { name: "批量删除" }));
     await waitFor(() => {
       const call = fetchMock.mock.calls.find((c) => c[0] === "/api/storage/images/batch-delete");
@@ -227,18 +248,20 @@ describe("ImageLibraryClient 多选与批量", () => {
     confirmSpy.mockRestore();
   });
 
-  it("取消多选清空勾选并隐藏批量条", async () => {
-    fetchMock.mockImplementation(baseResponses());
+  it("相册组头「全选/取消全选」一键切换当天照片", async () => {
+    fetchMock.mockImplementation(baseResponses({ remoteEnabled: true }));
     render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getAllByTestId("local-image")).toHaveLength(1));
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    fireEvent.click(screen.getByTestId("select-a.png"));
-    expect(screen.getByTestId("batch-bar-local-image")).toBeInTheDocument();
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
-    // 再次进入多选，勾选已清空
-    fireEvent.click(screen.getByTestId("batch-toggle-local-image"));
-    expect(screen.queryByTestId("batch-bar-local-image")).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByTestId("remote-image")).toHaveLength(3));
+    // 两个相册日：09-07（1 张）、09-06（2 张）
+    fireEvent.click(screen.getByTestId("album-select-2026-09-06"));
+    expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 2");
+    // 再点 → 取消全选
+    fireEvent.click(screen.getByTestId("album-select-2026-09-06"));
+    expect(screen.queryByTestId("selection-count")).not.toBeInTheDocument();
+    // 全选按钮（批量条内）仍可用：组全选后点批量条「全选」补齐另一天
+    fireEvent.click(screen.getByTestId("album-select-2026-09-06"));
+    fireEvent.click(screen.getByTestId("album-select-2026-09-07"));
+    expect(screen.getByTestId("selection-count")).toHaveTextContent("已选 3");
   });
 });
 
