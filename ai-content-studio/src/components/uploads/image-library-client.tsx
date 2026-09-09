@@ -4,10 +4,11 @@ import {
   Copy as CopyIcon,
   Download as DownloadIcon,
   ImageUp as ImageUpIcon,
-  RotateCcw as RotateCcwIcon,
   Trash2 as Trash2Icon,
+  Trash as TrashIcon,
   Upload as UploadIcon,
 } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { type BatchBarAction, type BatchGridEntry, ImageBatchGrid } from "./image-batch-grid";
@@ -44,30 +45,28 @@ export interface TrashImageEntry {
 }
 
 /** 服务端批量结果（与 batch-delete、trash 批量 op 返回一致） */
-interface BatchItemResult {
+export interface BatchItemResult {
   id: string;
   ok: boolean;
   error?: string;
 }
 
-/** 图片库：本地图片 + 回收站 + 云端图片（含云端回收站）+ 文章图片聚合 */
+/** 图片库主页面：本地图片 + 云端图片（按日相册）+ 文章图片聚合；回收站独立页 /images/trash */
 export function ImageLibraryClient() {
   const [localImages, setLocalImages] = useState<LocalImageEntry[]>([]);
   const [articleGroups, setArticleGroups] = useState<ArticleImageGroup[]>([]);
   const [remoteImages, setRemoteImages] = useState<RemoteImageEntry[]>([]);
   const [remoteEnabled, setRemoteEnabled] = useState(false);
   const [remoteName, setRemoteName] = useState("");
-  const [trash, setTrash] = useState<TrashImageEntry[]>([]);
-  const [remoteTrash, setRemoteTrash] = useState<TrashImageEntry[]>([]);
+  const [trashCount, setTrashCount] = useState(0);
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [copyHint, setCopyHint] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  // 四个区的勾选集合（id 与后端参数同名：本地 name、云端 key）
+  // 两区勾选集合（id 与后端参数同名：本地 name、云端 key）
   const [localSel, setLocalSel] = useState<string[]>([]);
   const [remoteSel, setRemoteSel] = useState<string[]>([]);
   const [trashSel, setTrashSel] = useState<string[]>([]);
-  const [remoteTrashSel, setRemoteTrashSel] = useState<string[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function refresh() {
@@ -79,10 +78,16 @@ export function ImageLibraryClient() {
         fetch("/api/storage/images"),
         fetch("/api/uploads/trash"),
       ]);
-      if (!localRes.ok || !articleRes.ok || !trashRes.ok) throw new Error("加载图片库失败");
+      if (!localRes.ok || !articleRes.ok) throw new Error("加载图片库失败");
       setLocalImages((await localRes.json()) as LocalImageEntry[]);
       setArticleGroups((await articleRes.json()) as ArticleImageGroup[]);
-      setTrash((await trashRes.json()) as TrashImageEntry[]);
+      // 回收站角标计数（本地条数；失败不拖垮页面）
+      try {
+        const t = (await trashRes.json()) as unknown[];
+        setTrashCount(Array.isArray(t) ? t.length : 0);
+      } catch {
+        setTrashCount(0);
+      }
       // 云端区容错：对象存储接口失败只影响云端区，不拖垮图片库
       try {
         const remote = (await remoteRes.json()) as {
@@ -93,19 +98,10 @@ export function ImageLibraryClient() {
         setRemoteEnabled(remote.enabled ?? false);
         setRemoteName(remote.name ?? "");
         setRemoteImages(remote.images ?? []);
-        if (remote.enabled) {
-          const rt = (await (await fetch("/api/storage/images/trash")).json()) as {
-            images?: TrashImageEntry[];
-          };
-          setRemoteTrash(rt.images ?? []);
-        } else {
-          setRemoteTrash([]);
-        }
       } catch {
         setRemoteEnabled(false);
         setRemoteName("");
         setRemoteImages([]);
-        setRemoteTrash([]);
       }
     } catch (e) {
       setError(e instanceof Error ? e.message : String(e));
@@ -249,58 +245,6 @@ export function ImageLibraryClient() {
     }
   }
 
-  /** 批量恢复/彻底删除（本地回收站） */
-  async function batchTrashOp(
-    op: "restore" | "purge",
-    names: string[],
-    successHint: string,
-    clearSel: () => void,
-  ) {
-    try {
-      const results = await postJson("/api/uploads/trash", { op, names });
-      showBatchResult(results, successHint);
-      clearSel();
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  /** 批量恢复/彻底删除（云端回收站） */
-  async function batchRemoteTrashOp(
-    op: "restore" | "purge",
-    keys: string[],
-    successHint: string,
-    clearSel: () => void,
-  ) {
-    try {
-      const results = await postJson("/api/storage/images/trash", { op, keys });
-      showBatchResult(results, successHint);
-      clearSel();
-      await refresh();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    }
-  }
-
-  function restoreTrash(id: string) {
-    void batchTrashOp("restore", [id], "图片已恢复到本地图片库", () => setTrashSel([]));
-  }
-
-  function purgeTrash(id: string) {
-    if (!window.confirm(`彻底删除 ${id}？此操作不可恢复。`)) return;
-    void batchTrashOp("purge", [id], "已彻底删除", () => setTrashSel([]));
-  }
-
-  function restoreRemoteTrash(id: string) {
-    void batchRemoteTrashOp("restore", [id], "图片已恢复到云端图片库", () => setRemoteTrashSel([]));
-  }
-
-  function purgeRemoteTrash(id: string) {
-    if (!window.confirm(`彻底删除 ${id}？此操作不可恢复。`)) return;
-    void batchRemoteTrashOp("purge", [id], "已彻底删除", () => setRemoteTrashSel([]));
-  }
-
   return (
     <div className="space-y-8" data-testid="image-library">
       <div className="flex items-center justify-between">
@@ -322,6 +266,22 @@ export function ImageLibraryClient() {
               if (file) void uploadFile(file);
             }}
           />
+          <Button
+            size="sm"
+            variant="ghost"
+            render={<Link href="/images/trash" />}
+            data-testid="trash-entry-btn"
+          >
+            <TrashIcon className="size-4" /> 回收站
+            {trashCount > 0 && (
+              <span
+                className="ml-0.5 inline-flex min-w-5 items-center justify-center rounded-full bg-destructive px-1 text-[10px] font-medium leading-4 text-destructive-foreground"
+                data-testid="trash-count-badge"
+              >
+                {trashCount > 99 ? "99+" : trashCount}
+              </span>
+            )}
+          </Button>
           <Button
             size="sm"
             onClick={() => fileInputRef.current?.click()}
@@ -398,71 +358,6 @@ export function ImageLibraryClient() {
         itemTestIdPrefix="local-image"
       />
 
-      <ImageBatchGrid
-        title="回收站"
-        count={trash.length}
-        emptyText="回收站是空的。"
-        trashStyle
-        entries={trash.map<BatchGridEntry>((entry) => ({
-          id: entry.id,
-          url: entry.url,
-          alt: entry.id,
-          caption: (
-            <p className="text-xs text-muted-foreground" data-testid="trash-expires">
-              {formatTime(entry.deletedAt)} 删除 ·{" "}
-              <span className={entry.daysLeft <= 3 ? "text-destructive" : ""}>
-                {entry.daysLeft > 0 ? `${entry.daysLeft} 天后自动清除` : "即将自动清除"}
-              </span>
-            </p>
-          ),
-        }))}
-        selectedIds={trashSel}
-        onSelectionChange={setTrashSel}
-        batchActions={[
-          {
-            label: "批量恢复",
-            onClick: (ids) => {
-              void batchTrashOp("restore", ids, "批量恢复成功", () => setTrashSel([]));
-            },
-          },
-          {
-            label: "批量彻底删除",
-            danger: true,
-            onClick: (ids) => {
-              if (window.confirm(`彻底删除选中的 ${ids.length} 张图片？此操作不可恢复。`)) {
-                void batchTrashOp("purge", ids, "批量彻底删除成功", () => setTrashSel([]));
-              }
-            },
-          },
-        ]}
-        cardActions={(entry) => (
-          <>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="恢复图片"
-              title="恢复"
-              onClick={() => restoreTrash(entry.id)}
-              data-testid={`trash-restore-${entry.id}`}
-            >
-              <RotateCcwIcon className="size-4" />
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon"
-              aria-label="彻底删除图片"
-              title="彻底删除"
-              onClick={() => purgeTrash(entry.id)}
-              data-testid={`trash-purge-${entry.id}`}
-            >
-              <Trash2Icon className="size-4" />
-            </Button>
-          </>
-        )}
-        gridTestId="trash-grid"
-        itemTestIdPrefix="trash-image"
-      />
-
       {remoteEnabled && (
         <>
           <ImageBatchGrid
@@ -517,75 +412,6 @@ export function ImageLibraryClient() {
             )}
             gridTestId="remote-grid"
             itemTestIdPrefix="remote-image"
-          />
-
-          <ImageBatchGrid
-            title="云端回收站"
-            count={remoteTrash.length}
-            emptyText="云端回收站是空的。"
-            trashStyle
-            entries={remoteTrash.map<BatchGridEntry>((entry) => ({
-              id: entry.id,
-              url: entry.url,
-              alt: entry.id,
-              caption: (
-                <p className="text-xs text-muted-foreground" data-testid="trash-expires-remote">
-                  {formatTime(entry.deletedAt)} 删除 ·{" "}
-                  <span className={entry.daysLeft <= 3 ? "text-destructive" : ""}>
-                    {entry.daysLeft > 0 ? `${entry.daysLeft} 天后自动清除` : "即将自动清除"}
-                  </span>
-                </p>
-              ),
-            }))}
-            selectedIds={remoteTrashSel}
-            onSelectionChange={setRemoteTrashSel}
-            batchActions={[
-              {
-                label: "批量恢复",
-                onClick: (ids) => {
-                  void batchRemoteTrashOp("restore", ids, "批量恢复成功", () =>
-                    setRemoteTrashSel([]),
-                  );
-                },
-              },
-              {
-                label: "批量彻底删除",
-                danger: true,
-                onClick: (ids) => {
-                  if (window.confirm(`彻底删除选中的 ${ids.length} 张图片？此操作不可恢复。`)) {
-                    void batchRemoteTrashOp("purge", ids, "批量彻底删除成功", () =>
-                      setRemoteTrashSel([]),
-                    );
-                  }
-                },
-              },
-            ]}
-            cardActions={(entry) => (
-              <>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="恢复图片"
-                  title="恢复"
-                  onClick={() => restoreRemoteTrash(entry.id)}
-                  data-testid={`trash-restore-${entry.id}`}
-                >
-                  <RotateCcwIcon className="size-4" />
-                </Button>
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  aria-label="彻底删除图片"
-                  title="彻底删除"
-                  onClick={() => purgeRemoteTrash(entry.id)}
-                  data-testid={`trash-purge-${entry.id}`}
-                >
-                  <Trash2Icon className="size-4" />
-                </Button>
-              </>
-            )}
-            gridTestId="remote-trash-grid"
-            itemTestIdPrefix="remote-trash-image"
           />
         </>
       )}
@@ -650,7 +476,7 @@ export function ImageLibraryClient() {
       <p className="text-xs text-muted-foreground">
         <ImageUpIcon className="mr-1 inline size-3" />
         图片存于服务器 public/uploads（本地开发为
-        localhost:3000/uploads/...），部署后可换对象存储；删除的图片在回收站保留 14
+        localhost:3000/uploads/...），部署后可换对象存储；删除的图片进入回收站（右上角按钮）保留 14
         天，恢复后原链接继续可用。
       </p>
     </div>

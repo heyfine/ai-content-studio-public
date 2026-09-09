@@ -191,31 +191,6 @@ describe("ImageLibraryClient 多选与批量", () => {
     confirmSpy.mockRestore();
   });
 
-  it("回收站批量恢复/彻底删除走 POST op+names", async () => {
-    const confirmSpy = vi.spyOn(window, "confirm").mockReturnValue(true);
-    fetchMock.mockImplementation(async (url: string, init?: RequestInit) => {
-      if (url === "/api/uploads/trash" && init?.method === "POST") {
-        return { ok: true, json: async () => ({ results: [{ id: "t1.png", ok: true }] }) };
-      }
-      return baseResponses()(url, init);
-    });
-    render(<ImageLibraryClient />);
-    await waitFor(() => expect(screen.getAllByTestId("trash-image")).toHaveLength(1));
-    fireEvent.click(cardOf("select-t1.png"));
-    fireEvent.click(screen.getByRole("button", { name: "批量恢复" }));
-    await waitFor(() => {
-      const call = fetchMock.mock.calls.find(
-        (c) =>
-          c[0] === "/api/uploads/trash" && (c[1] as RequestInit | undefined)?.method === "POST",
-      );
-      expect(JSON.parse(String((call as [string, RequestInit])[1].body))).toEqual({
-        op: "restore",
-        names: ["t1.png"],
-      });
-    });
-    confirmSpy.mockRestore();
-  });
-
   it("云端图片按日相册分组渲染", async () => {
     fetchMock.mockImplementation(baseResponses({ remoteEnabled: true }));
     render(<ImageLibraryClient />);

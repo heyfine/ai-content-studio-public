@@ -22,7 +22,7 @@ import {
   getPreset,
   S3_CLIENT_APP_OPTIONS,
   S3_PROVIDER_PRESETS,
-} from "@/lib/services/storage-service";
+} from "@/lib/services/storage-providers";
 
 interface StorageConfigSafe {
   id: string;

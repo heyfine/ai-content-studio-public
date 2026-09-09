@@ -22,6 +22,7 @@ import {
 } from "@aws-sdk/client-s3";
 import { decrypt, encrypt } from "@/lib/crypto";
 import { prisma } from "@/lib/prisma";
+import { remoteTrashPrefix } from "./image-trash-service";
 import { getPreset, inferProviderIdFromEndpoint, resolveUserAgent } from "./storage-providers";
 
 export type { S3ClientAppId, S3ProviderPreset } from "./storage-providers";
@@ -234,10 +235,11 @@ export interface RemoteImageEntry {
   mtime: string;
 }
 
-/** 列举桶内指定前缀下的图片对象（按时间倒序）；url 同样区分直出/代理 */
+/** 列举桶内指定前缀下的图片对象（按时间倒序）；excludePrefixes 用于排除回收站等子前缀 */
 export async function listObjectsUnderPrefix(
   row: StorageConfigRow,
   prefix: string,
+  excludePrefixes: string[] = [],
 ): Promise<RemoteImageEntry[]> {
   const client = buildClient(row);
   const keys: Array<{ key: string; size: number; mtime: string }> = [];
@@ -254,6 +256,7 @@ export async function listObjectsUnderPrefix(
       );
       for (const obj of res.Contents ?? []) {
         if (!obj.Key) continue;
+        if (excludePrefixes.some((p) => obj.Key!.startsWith(p))) continue;
         keys.push({
           key: obj.Key,
           size: obj.Size ?? 0,
@@ -273,9 +276,9 @@ export async function listObjectsUnderPrefix(
   return out;
 }
 
-/** 列举桶内 keyPrefix 下的图片对象（按时间倒序）；url 同样区分直出/代理 */
+/** 列举桶内 keyPrefix 下的图片对象（按时间倒序）；排除回收站前缀，url 区分直出/代理 */
 export async function listRemoteImages(row: StorageConfigRow): Promise<RemoteImageEntry[]> {
-  return listObjectsUnderPrefix(row, row.keyPrefix);
+  return listObjectsUnderPrefix(row, row.keyPrefix, [remoteTrashPrefix(row.keyPrefix)]);
 }
 
 /** 桶内复制对象（回收站移动用：Copy 到目标 key 后删除源对象） */
