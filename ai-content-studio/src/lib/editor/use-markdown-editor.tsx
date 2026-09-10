@@ -4,7 +4,6 @@ import CharacterCount from "@tiptap/extension-character-count";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import Image from "@tiptap/extension-image";
 import Placeholder from "@tiptap/extension-placeholder";
-import { Table } from "@tiptap/extension-table";
 import { TableCell } from "@tiptap/extension-table-cell";
 import { TableHeader } from "@tiptap/extension-table-header";
 import { TableRow } from "@tiptap/extension-table-row";
@@ -29,6 +28,9 @@ import {
 } from "./extensions/markdown-style-bridge";
 import { PasteImage } from "./extensions/paste-image";
 import { SlashCommand } from "./extensions/slash-command/slash-command";
+// Table 用 table-background 的桥接版：带底色/对齐/合并单元格的表格序列化进
+// Markdown 时整体内嵌 HTML，重开不丢格式（见该文件头注释）
+import { TableCellBackground, TableMarkdown } from "./extensions/table-background";
 
 const lowlight = createLowlight(common);
 
@@ -67,10 +69,11 @@ const baseExtensions = (placeholder?: string) => [
   Indent,
   Callout,
   Image,
-  Table.configure({ resizable: true }),
+  TableMarkdown.configure({ resizable: true }),
   TableRow,
   TableHeader,
   TableCell,
+  TableCellBackground,
   TaskList,
   TaskItem.configure({ nested: true }),
   CodeBlockLowlight.configure({ lowlight }),

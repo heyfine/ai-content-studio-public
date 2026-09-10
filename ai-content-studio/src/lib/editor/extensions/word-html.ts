@@ -57,6 +57,14 @@ function headingLevel(
   return 0;
 }
 
+/** 从原始 style 字符串提取声明值（绕开 CSSOM 对 background 简写解析不一致的问题）。
+ * 锚定属性起始位，避免误匹配 mso-background / background-image 等。 */
+function cssDecl(style: string, prop: string): string | null {
+  const m = style.match(new RegExp(`(?:^|;)\\s*${prop}(?:-color)?\\s*:\\s*([^;]+)`, "i"));
+  const v = m?.[1].trim();
+  return v ? v : null;
+}
+
 /** 判断是否 Word 粘贴 HTML（含 Word 命名空间或 mso 标记） */
 export function isWordHtml(html: string): boolean {
   return /xmlns:o="urn:schemas-microsoft-com|class="?Mso|<o:p>|mso-|<!--\[if/i.test(html);
@@ -77,9 +85,7 @@ export function normalizeWordHtml(html: string): string {
   for (const div of Array.from(body.querySelectorAll("div"))) {
     const align = div.style.textAlign;
     if (align && align !== "left") {
-      for (const p of Array.from(
-        div.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6"),
-      )) {
+      for (const p of Array.from(div.querySelectorAll<HTMLElement>("p, h1, h2, h3, h4, h5, h6"))) {
         if (!p.style.textAlign) p.style.textAlign = align;
       }
     }
@@ -143,15 +149,32 @@ export function normalizeWordHtml(html: string): string {
     }
   }
 
-  // 6. 清掉容器残余 mso 样式与 class（MsoNormal 等编辑器用不到）
+  // 6. 清掉容器残余 mso 样式与 class（MsoNormal 等编辑器用不到）。
+  //    表格单元格例外：Word 的 td/th 样式几乎必含 mso-border-*/mso-padding-alt，
+  //    整删 style 会把表头底色连坐丢掉（「深蓝底白字」变白底白字不可读）。
+  //    因此剥离前摘出 background 保留；td 级 text-align 下传给单元格内段落
+  //    （Tiptap TextAlign 只解析块级 align，td 上的会被 ProseMirror 丢弃）。
   for (const el of Array.from(body.querySelectorAll("[class]"))) {
     el.removeAttribute("class");
   }
   for (const el of Array.from(
-    body.querySelectorAll("ul, ol, li, table, thead, tbody, tr, td, th, h1, h2, h3, h4, h5, h6"),
+    body.querySelectorAll("ul, ol, li, table, thead, tbody, tr, h1, h2, h3, h4, h5, h6"),
   )) {
     const style = (el.getAttribute("style") ?? "").toLowerCase();
     if (style.includes("mso-")) el.removeAttribute("style");
+  }
+  for (const el of Array.from(body.querySelectorAll<HTMLElement>("td, th"))) {
+    const raw = el.getAttribute("style") ?? "";
+    if (!raw.toLowerCase().includes("mso-")) continue;
+    const bg = cssDecl(raw, "background");
+    const align = cssDecl(raw, "text-align");
+    el.removeAttribute("style");
+    if (bg && bg.toLowerCase() !== "transparent") el.style.backgroundColor = bg;
+    if (align && align.toLowerCase() !== "left") {
+      for (const p of Array.from(el.querySelectorAll<HTMLElement>("p"))) {
+        if (!p.style.textAlign) p.style.textAlign = align;
+      }
+    }
   }
 
   return body.innerHTML;

@@ -82,4 +82,46 @@ describe("normalizeWordHtml", () => {
     expect(out).toContain("<li>项目一</li>");
     expect(out).toContain("<li>项目二</li>");
   });
+
+  it("Word 表格：td 的 background 在剥离 mso 样式时保留，表头白字加粗不丢", () => {
+    const out = normalizeWordHtml(
+      `<table class="MsoNormalTable" style="border-collapse:collapse;mso-padding-alt:0cm 5.4pt"><tbody>` +
+        `<tr><td width="187" style="border:solid windowtext 1.0pt;mso-border-alt:solid windowtext .5pt;background:#1F4E79;padding:0cm 5.4pt">` +
+        `<p class="MsoNormal" style="text-align:center"><span style="color:white;font-weight:bold">对比项</span></p></td>` +
+        `<td width="187" style="mso-border-alt:solid windowtext .5pt;background:#1F4E79;padding:0cm 5.4pt">` +
+        `<p class="MsoNormal"><b>AutoBackup</b></p></td></tr>` +
+        `<tr><td style="mso-border-alt:solid windowtext .5pt;padding:0cm 5.4pt">` +
+        `<p class="MsoNormal">应用新加了个数据库</p></td>` +
+        `<td style="mso-border-alt:solid windowtext .5pt;padding:0cm 5.4pt">` +
+        `<p class="MsoNormal">手动往脚本里加一行</p></td></tr></tbody></table>`,
+    );
+    // 表头两格背景保留（jsdom 把 #1F4E79 规范化为 rgb）；数据行无背景不受影响
+    expect((out.match(/background-color:\s*rgb\(31,\s*78,\s*121\)/g) ?? []).length).toBe(2);
+    expect(out).not.toContain("mso-border-alt");
+    expect(out).not.toContain("border:solid");
+    // 表头文字：白字色 + 加粗语义都保留（strong 标签或 b 标签均被 PM 解析为粗体）
+    expect(out).toContain("color:");
+    expect(out).toContain("<strong>对比项</strong>");
+    expect(out).toMatch(/<(strong|b)>AutoBackup<\/\1>/);
+    // 单元格内段落对齐保留
+    expect(out.replace(/\s+/g, "")).toContain("text-align:center");
+    expect(out).toContain("<td");
+  });
+
+  it("Word 表格：td 上的 text-align 下传到单元格内段落", () => {
+    const out = normalizeWordHtml(
+      `<table><tbody><tr>` +
+        `<td style="mso-border-alt:solid windowtext .5pt;text-align:center;background:#1F4E79">` +
+        `<p class="MsoNormal"><span style="color:white">对比项</span></p></td></tr></tbody></table>`,
+    );
+    expect(out.replace(/\s+/g, "")).toContain("text-align:center");
+    expect(out).toContain("background-color:");
+  });
+
+  it("Word 表格：无 mso 样式的 td 原样保留（含 background）", () => {
+    const out = normalizeWordHtml(
+      `<table><tbody><tr><td style="background:#1F4E79"><p>x</p></td></tr></tbody></table>`,
+    );
+    expect(out).toContain("background");
+  });
 });
