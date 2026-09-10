@@ -1,0 +1,165 @@
+import { Editor } from "@tiptap/core";
+import Image from "@tiptap/extension-image";
+import { TableCell } from "@tiptap/extension-table-cell";
+import { TableHeader } from "@tiptap/extension-table-header";
+import { TableRow } from "@tiptap/extension-table-row";
+import TextAlign from "@tiptap/extension-text-align";
+// text-style 包内含 Color + BackgroundColor（与 use-markdown-editor 相同注册）
+import { BackgroundColor, Color } from "@tiptap/extension-text-style";
+import StarterKit from "@tiptap/starter-kit";
+import { afterEach, describe, expect, it, vi } from "vitest";
+import { Markdown } from "./extensions/markdown";
+import { TextStyleMarkdown } from "./extensions/markdown-style-bridge";
+import { TableCellBackground, TableMarkdown } from "./extensions/table-background";
+import { convertHtmlToSlice } from "./html-import";
+
+/** 与 use-markdown-editor 对齐的 schema 子集（覆盖标题/列表/表格/图片/样式类节点） */
+function makeSchema(): Editor {
+  return new Editor({
+    extensions: [
+      StarterKit,
+      Image,
+      TextStyleMarkdown,
+      Color,
+      BackgroundColor,
+      TextAlign.configure({ types: ["heading", "paragraph"] }),
+      TableMarkdown.configure({ resizable: true }),
+      TableRow,
+      TableHeader,
+      TableCell,
+      TableCellBackground,
+      Markdown,
+    ],
+    content: "",
+    editable: false,
+  });
+}
+
+interface PMNode {
+  type: { name: string };
+  attrs?: Record<string, unknown>;
+  marks?: Array<{ type: { name: string }; attrs?: Record<string, unknown> }>;
+  text?: string;
+  content?: unknown;
+  forEach?: (f: (n: PMNode) => void) => void;
+}
+
+/** Fragment / slice.content → 数组（PM 节点 children 不是原生数组） */
+function arr(container: unknown): PMNode[] {
+  const out: PMNode[] = [];
+  const frag = container as { forEach?: (f: (n: PMNode) => void) => void } | undefined;
+  frag?.forEach?.((n) => {
+    out.push(n);
+  });
+  return out;
+}
+
+function sliceNodes(res: { slice: { content: unknown } }): PMNode[] {
+  return arr(res.slice.content);
+}
+
+function firstChild(res: { slice: { content: unknown } }): PMNode {
+  const nodes = sliceNodes(res);
+  if (nodes.length === 0) throw new Error("slice 为空");
+  return nodes[0] as PMNode;
+}
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+describe("convertHtmlToSlice", () => {
+  it("内联样式 HTML：标题层级/段落对齐/加粗+文字色 marks 全保留", async () => {
+    const e = makeSchema();
+    const res = await convertHtmlToSlice(
+      `<h2>小章节</h2>` +
+        `<p style="text-align:center"><span style="font-weight:bold;color:rgb(255,0,0)">红粗</span></p>`,
+      e.schema,
+    );
+    const heading = firstChild(res);
+    expect(heading.type.name).toBe("heading");
+    expect(heading.attrs?.level).toBe(2);
+
+    // parseSlice 平铺在 content 上：取第二个子节点断言段落对齐与 marks
+    const nodes = sliceNodes(res);
+    expect(nodes[1]?.type.name).toBe("paragraph");
+    expect(nodes[1]?.attrs?.textAlign).toBe("center");
+    const text = arr(nodes[1]?.content)[0];
+    expect(text?.marks?.some((m) => m.type.name === "bold")).toBe(true);
+    const ts = text?.marks?.find((m) => m.type.name === "textStyle");
+    // jsdom CSSOM 会给 rgb() 逗号后补空格，宽松比较
+    expect(String(ts?.attrs?.color ?? "").replace(/\s/g, "")).toBe("rgb(255,0,0)");
+    e.destroy();
+  });
+
+  it("Word 源码：mso 样式 + 22pt 加粗 → h1，表头底色进单元格 attrs", async () => {
+    const e = makeSchema();
+    const res = await convertHtmlToSlice(
+      `<p class="MsoNormal" style="font-size:22.0pt"><span style="font-weight:bold">网关接入记</span></p>` +
+        `<table><tbody><tr><td width="187" style="mso-border-alt:solid windowtext .5pt;background:#1F4E79">` +
+        `<p class="MsoNormal"><span style="color:white">对比项</span></p></td></tr></tbody></table>`,
+      e.schema,
+    );
+    const nodes = sliceNodes(res);
+    expect(nodes[0]?.type.name).toBe("heading");
+    expect(nodes[0]?.attrs?.level).toBe(1);
+
+    const table = nodes[1];
+    expect(table?.type.name).toBe("table");
+    const row = arr(table?.content)[0];
+    const cell = arr(row?.content)[0];
+    expect(cell?.attrs?.background).toBe("rgb(31, 78, 121)");
+    e.destroy();
+  });
+
+  it("data: 图片自动转存上传，src 换成站内 URL", async () => {
+    const pngB64 =
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+    const dataUrl = `data:image/png;base64,${pngB64}`;
+    const fetchMock = vi.fn(async (input: unknown) => {
+      const url = String(input);
+      if (url.startsWith("data:")) {
+        const bytes = Uint8Array.from(atob(pngB64), (c) => c.charCodeAt(0));
+        return new Response(new Blob([bytes], { type: "image/png" }));
+      }
+      if (url === "/api/uploads/image") {
+        return Response.json({ url: "/uploads/imported.png" }, { status: 201 });
+      }
+      throw new Error(`unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal("fetch", fetchMock);
+
+    const e = makeSchema();
+    const res = await convertHtmlToSlice(`<p><img src="${dataUrl}"></p>`, e.schema);
+    // Tiptap v3 Image 为块级 atom：段落中的 img 解析后成为顶层 image 节点
+    const nodes = sliceNodes(res);
+    const img =
+      nodes.find((n) => n.type.name === "image") ??
+      arr(nodes[0]?.content).find((c) => c.type.name === "image");
+    expect(img?.attrs?.src).toBe("/uploads/imported.png");
+    e.destroy();
+  });
+
+  it("file:// 不可达图片丢弃并计数（不产生裂图节点）", async () => {
+    const e = makeSchema();
+    const res = await convertHtmlToSlice(
+      `<p>前文</p><p><img src="file:///C:/Users/x/a.png"></p>`,
+      e.schema,
+    );
+    expect(res.droppedImages).toBe(1);
+    let imgCount = 0;
+    for (const n of sliceNodes(res)) {
+      if (n.type.name === "image") imgCount++;
+      for (const c of arr(n.content)) if (c.type.name === "image") imgCount++;
+    }
+    expect(imgCount).toBe(0);
+    e.destroy();
+  });
+
+  it("空白输入返回空 slice（由 UI 层提示）", async () => {
+    const e = makeSchema();
+    const res = await convertHtmlToSlice("   \n  ", e.schema);
+    expect(res.slice.content.size).toBe(0);
+    e.destroy();
+  });
+});

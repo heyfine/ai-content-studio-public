@@ -1,8 +1,7 @@
 "use client";
 
-import type { Editor } from "@tiptap/react";
 import type { Fragment, Node as ProseMirrorNode } from "@tiptap/pm/model";
-import { useEffect, useRef, useState } from "react";
+import type { Editor } from "@tiptap/react";
 import {
   AlignCenter as AlignCenterIcon,
   AlignLeft as AlignLeftIcon,
@@ -19,23 +18,24 @@ import {
   Italic as ItalicIcon,
   List as ListIcon,
   ListOrdered as ListOrderedIcon,
-  ListTodo as TaskListIcon,
   Minus as MinusIcon,
   Pilcrow as PilcrowIcon,
   Quote as QuoteIcon,
   Strikethrough as StrikethroughIcon,
   Table as TableIcon,
+  ListTodo as TaskListIcon,
   Underline as UnderlineIcon,
 } from "lucide-react";
-
-import { CALLOUT_TYPES, type CalloutType } from "@/lib/content/callout-types";
-import { CalloutColorPicker } from "../extensions/callout/callout-color-picker";
+import { useEffect, useRef, useState } from "react";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { CALLOUT_TYPES, type CalloutType } from "@/lib/content/callout-types";
+import { CalloutColorPicker } from "../extensions/callout/callout-color-picker";
+import { HtmlSourceButton } from "./html-source-button";
 
 export interface EditorToolbarProps {
   editor: Editor | null;
@@ -123,9 +123,10 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
     const { state, schema } = ed;
     const slice = state.selection.content();
     let content: Fragment | ProseMirrorNode;
+    const first = slice.content.firstChild;
     if (slice.content.size === 0) {
       content = schema.nodes.paragraph.create();
-    } else if (slice.content.childCount === 1 && slice.content.firstChild!.isTextblock) {
+    } else if (slice.content.childCount === 1 && first && first.isTextblock) {
       content = slice.content;
     } else {
       let allBlocks = true;
@@ -163,9 +164,10 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
 
   return (
     <div
+      role="toolbar"
+      aria-label="编辑器工具栏"
       className="flex flex-wrap items-center gap-0.5 rounded-md border bg-background px-1.5 py-1"
       data-testid="editor-toolbar"
-      aria-label="编辑器工具栏"
     >
       {/* 行内格式 */}
       <button
@@ -236,7 +238,12 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         </button>
         {colorPanel === "text" && (
           <>
-            <div className="callout-color-backdrop" onClick={() => setColorPanel(null)} />
+            <button
+              type="button"
+              aria-label="关闭颜色面板"
+              className="callout-color-backdrop"
+              onClick={() => setColorPanel(null)}
+            />
             <CalloutColorPicker
               value={textColor}
               onPick={applyTextColor}
@@ -269,7 +276,12 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
         </button>
         {colorPanel === "bg" && (
           <>
-            <div className="callout-color-backdrop" onClick={() => setColorPanel(null)} />
+            <button
+              type="button"
+              aria-label="关闭颜色面板"
+              className="callout-color-backdrop"
+              onClick={() => setColorPanel(null)}
+            />
             <CalloutColorPicker
               value={textBg}
               onPick={applyTextBg}
@@ -493,6 +505,7 @@ export function EditorToolbar({ editor, imagePrompt }: EditorToolbarProps) {
       >
         <CodeXmlIcon className="size-4" />
       </button>
+      <HtmlSourceButton editor={editor} />
       <button
         type="button"
         aria-label="分割线"

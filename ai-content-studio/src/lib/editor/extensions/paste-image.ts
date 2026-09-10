@@ -108,8 +108,8 @@ export function preparePasteHtml(html: string, rtfImages: RtfImage[] = []): Prep
   };
 }
 
-/** 把 data:/blob: 图转存到本地图片库，返回 src → 新 URL 映射 */
-async function uploadInlineImages(jobs: PasteImageJob[]): Promise<Map<string, string>> {
+/** 把 data:/blob: 图转存到本地图片库，返回 src → 新 URL 映射（html-import 源码转换共用） */
+export async function uploadInlineImages(jobs: PasteImageJob[]): Promise<Map<string, string>> {
   const urlBySrc = new Map<string, string>();
   await Promise.all(
     jobs.map(async (job) => {
