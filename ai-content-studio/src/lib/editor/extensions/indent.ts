@@ -1,4 +1,4 @@
-import { Extension, type CommandProps } from "@tiptap/core";
+import { type CommandProps, Extension } from "@tiptap/core";
 
 export interface IndentOptions {
   /** 应用缩进的节点类型 */
@@ -22,7 +22,8 @@ declare module "@tiptap/core" {
 
 /**
  * 段落/标题缩进：给节点加 padding-left 内联样式。
- * 纯视觉属性，不参与 markdown 序列化（markdown 无缩进语法）。
+ * 纯视觉属性；Markdown 往返由 markdown-style-bridge 的段落/标题钩子在块级
+ * style 中一并输出 padding-left（HTML 源码转换的下传缩进靠此重开不丢）。
  */
 export const Indent = Extension.create<IndentOptions>({
   name: "indent",

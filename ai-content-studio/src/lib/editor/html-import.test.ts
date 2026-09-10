@@ -8,6 +8,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import { BackgroundColor, Color } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BlockBoxStyles } from "./extensions/block-box-styles";
+import { Indent } from "./extensions/indent";
 import { Markdown } from "./extensions/markdown";
 import { TextStyleMarkdown } from "./extensions/markdown-style-bridge";
 import { TableCellBackground, TableMarkdown } from "./extensions/table-background";
@@ -22,6 +24,8 @@ function makeSchema(): Editor {
       TextStyleMarkdown,
       Color,
       BackgroundColor,
+      Indent,
+      BlockBoxStyles,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TableMarkdown.configure({ resizable: true }),
       TableRow,
@@ -160,6 +164,62 @@ describe("convertHtmlToSlice", () => {
     const e = makeSchema();
     const res = await convertHtmlToSlice("   \n  ", e.schema);
     expect(res.slice.content.size).toBe(0);
+    e.destroy();
+  });
+
+  it("外链 style 文档：先经内联器再进管道；无 style 文档不触发内联", async () => {
+    const e = makeSchema();
+    // 无 <style> 的纯内联文档：不调用内联器（零开销）
+    const spyIdle = vi.fn(async (h: string) => h);
+    await convertHtmlToSlice('<p style="color:red">内联文档</p>', e.schema, {
+      inlineStyles: spyIdle,
+    });
+    expect(spyIdle).not.toHaveBeenCalled();
+
+    // 带 <style> 的非 Word 文档：调用注入的内联实现，产物块级底色进段落 attrs
+    const spyInline = vi.fn(
+      async () =>
+        `<div style="background-color:rgb(22,38,63)"><p style="background-color:rgb(22,38,63)">自检清单</p></div>`,
+    );
+    const res = await convertHtmlToSlice(
+      `<style>.qa{background:#16263f}</style><div class="qa"><p>自检清单</p></div>`,
+      e.schema,
+      { inlineStyles: spyInline },
+    );
+    expect(spyInline).toHaveBeenCalledOnce();
+    const p = sliceNodes(res).find((n) => n.type.name === "paragraph");
+    expect(String(p?.attrs?.backgroundColor ?? "").replace(/\s+/g, "")).toBe("rgb(22,38,63)");
+    e.destroy();
+  });
+
+  it("深底白字块端到端：p 底色 attrs + 文字 color textStyle mark（本轮事故回归锁）", async () => {
+    const e = makeSchema();
+    // 模拟浏览器 inliner 的真实输出形制：块级色包 span，容器色下传
+    const res = await convertHtmlToSlice(
+      `<style>.qa{background:#16263f;color:#e8f1ff}</style>`, // 触发内联器
+      e.schema,
+      {
+        inlineStyles: async () =>
+          `<h2 style="color:rgb(232,241,255);background-color:rgb(22,38,63)">` +
+          `<span style="color:rgb(232, 241, 255)">BACKUP 自检清单</span></h2>` +
+          `<ul><li style="color:rgb(232,241,255)"><span style="color:rgb(232,241,255)">问题一</span></li></ul>`,
+      },
+    );
+    const h2 = sliceNodes(res).find((n) => n.type.name === "heading");
+    expect(h2?.attrs?.backgroundColor).toBeTruthy();
+    const h2Text = arr(h2?.content)[0];
+    const h2Color = h2Text?.marks?.find((m) => m.type.name === "textStyle")?.attrs?.color;
+    expect(String(h2Color ?? "").replace(/\s+/g, "")).toBe("rgb(232,241,255)");
+    const li = arr(
+      arr(sliceNodes(res).find((n) => n.type.name === "bulletList")?.content)[0]?.content,
+    )[0];
+    const liText = arr(li?.content)[0];
+    expect(
+      String(liText?.marks?.find((m) => m.type.name === "textStyle")?.attrs?.color ?? "").replace(
+        /\s+/g,
+        "",
+      ),
+    ).toBe("rgb(232,241,255)");
     e.destroy();
   });
 });

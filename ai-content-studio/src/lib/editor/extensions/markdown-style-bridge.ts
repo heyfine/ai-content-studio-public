@@ -8,7 +8,8 @@
  * 方案：通过 tiptap-markdown 的 storage.markdown.serialize 钩子，把带样式的
  * 节点/mark 序列化为 Markdown 内嵌 HTML。marked（html:true）原样透传，WordPress
  * 与公众号内联化渲染器都保留 style 属性，实现「编辑器 = 预览 = 发布」：
- * - paragraph/heading 带 textAlign → <p style="text-align:center">…</p>（整块 HTML）
+ * - paragraph/heading 带 对齐/底色/左色条/缩进 → <p style="text-align:center;
+ *   background-color:…;border-left:…;padding-left:…">…</p>（整块 HTML）
  * - textStyle 带 color/backgroundColor → <span style="color:…">…</span>（行内 HTML）
  * - 无样式时走默认 Markdown 输出（## 标题 / 纯段落 / **粗体**），不产生冗余 HTML
  *
@@ -123,17 +124,34 @@ interface SerializerState {
   repeat: (str: string, n: number) => string;
 }
 
-/** 标题对齐 → <h2 style="text-align:center">（无对齐走默认 ## 输出） */
+/**
+ * 块级样式声明收集：对齐/底色/左色条/缩进（BlockBoxStyles+Indent 属性）。
+ * 非空 → 整块内嵌 HTML 输出；空 → 走默认 Markdown（## / 纯段落），不产冗余。
+ */
+function blockStyleParts(attrs: Record<string, unknown>): string[] {
+  const parts: string[] = [];
+  const align = (attrs.textAlign as string | null) ?? "";
+  if (align && align !== "left") parts.push(`text-align:${align}`);
+  const bg = (attrs.backgroundColor as string | null) ?? "";
+  if (bg) parts.push(`background-color:${bg}`);
+  const border = (attrs.borderLeft as string | null) ?? "";
+  if (border) parts.push(`border-left:${border}`);
+  const indent = Number(attrs.indent ?? 0);
+  if (indent > 0) parts.push(`padding-left:${indent}px`);
+  return parts;
+}
+
+/** 标题：带块级样式 → <h2 style="…">（无样式走默认 ## 输出） */
 export const HeadingMarkdown = Heading.extend({
   addStorage() {
     return {
       markdown: {
         serialize(state: unknown, node: PMNode) {
           const s = state as SerializerState;
-          const style = (node.attrs?.textAlign as string | null) ?? "";
-          if (style && style !== "left") {
+          const parts = blockStyleParts(node.attrs as unknown as Record<string, unknown>);
+          if (parts.length > 0) {
             s.write(
-              `<h${node.attrs.level} style="text-align:${style}">${inlineToHtml(node)}</h${node.attrs.level}>`,
+              `<h${node.attrs.level} style="${parts.join(";")}">${inlineToHtml(node)}</h${node.attrs.level}>`,
             );
             s.closeBlock(node);
             return;
@@ -149,16 +167,16 @@ export const HeadingMarkdown = Heading.extend({
   },
 });
 
-/** 段落对齐 → <p style="text-align:center">（无对齐走默认段落输出） */
+/** 段落：带块级样式（对齐/底色/色条/缩进）→ <p style="…">（无样式走默认输出） */
 export const ParagraphMarkdown = Paragraph.extend({
   addStorage() {
     return {
       markdown: {
         serialize(state: unknown, node: PMNode) {
           const s = state as SerializerState;
-          const style = (node.attrs?.textAlign as string | null) ?? "";
-          if (style && style !== "left") {
-            s.write(`<p style="text-align:${style}">${inlineToHtml(node)}</p>`);
+          const parts = blockStyleParts(node.attrs as unknown as Record<string, unknown>);
+          if (parts.length > 0) {
+            s.write(`<p style="${parts.join(";")}">${inlineToHtml(node)}</p>`);
             s.closeBlock(node);
             return;
           }

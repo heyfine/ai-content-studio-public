@@ -4,6 +4,8 @@ import TextAlign from "@tiptap/extension-text-align";
 import { BackgroundColor, Color } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { BlockBoxStyles } from "./block-box-styles";
+import { Indent } from "./indent";
 import { Markdown } from "./markdown";
 import { HeadingMarkdown, ParagraphMarkdown, TextStyleMarkdown } from "./markdown-style-bridge";
 
@@ -17,6 +19,8 @@ function makeEditor(initial?: string): Editor {
       HeadingMarkdown,
       ParagraphMarkdown,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
+      BlockBoxStyles,
+      Indent,
       Image,
       Markdown,
     ],
@@ -99,6 +103,34 @@ describe("markdown-style-bridge 序列化", () => {
     const html = editor.getHTML();
     expect(html).toContain("text-align");
     expect(html).toContain("color");
+    editor.destroy();
+  });
+
+  it("块级底色/左色条/缩进 → 内嵌 <p style>，往返重开不丢", () => {
+    const editor = makeEditor(
+      `<p style="background-color:rgb(22,38,63);border-left:4px solid rgb(74,134,232);padding-left:24px">深色引用块</p>`,
+    );
+    const md = getMarkdown(editor);
+    // CSSOM 会给 rgb() 逗号补空格，统一去空白后比较
+    const flat = md.replace(/\s+/g, "");
+    expect(flat).toContain("<p");
+    expect(flat).toContain("background-color:rgb(22,38,63)");
+    expect(flat).toContain("border-left:4pxsolidrgb(74,134,232)");
+    expect(flat).toContain("padding-left:24px");
+    expect(md).toContain("深色引用块");
+    const reopened = makeEditor(md);
+    const doc = JSON.stringify(reopened.getJSON()).replace(/\s+/g, "");
+    expect(doc).toContain("rgb(22,38,63)");
+    expect(doc).toContain("4pxsolidrgb(74,134,232)");
+    editor.destroy();
+    reopened.destroy();
+  });
+
+  it("标题带底色同样内嵌（h2 style）", () => {
+    const editor = makeEditor('<h2 style="background-color:rgb(245,249,255)">小节底色</h2>');
+    const md = getMarkdown(editor).replace(/\s+/g, "");
+    expect(md).toContain("<h2");
+    expect(md).toContain("background-color:rgb(245,249,255)");
     editor.destroy();
   });
 });

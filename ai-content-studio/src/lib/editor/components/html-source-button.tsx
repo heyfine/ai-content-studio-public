@@ -98,9 +98,9 @@ export function HtmlSourceButton({ editor }: { editor: Editor | null }) {
           <DialogHeader>
             <DialogTitle>HTML 源码转换</DialogTitle>
             <DialogDescription>
-              粘贴一段 HTML 源码，转换后按原效果生成可编辑正文。保留内联样式（标题/加粗/颜色/
-              背景/对齐/表格底色/图片/链接/列表等）；class 与 &lt;style&gt; 外链样式、script
-              不保留；file:/// 本地图片无法读取会被移除。
+              粘贴 HTML 源码（整页含 &lt;style&gt; 的文档也可以），转换时按浏览器实际渲染效果
+              把颜色、加粗、对齐、背景、表格底色等落成可编辑格式。不保留：字体/字号阶梯、
+              圆角阴影、渐变与排版定位（渐变背景取主色兜底）；file:/// 本地图片无法读取会被移除。
             </DialogDescription>
           </DialogHeader>
           <Textarea

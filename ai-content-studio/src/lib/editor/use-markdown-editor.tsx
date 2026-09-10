@@ -17,6 +17,7 @@ import StarterKit from "@tiptap/starter-kit";
 import { common, createLowlight } from "lowlight";
 import type { ReactNode } from "react";
 import { EditorToolbar } from "./components/editor-toolbar";
+import { BlockBoxStyles } from "./extensions/block-box-styles";
 import { Callout } from "./extensions/callout/callout";
 import { DragHandle } from "./extensions/drag-handle/drag-handle";
 import { Indent } from "./extensions/indent";
@@ -67,6 +68,7 @@ const baseExtensions = (placeholder?: string) => [
   ParagraphMarkdown,
   TextAlign.configure({ types: ["heading", "paragraph"] }),
   Indent,
+  BlockBoxStyles,
   Callout,
   Image,
   TableMarkdown.configure({ resizable: true }),
