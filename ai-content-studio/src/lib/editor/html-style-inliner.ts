@@ -171,8 +171,117 @@ export function inlineComputedStyles(doc: Document, getStyle: StyleValueGetter):
 
   walk(body, { ...EMPTY_SNAPSHOT }, getStyle);
   convertGridRowsToTables(body, getStyle);
+  removeTinyBadgeDivs(body);
+  cardifyColorBlocks(body);
   fixDroppedContainers(body);
+  stripLightTextOnLightCanvas(body);
   return body.innerHTML;
+}
+
+/** sRGB 相对亮度（0..1）；解析失败返回 null */
+function rgbLuminance(color: string): number | null {
+  const m = color.match(/rgba?\(\s*(\d+),\s*(\d+),\s*(\d+)/);
+  if (m) return (0.2126 * +m[1] + 0.7152 * +m[2] + 0.0722 * +m[3]) / 255;
+  const hex = color.trim().match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (hex) {
+    let h = hex[1];
+    if (h.length === 3)
+      h = h
+        .split("")
+        .map((c) => c + c)
+        .join("");
+    return (
+      (0.2126 * Number.parseInt(h.slice(0, 2), 16) +
+        0.7152 * Number.parseInt(h.slice(2, 4), 16) +
+        0.0722 * Number.parseInt(h.slice(4, 6), 16)) /
+      255
+    );
+  }
+  return null;
+}
+
+/** Pass D0：纯装饰徽章（≤2 字符的裸文本块：编号圆圈、emoji 图标）整块删除。
+ * 必须在 grid→table 之后运行，避免误删表格短单元格 */
+function removeTinyBadgeDivs(root: Element): void {
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>(DROP_SELECTOR))) {
+    if (el.children.length > 0) continue;
+    const t = (el.textContent ?? "").trim();
+    if (t && Array.from(t).length <= 2) el.remove();
+  }
+}
+
+/**
+ * Pass D：语义卡片化——「带实色底 + 块级内容」的容器是网页卡片，编辑器原生语言是
+ * Callout（div[data-callout]，渲染/序列化/发布链全现有）。整卡底色进 data-fill-color
+ * （渲染端 color-mix 12% 调浅），首个短文本块提为标题；容器 style 底色移除——
+ * 逐段铺底色（斑马纹条纹）的病根在此终结。
+ * 豁免：代码块容器（pre，编辑器代码块主题接管）与含 h1 的封面横幅（降级为居中标题块），
+ * 二者仅移除底色。
+ */
+function cardifyColorBlocks(root: Element): void {
+  for (const el of Array.from(root.querySelectorAll<HTMLElement>(DROP_SELECTOR))) {
+    if (!el.parentNode || el.closest("[data-callout]")) continue;
+    const bg = el.style.backgroundColor;
+    if (!bg || !isUsableBackground(bg)) continue;
+    const kids = Array.from(el.children) as HTMLElement[];
+    const blockKids = kids.filter((k) => BLOCK_TAGS.has(k.tagName));
+    if (blockKids.length === 0) continue; // 单段/纯行内 → Pass C 整块铺底色（本就连续）
+    if (el.querySelector("pre") || el.querySelector("h1")) {
+      el.style.removeProperty("background-color"); // 代码块/封面豁免：只去掉实色底
+      continue;
+    }
+    let title = "";
+    // 标题候选：首个子块是裸文本容器（div）或 h2-h4 标题级，且卡内还留有其它块——
+    // 绝不拿 p 段落当标题、绝不清空卡片正文
+    const cand = kids[0];
+    const candText = (cand?.textContent ?? "").trim();
+    const candIsTitleTag = !!cand && (cand.tagName === "DIV" || /^H[2-4]$/.test(cand.tagName));
+    if (
+      candIsTitleTag &&
+      candText &&
+      Array.from(candText).length <= 24 &&
+      blockKids.length >= 2 &&
+      !cand?.querySelector("p, h1, h5, h6, ul, ol, table, div, pre")
+    ) {
+      title = candText;
+      cand.remove();
+    }
+    const card = el.ownerDocument.createElement("div");
+    card.setAttribute("data-callout", "neutral");
+    card.setAttribute("data-fill-color", bg);
+    if (title) card.setAttribute("data-title", title);
+    // 卡内文字走 callout 主题色；色条/整块底色由卡片视觉接管
+    el.style.removeProperty("background-color");
+    el.style.removeProperty("color");
+    el.style.removeProperty("border-left");
+    while (el.firstChild) card.appendChild(el.firstChild);
+    el.replaceWith(card);
+  }
+}
+
+/** Pass E（终扫）：近白文字色只在「其上存活的第一层底色为深色」时保留（表头/色块 chip），
+ * 否则编辑器浅卡/白画布上必不可读 → 清除，交给主题文字色 */
+function stripLightTextOnLightCanvas(root: Element): void {
+  const targets: HTMLElement[] = [
+    root as HTMLElement,
+    ...Array.from(root.querySelectorAll<HTMLElement>("[style]")),
+  ];
+  for (const el of targets) {
+    const color = el.style.color;
+    if (!color) continue;
+    const cl = rgbLuminance(color);
+    if (cl === null || cl < 0.8) continue;
+    let onDark = false;
+    for (let cur: Element | null = el; cur; cur = cur.parentElement) {
+      const bg = (cur as HTMLElement).style?.backgroundColor;
+      if (bg && isUsableBackground(bg)) {
+        const bl = rgbLuminance(bg);
+        onDark = bl !== null && bl < 0.55;
+        break; // 以最近的有效底色定夺，浅底不算救白字
+      }
+    }
+    if (!onDark) el.style.removeProperty("color");
+  }
 }
 
 /** Pass A：自顶向下差分内联（只写与父计算值不同的属性，抑制继承噪声） */
@@ -196,7 +305,10 @@ function walk(el: HTMLElement, parent: ComputedSnapshot, getStyle: StyleValueGet
               ? "borderLeft"
               : "color";
     if (v !== parent[key]) {
-      if (prop === "color" && TEXT_BLOCK_TAGS.has(el.tagName)) {
+      if (prop === "color" && el.tagName === "PRE") {
+        // 代码块色随编辑器主题，不做包色（span 会干扰 code block 解析）
+        el.style.setProperty(prop, v);
+      } else if (prop === "color" && TEXT_BLOCK_TAGS.has(el.tagName)) {
         // 文字块的色：PM 不认块元素 style color（探针验证），包 span 承载
         el.style.setProperty(prop, v);
         wrapTextWithSpan(el, v);

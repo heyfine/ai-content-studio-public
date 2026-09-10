@@ -9,13 +9,15 @@ import { BackgroundColor, Color } from "@tiptap/extension-text-style";
 import StarterKit from "@tiptap/starter-kit";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { BlockBoxStyles } from "./extensions/block-box-styles";
+import { Callout } from "./extensions/callout/callout";
 import { Indent } from "./extensions/indent";
 import { Markdown } from "./extensions/markdown";
 import { TextStyleMarkdown } from "./extensions/markdown-style-bridge";
 import { TableCellBackground, TableMarkdown } from "./extensions/table-background";
 import { convertHtmlToSlice } from "./html-import";
+import { inlineComputedStyles } from "./html-style-inliner";
 
-/** 与 use-markdown-editor 对齐的 schema 子集（覆盖标题/列表/表格/图片/样式类节点） */
+/** 与 use-markdown-editor 对齐的 schema 子集（标题/列表/表格/图片/样式/callout 全通道） */
 function makeSchema(): Editor {
   return new Editor({
     extensions: [
@@ -26,6 +28,7 @@ function makeSchema(): Editor {
       BackgroundColor,
       Indent,
       BlockBoxStyles,
+      Callout,
       TextAlign.configure({ types: ["heading", "paragraph"] }),
       TableMarkdown.configure({ resizable: true }),
       TableRow,
@@ -220,6 +223,40 @@ describe("convertHtmlToSlice", () => {
         "",
       ),
     ).toBe("rgb(232,241,255)");
+    e.destroy();
+  });
+
+  it("色块卡片全链路：真实 inliner 核心 → callout 节点 → :::callout 序列化（重开不丢）", async () => {
+    const e = makeSchema();
+    // 假 getStyle 喂真 inlineComputedStyles：卡片化/徽章删除/标题提取全部真实执行
+    const fakeStyle = (el: Element) => ({
+      getPropertyValue: (prop: string) => el.getAttribute(`data-cs-${prop}`)?.trim() ?? "",
+    });
+    const res = await convertHtmlToSlice(`<style>.qa{background:#16263f}</style>`, e.schema, {
+      inlineStyles: async (html) => {
+        void html;
+        const doc = new DOMParser().parseFromString(
+          `<div data-cs-background-color="rgb(22,38,63)">` +
+            `<div data-cs-color="rgb(127,176,245)">BACKUP 自检清单</div>` +
+            `<ul><li>问题一</li></ul></div>`,
+          "text/html",
+        );
+        return inlineComputedStyles(doc, fakeStyle);
+      },
+    });
+    const callout = sliceNodes(res).find((n) => n.type.name === "callout");
+    expect(callout?.attrs?.title).toBe("BACKUP 自检清单");
+    expect(String(callout?.attrs?.fillColor ?? "").replace(/\s+/g, "")).toBe("rgb(22,38,63)");
+    // 插入编辑器后序列化为 :::callout{...}——Markdown 唯一事实源下卡片无损重开
+    // （走产品同款事务通道：view.dispatch(tr.replace)，insertContent 不吃 Slice 对象）
+    const tr = e.state.tr.replace(0, e.state.doc.content.size, res.slice);
+    e.view.dispatch(tr);
+    const storage = e.storage as unknown as Record<string, unknown>;
+    const mdApi = storage.markdown as { getMarkdown?: () => string } | undefined;
+    const md = mdApi?.getMarkdown?.() ?? "";
+    expect(md).toContain(':::callout{type="neutral" title="BACKUP 自检清单"');
+    expect(md).toContain('fillColor="rgb(22, 38, 63)"');
+    expect(md).toContain("问题一");
     e.destroy();
   });
 });

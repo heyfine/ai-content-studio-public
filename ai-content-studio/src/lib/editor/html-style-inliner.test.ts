@@ -57,43 +57,44 @@ describe("inlineComputedStyles：差分内联", () => {
         ` data-cs-background-image="linear-gradient(135deg, #1b2a4a 0%, #2e4a7d 45%)">` +
         `<p data-cs-color="rgb(255,255,255)">封面标题</p></div>`,
     );
-    // 第一色标 #1b2a4a → rgb(27, 42, 74)：容器拿到，白字段落下传
-    expect(out).toContain("background-color: rgb(27, 42, 74)");
-    expect(out).toMatch(
-      /<p[^>]*color: rgb\(255, 255, 255\)[^>]*background-color: rgb\(27, 42, 74\)|<p[^>]*background-color: rgb\(27, 42, 74\)[^>]*color/,
-    );
+    // 色块容器含块级子内容 → 卡片化：第一色标 #1b2a4a→rgb(27,42,74) 成为 callout fill，
+    // 近白字在浅卡上不可读 → 清除
+    expect(out).toContain('data-fill-color="rgb(27, 42, 74)"');
+    expect(out).not.toContain("rgb(255, 255, 255)");
   });
 });
 
 describe("inlineComputedStyles：被丢容器的样式下传", () => {
-  it("div 底色/左色条/对齐下传给后代文字块（已有值不覆盖）", () => {
+  it("单段引用容器（无块级子内容）：底色/左色条/对齐下传给生成的段落", () => {
     const out = inline(
       `<div data-cs-background-color="rgb(22,38,63)" data-cs-border-left="4px solid rgb(74,134,232)"` +
-        ` data-cs-text-align="center">` +
-        `<p>会拿到父底色</p><p data-cs-background-color="rgb(240,248,255)">自己的浅蓝底优先</p></div>`,
+        ` data-cs-text-align="center">会拿到父底色<span data-cs-background-color="rgb(255,255,255)">自己的浅蓝底优先</span></div>`,
     );
-    // 恰好一个 p 拿到容器底色，另一个保持自身色（白底断言见嵌套用例）
+    // 无块级子内容 → 不卡片化，走裸文本包 p + 下传
+    expect(out).not.toContain("data-callout");
     expect((out.match(/<p[^>]*background-color: rgb\(22, 38, 63\)/g) ?? []).length).toBe(1);
-    expect((out.match(/<p[^>]*background-color: rgb\(240, 248, 255\)/g) ?? []).length).toBe(1);
-    expect((out.match(/<p[^>]*border-left: 4px solid rgb\(74, 134, 232\)/g) ?? []).length).toBe(2);
-    expect((out.match(/<p[^>]*text-align: center/g) ?? []).length).toBe(2);
+    expect(out).toContain("border-left: 4px solid rgb(74, 134, 232)");
+    expect(out).toContain("text-align: center");
   });
 
   it("被丢容器的裸文本包成段落，文字色再包 span（PM 解析通道）", () => {
-    const out = inline(`<div data-cs-color="rgb(232,241,255)">三个问题里有两个让你心里一虚</div>`);
+    const out = inline(`<div data-cs-color="rgb(157,184,220)">三个问题里有两个让你心里一虚</div>`);
     expect(out).toMatch(/<p[^>]*>[\s\S]*三个问题里有两个让你心里一虚/);
     // 色必须落在 span 上：Tiptap Color mark 只解析行内元素 style（块级 style color 被忽略）
-    expect(out).toMatch(/<span[^>]*color: rgb\(232, 241, 255\)/);
+    expect(out).toMatch(/<span[^>]*color: rgb\(157, 184, 220\)/);
   });
 
-  it("嵌套容器由内向外下传：深色内块不被外层白卡片抢占，纯白底不落", () => {
+  it("嵌套容器：深色内块卡片化（fill 接管），外层白底不产噪声", () => {
     const out = inline(
       `<div data-cs-background-color="rgb(255,255,255)"><div data-cs-background-color="rgb(22,38,63)">` +
         `<p>暗块文字</p></div><p>白卡正文</p></div>`,
     );
-    // 内层 p 拿到深色底；外层白底直接不落（编辑器画布本就白）
-    expect(out).toMatch(/<p[^>]*background-color: rgb\(22, 38, 63\)/);
+    // 内层深色块成为 callout 卡片（底色进 fill，逐段铺色被消灭）
+    expect(out).toContain('data-callout="neutral"');
+    expect(out).toContain('data-fill-color="rgb(22, 38, 63)"');
+    // 纯白底全链不落
     expect(out).not.toContain("rgb(255, 255, 255)");
+    expect((out.match(/data-callout/g) ?? []).length).toBe(1); // 仅内层一张卡
   });
 
   it("::before 字面内容前插（counter/none 跳过）", () => {
@@ -144,4 +145,79 @@ it("a 链接自带底色：内容包 span（防白字落白底）", () => {
   );
   // span 承接底色+白字，链标记不受影响
   expect(out).toMatch(/<a[^>]*><span[^>]*background-color: rgb\(46, 111, 214\)/);
+});
+
+describe("Pass D：语义卡片化（色块容器 → 编辑器原生 callout）", () => {
+  it("卡片容器转 callout：fill 取原底色、首个短句成标题、≤2 字徽章删除", () => {
+    const out = inline(
+      `<div data-cs-background-color="rgb(22,38,63)">` +
+        `<div data-cs-color="rgb(127,176,245)">BACKUP 自检清单</div>` +
+        `<div data-cs-background-color="rgb(46,111,214)">1</div>` +
+        `<ol><li>问题一</li></ol>` +
+        `<div>三个问题里有两个让你心里一虚</div></div>`,
+    );
+    expect(out).toContain('data-callout="neutral"');
+    expect(out).toContain('data-fill-color="rgb(22, 38, 63)"');
+    expect(out).toContain('data-title="BACKUP 自检清单"');
+    expect(out).not.toContain(">1<"); // 编号徽章作为装饰删除
+    // 容器实色底移交 fill 属性（渲染端 color-mix 调浅），不再整块铺深色
+    expect(out).not.toMatch(/style="[^"]*background-color: rgb\(22, 38, 63\)/);
+  });
+
+  it("卡片内继承性浅字清除，刻意强调色保留", () => {
+    const out = inline(
+      `<div data-cs-background-color="rgb(22,38,63)">` +
+        `<div data-cs-color="rgb(232,241,255)">浅字</div>` +
+        `<p data-cs-color="rgb(217,71,43)">红色强调</p></div>`,
+    );
+    expect(out).toContain("data-callout");
+    expect(out).not.toContain("rgb(232, 241, 255)"); // 近白字在浅卡上不可读 → 清除
+    expect(out).toContain("rgb(217, 71, 43)"); // 刻意红保留
+  });
+
+  it("代码块容器不卡片化：底色与浅色代码字清除（编辑器代码块主题接管）", () => {
+    const out = inline(
+      `<div data-cs-background-color="rgb(16,25,43)"><pre data-cs-color="rgb(184,224,255)">git clone …</pre></div>`,
+    );
+    expect(out).not.toContain("data-callout");
+    expect(out).not.toMatch(/background-color: rgb\(16, 25, 43\)/);
+    expect(out).not.toContain("rgb(184, 224, 255)");
+  });
+
+  it("含 h1 的封面豁免卡片：居中保留、白字与底色清除、emoji 徽章删除", () => {
+    const out = inline(
+      `<div data-cs-background-color="rgb(27,42,74)" data-cs-text-align="center">` +
+        `<div>🛡️</div>` +
+        `<h1 data-cs-color="rgb(255,255,255)">你的备份</h1>` +
+        `<p data-cs-color="rgb(197,216,240)">—— 聊聊 AutoBackup</p></div>`,
+    );
+    expect(out).not.toContain("data-callout");
+    expect(out).not.toMatch(/background-color/);
+    expect(out).not.toContain("rgb(255, 255, 255)");
+    expect(out).not.toContain("rgb(197, 216, 240)");
+    expect(out).toContain("<h1");
+    expect(out).not.toContain("🛡️");
+    expect(out.replace(/\s+/g, "")).toContain("text-align:center");
+  });
+
+  it("单段色块（无块级子内容）不卡片化：整段连续底色（无斑马纹）", () => {
+    const out = inline(
+      `<div data-cs-background-color="rgb(240,246,255)" data-cs-border-left="4px solid rgb(74,134,232)">而它真正的诚意在另一半</div>`,
+    );
+    expect(out).not.toContain("data-callout");
+    expect(out).toMatch(/<p[^>]*background-color: rgb\(240, 246, 255\)/);
+  });
+
+  it("表格深色单元格上的白字不被误清除（暗底存活判定）", () => {
+    const grid = 'data-cs-display="grid" data-cs-grid-template-columns="1fr 1fr"';
+    const out = inline(
+      `<div><div ${grid}><div data-cs-background-color="rgb(22,38,63)" data-cs-color="rgb(255,255,255)">场景</div>` +
+        `<div data-cs-background-color="rgb(22,38,63)" data-cs-color="rgb(255,255,255)">手动</div></div>` +
+        `<div ${grid}><div>A</div><div>B</div></div></div>`,
+    );
+    expect(out).toContain("<table");
+    expect(out).toMatch(
+      /<td[^>]*background-color: rgb\(22, 38, 63\)[^>]*>(?:(?!<\/td>)[\s\S])*color: rgb\(255, 255, 255\)/,
+    );
+  });
 });

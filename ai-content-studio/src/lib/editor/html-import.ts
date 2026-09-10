@@ -1,5 +1,5 @@
 import type { Schema, Slice } from "@tiptap/pm/model";
-import { DOMParser as PMDOMParser } from "@tiptap/pm/model";
+import { DOMParser as PMDOMParser, Slice as PMSlice } from "@tiptap/pm/model";
 import { preparePasteHtml, uploadInlineImages } from "./extensions/paste-image";
 import { isWordHtml, normalizeWordHtml } from "./extensions/word-html";
 import { inlineHtmlStyles } from "./html-style-inliner";
@@ -56,8 +56,12 @@ export async function convertHtmlToSlice(
   );
   const holder = document.createElement("div");
   holder.innerHTML = cleaned;
+  const parsed = PMDOMParser.fromSchema(schema).parseSlice(holder);
   return {
-    slice: PMDOMParser.fromSchema(schema).parseSlice(holder),
+    // openStart/openEnd 归零（closed slice）：parseSlice 把 holder 当开放上下文，
+    // 产生的 open=1 会让 tr.replace/replaceSelection 按 fitting 逐层解包顶级节点——
+    // 普通段落无感，callout/table 等包装节点会被拆散（单测+最小复现定案）
+    slice: new PMSlice(parsed.content, 0, 0),
     droppedImages: prepared.blocked,
   };
 }
