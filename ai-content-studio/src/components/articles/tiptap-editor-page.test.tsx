@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { GENERATE_INPUT_MAX } from "@/lib/schemas/generate";
 
 const pushMock = vi.fn();
 vi.mock("next/navigation", () => ({
@@ -195,6 +196,31 @@ describe("TiptapEditorPage", () => {
     expect(screen.queryByTestId("layout-generate-panel")).not.toBeInTheDocument();
   });
 
+  it("AI 智能排版：正文超过输入上限时友好报错且不发请求", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: "a1",
+        title: "旧标题",
+        slug: "x",
+        // 正文本身已到上限，加上「标题：旧标题」前缀必然超限（表格内嵌 HTML 场景的等价形式）
+        content: "字".repeat(GENERATE_INPUT_MAX),
+        status: "DRAFT",
+        seoScore: null,
+        wpPostId: null,
+        promptId: null,
+      }),
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("ai-layout"));
+    fireEvent.click(screen.getByRole("button", { name: "开始生成" }));
+    const err = await waitFor(() => screen.getByTestId("layout-error"));
+    expect(err).toHaveTextContent("正文过长");
+    expect(err).toHaveTextContent("上限");
+    expect(streamMock).not.toHaveBeenCalled();
+  });
+
   it("AI 建议：正文为空时给出提示", () => {
     render(<TiptapEditorPage articleId={null} />);
     fireEvent.click(screen.getByTestId("ai-suggest-callouts"));
@@ -342,7 +368,8 @@ describe("TiptapEditorPage", () => {
     await waitFor(() => expect(screen.getByTestId("publish-result")).toBeInTheDocument());
     const pubCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wordpress/publish");
     expect(pubCall).toBeDefined();
-    expect(JSON.parse((pubCall?.[1] as RequestInit).body as string)).toEqual({
+    if (!pubCall) throw new Error("missing publish call");
+    expect(JSON.parse((pubCall[1] as RequestInit).body as string)).toEqual({
       articleId: "a1",
       configId: "w2",
     });
@@ -432,10 +459,9 @@ describe("TiptapEditorPage", () => {
     await waitFor(() =>
       expect(screen.getByTestId("wechat-result")).toHaveTextContent(/已进入公众号草稿箱/),
     );
-    const body = JSON.parse(
-      (fetchMock.mock.calls.find((c) => c[0] === "/api/wechat/draft")?.[1] as RequestInit)
-        .body as string,
-    );
+    const draftCall = fetchMock.mock.calls.find((c) => c[0] === "/api/wechat/draft");
+    if (!draftCall) throw new Error("missing draft call");
+    const body = JSON.parse((draftCall[1] as RequestInit).body as string);
     expect(body.configId).toBe("wc1");
   });
 

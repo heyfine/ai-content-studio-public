@@ -45,6 +45,7 @@ import {
 } from "@/lib/editor/autosave-draft";
 import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
+import { GENERATE_INPUT_MAX } from "@/lib/schemas/generate";
 import { useStudioStore } from "@/stores/studio-store";
 import { VersionHistoryDialog } from "./version-history-dialog";
 
@@ -246,6 +247,7 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   }
 
   // 输入停顿 2s 触发自动保存（挂载后首次运行内容未变，no-op）
+  // biome-ignore lint/correctness/useExhaustiveDependencies: autosaveNow 每次渲染重建，依赖它会让任意 state 变化重置计时器；刻意按 title/content 变化触发
   useEffect(() => {
     const timer = setTimeout(() => {
       void autosaveNow();
@@ -290,11 +292,19 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
 
   /** 流式生成排版结果：复用 /api/ai/stream（layout_suggest 任务 + 所选模板），逐段拼到面板 */
   async function runLayoutStream(promptId: string | null) {
+    const input =
+      [title && `标题：${title}`, content].filter(Boolean).join("\n\n") || "请生成一篇文章";
+    // 前置预检：超限直接友好报错，不发请求（否则后端 zod 400 只会回「校验失败」）
+    if (input.length > GENERATE_INPUT_MAX) {
+      setLayoutError(
+        `正文过长：共 ${input.length} 字符，超过排版输入上限 ${GENERATE_INPUT_MAX} 字符。` +
+          "带样式的表格会以内嵌 HTML 序列化、字符数远超所见，请精简正文后重试",
+      );
+      return;
+    }
     setLayoutGenerating(true);
     setLayoutResult("");
     setLayoutError(null);
-    const input =
-      [title && `标题：${title}`, content].filter(Boolean).join("\n\n") || "请生成一篇文章";
     try {
       for await (const ev of streamGenerateRequest({
         task: "layout_suggest",

@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { generateSchema } from "./generate";
+import { describe, expect, it } from "vitest";
+import { GENERATE_INPUT_MAX, generateSchema } from "./generate";
 
 describe("generateSchema", () => {
   it("接受合法输入", () => {
@@ -17,9 +17,20 @@ describe("generateSchema", () => {
     expect(r.success).toBe(false);
   });
 
+  it("接受上限长度的 input（AI 排版整篇文章场景）", () => {
+    const r = generateSchema.safeParse({ task: "t", input: "x".repeat(GENERATE_INPUT_MAX) });
+    expect(r.success).toBe(true);
+  });
+
   it("拒绝超长 input", () => {
-    const r = generateSchema.safeParse({ task: "t", input: "x".repeat(8001) });
+    const r = generateSchema.safeParse({
+      task: "t",
+      input: "x".repeat(GENERATE_INPUT_MAX + 1),
+    });
     expect(r.success).toBe(false);
+    if (!r.success) {
+      expect(r.error.issues[0]?.message).toContain("输入过长");
+    }
   });
 
   it("接受可选字段 temperature / maxTokens", () => {
