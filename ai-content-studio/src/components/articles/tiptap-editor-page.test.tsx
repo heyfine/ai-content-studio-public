@@ -221,6 +221,27 @@ describe("TiptapEditorPage", () => {
     expect(streamMock).not.toHaveBeenCalled();
   });
 
+  it("复制源码：点击后打开对话框并展示导出 HTML", async () => {
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        id: "a1",
+        title: "旧标题",
+        slug: "x",
+        content: "旧正文",
+        status: "DRAFT",
+        seoScore: null,
+        wpPostId: null,
+        promptId: null,
+      }),
+    });
+    render(<TiptapEditorPage articleId="a1" />);
+    await waitFor(() => expect(screen.getByTestId("article-title-input")).toHaveValue("旧标题"));
+    fireEvent.click(screen.getByTestId("copy-source"));
+    const text = await screen.findByTestId("source-export-text");
+    expect(text).toHaveValue("<p>正文</p>");
+  });
+
   it("AI 建议：正文为空时给出提示", () => {
     render(<TiptapEditorPage articleId={null} />);
     fireEvent.click(screen.getByTestId("ai-suggest-callouts"));

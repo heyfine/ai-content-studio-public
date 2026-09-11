@@ -1,4 +1,4 @@
-import { Node, mergeAttributes } from "@tiptap/core";
+import { mergeAttributes, Node } from "@tiptap/core";
 import { ReactNodeViewRenderer } from "@tiptap/react";
 import type MarkdownIt from "markdown-it";
 
@@ -8,8 +8,8 @@ import {
   type CalloutType,
   isCalloutType,
 } from "@/lib/content/callout-types";
-import { calloutBlockPlugin } from "./markdown-plugin";
 import { CalloutView } from "./callout-view";
+import { calloutBlockPlugin } from "./markdown-plugin";
 
 /**
  * 自定义 Callout 块节点 —— 兼容现有 :::callout fenced 语法。
@@ -94,6 +94,11 @@ export const Callout = Node.create({
     };
     if (title) attrs["data-title"] = title;
     if (icon) attrs["data-icon"] = icon;
+    // 自定义色原值补输出 data-*：parseHTML 只认 data-text/border/fill-color，
+    // style 仅是呈现形式——「复制源码 → HTML 源码转换」跨站迁移必须靠 data-* 还原
+    if (textColor) attrs["data-text-color"] = textColor;
+    if (borderColor) attrs["data-border-color"] = borderColor;
+    if (fillColor) attrs["data-fill-color"] = fillColor;
     // 颜色直接落 style，导出 HTML 时即带自定义色
     const styleParts: string[] = [];
     if (textColor) styleParts.push(`color:${textColor}`);

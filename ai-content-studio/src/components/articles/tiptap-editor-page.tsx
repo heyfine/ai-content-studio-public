@@ -3,6 +3,7 @@
 import { type Editor, EditorContent } from "@tiptap/react";
 import {
   Check,
+  Code as CodeIcon,
   History as HistoryIcon,
   MessageCircle as MessageCircleIcon,
   Send as SendIcon,
@@ -47,6 +48,7 @@ import { EditorToolbar } from "@/lib/editor/components/editor-toolbar";
 import { useMarkdownEditor } from "@/lib/editor/use-markdown-editor";
 import { GENERATE_INPUT_MAX } from "@/lib/schemas/generate";
 import { useStudioStore } from "@/stores/studio-store";
+import { absolutizeImageUrls, SourceExportDialog } from "./source-export-dialog";
 import { VersionHistoryDialog } from "./version-history-dialog";
 
 export interface TiptapEditorPageProps {
@@ -205,6 +207,9 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
   const [wechatConfigId, setWechatConfigId] = useState("");
   // 历史版本
   const [versionsOpen, setVersionsOpen] = useState(false);
+  // 复制源码（跨站点迁移导出：HTML 源码 + 图片绝对化）
+  const [sourceDialogOpen, setSourceDialogOpen] = useState(false);
+  const [exportSource, setExportSource] = useState("");
   // 实际文章 id：编辑模式即 initial.id；新建模式首次保存（POST）后获得，后续转 PUT 更新
   const [savedArticleId, setSavedArticleId] = useState(initial.id);
   // 自动保存：输入停顿 2s 静默保存；切选项卡立即保存；无标题新建暂存 localStorage
@@ -366,6 +371,13 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
     } finally {
       setSuggesting(false);
     }
+  }
+
+  /** 「复制源码」：导出当前正文 HTML（图片相对路径转绝对 URL），供跨站点迁移 */
+  function handleCopySourceClick() {
+    if (!editor) return;
+    setExportSource(absolutizeImageUrls(editor.getHTML(), window.location.origin));
+    setSourceDialogOpen(true);
   }
 
   function onAcceptSuggestion(idx: number) {
@@ -597,6 +609,16 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
               历史版本
             </Button>
           )}
+          <Button
+            type="button"
+            variant="outline"
+            onClick={handleCopySourceClick}
+            disabled={!content.trim()}
+            data-testid="copy-source"
+          >
+            <CodeIcon className="size-4" />
+            复制源码
+          </Button>
           <Button variant="ghost" onClick={() => router.push("/articles")}>
             取消
           </Button>
@@ -980,6 +1002,12 @@ function TiptapEditorInner({ initial, isEdit }: TiptapEditorInnerProps) {
           onRestored={() => window.location.reload()}
         />
       )}
+      {/* 复制源码：跨站点迁移导出（目标站用「HTML 源码转换」还原） */}
+      <SourceExportDialog
+        open={sourceDialogOpen}
+        onOpenChange={setSourceDialogOpen}
+        source={exportSource}
+      />
     </div>
   );
 }
